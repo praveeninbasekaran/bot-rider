@@ -23,7 +23,7 @@ export class ProposedContentProvider implements vscode.TextDocumentContentProvid
   }
 
   provideTextDocumentContent(uri: vscode.Uri): string {
-    if (uri.path === EMPTY_PATH) {
+    if (uri.query.includes('empty=1') || uri.path === EMPTY_PATH) {
       return '';
     }
     return this.contents.get(normalize(uri.path)) ?? '';
@@ -34,7 +34,7 @@ export class ProposedContentProvider implements vscode.TextDocumentContentProvid
   }
 
   emptyUri(): vscode.Uri {
-    return vscode.Uri.from({ scheme: PROPOSED_SCHEME, path: EMPTY_PATH });
+    return vscode.Uri.from({ scheme: PROPOSED_SCHEME, path: '/empty', query: 'empty=1' });
   }
 }
 

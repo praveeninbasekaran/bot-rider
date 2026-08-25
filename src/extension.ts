@@ -91,7 +91,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const reviewView = vscode.window.createTreeView('botrider.review', {
     treeDataProvider: reviewTree,
+    canSelectMany: false,
   });
+  reviewTree.attach(reviewView);
 
   context.subscriptions.push(
     botsView,
@@ -173,14 +175,20 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
-  async function handleUi(msg: UiToHost): Promise<void> {
+  async function handleUi(
+    msg: UiToHost | { type: 'ui/pick' } | { type: 'ui/focus-expanded' },
+  ): Promise<void> {
     try {
-      if (msg.type === 'review/open-diff') {
-        await openProposedDiff({ path: msg.path, op: msg.op ?? 'update' }, proposed);
+      if (msg.type === 'ui/pick') {
+        await pickBot();
         return;
       }
-      if (msg.type === 'split/pick' && !msg.botId) {
-        await pickBot();
+      if (msg.type === 'ui/focus-expanded') {
+        expand.reveal();
+        return;
+      }
+      if (msg.type === 'review/open-diff') {
+        await openProposedDiff({ path: msg.path, op: msg.op ?? 'update' }, proposed);
         return;
       }
       await app.handleUi(msg);

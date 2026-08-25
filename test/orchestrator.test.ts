@@ -47,6 +47,12 @@ describe('Orchestrator positive', () => {
     const starts = msgs.filter((m) => m.type === 'chat/turn-start');
     expect(starts.some((m) => m.type === 'chat/turn-start' && m.turn === 'propose' && m.round === 1)).toBe(true);
     expect(starts.some((m) => m.type === 'chat/turn-start' && m.turn === 'critique' && m.round === 1)).toBe(true);
+    const tokens = msgs.filter((m) => m.type === 'chat/token');
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(tokens.every((m) => m.type === 'chat/token' && typeof m.botId === 'string' && typeof m.delta === 'string')).toBe(
+      true,
+    );
+    expect(tokens.every((m) => m.type === 'chat/token' && !('text' in m))).toBe(true);
   });
 
   it('@known solo then NEED_EDIT implementer for that bot', async () => {
@@ -167,9 +173,18 @@ describe('Orchestrator negative', () => {
     expect(gw.turns.includes('implement')).toBe(false);
     expect(app.orchestrator.getRunState().splitOpen).toBe(true);
     expect(app.orchestrator.getRunState().phase).toBe('split');
-    expect(
-      msgs.some((m) => m.type === 'chat/split' && m.title === COPY.splitPaused && m.paused === true),
-    ).toBe(true);
+    const split = msgs.find((m) => m.type === 'chat/split');
+    const frozen = app.orchestrator.getFrozenBots();
+    expect(split).toMatchObject({
+      type: 'chat/split',
+      title: COPY.splitPaused,
+      reason: COPY.splitPausedReason,
+      paused: true,
+    });
+    expect(split && split.type === 'chat/split' && split.reason).toBe('Debate paused. Positions so far:');
+    expect(split && split.type === 'chat/split' && split.reason).not.toBe(COPY.stoppedNoImpl);
+    expect(split && split.type === 'chat/split' && split.positions).toHaveLength(frozen.length);
+    expect(split && split.type === 'chat/split' && split.positions).toHaveLength(2);
   });
 
   it('send is ignored while splitOpen', async () => {
@@ -181,6 +196,33 @@ describe('Orchestrator negative', () => {
     const count = gw.requestCount;
     await app.send('second should ignore');
     expect(gw.requestCount).toBe(count);
+  });
+
+  it('two-round no AGREE splits with no implementer and no round 3', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    gw.script = ({ turn }) => (turn === 'consensus' ? 'DISSENT we differ' : 'talk');
+    await app.send('no consensus please');
+    const state = app.orchestrator.getRunState();
+    expect(state.splitOpen).toBe(true);
+    expect(state.phase).toBe('split');
+    expect(state.round).toBe(2);
+    expect(state.debateRunning).toBe(false);
+    expect(gw.turns.filter((t) => t === 'implement')).toEqual([]);
+    expect(gw.turns.filter((t) => t === 'consensus')).toHaveLength(4);
+    const instructions = gw.lastMessages.map((ms) => ms[ms.length - 1]?.content ?? '');
+    expect(instructions.some((text) => text.includes('Round 3'))).toBe(false);
+    expect(app.changesets.hasPending()).toBe(false);
+    const split = msgs.find((m) => m.type === 'chat/split');
+    expect(split).toMatchObject({ type: 'chat/split', title: COPY.splitNoConsensus, paused: false });
+    expect(split && split.type === 'chat/split' && split.positions).toHaveLength(2);
+    expect(split && split.type === 'chat/split' && split.positions.every((p) => p.botId && p.handle && 'text' in p)).toBe(
+      true,
+    );
+    const frozen = app.orchestrator.getFrozenBots();
+    expect(split && split.type === 'chat/split' && split.positions.map((p) => p.handle).sort()).toEqual(
+      frozen.map((b) => b.handle).sort(),
+    );
   });
 
   it('invalid implementer op is validate-failed', async () => {
@@ -239,6 +281,15 @@ describe('Orchestrator negative', () => {
     await first;
   });
 
+  it('recheck ensureAvailable emits copilot/status without streaming', async () => {
+    const { app, gw, msgs } = harness();
+    gw.status = 'noPermissions';
+    await app.handleUi({ type: 'copilot/recheck' });
+    expect(gw.ensureCalls).toBe(1);
+    expect(gw.requestCount).toBe(0);
+    expect(msgs.some((m) => m.type === 'copilot/status' && m.status === 'noPermissions')).toBe(true);
+  });
+
   it('copilot not ready emits copilot/status and does not stream', async () => {
     const { app, gw, msgs } = harness();
     await twoBots(app);
@@ -269,7 +320,7 @@ describe('Orchestrator negative', () => {
   });
 
   it('email-style @ is plain text not a mention token', async () => {
-    const { app, gw } = harness();
+    const { app, gw, msgs } = harness();
     await twoBots(app);
     gw.script = ({ turn, instruction }) => {
       const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
@@ -283,6 +334,10 @@ describe('Orchestrator negative', () => {
     };
     await app.send('ping me@host.com about this');
     expect(gw.requestCount).toBeGreaterThan(0);
+    expect(gw.turns.includes('direct')).toBe(false);
+    expect(gw.turns.filter((t) => t === 'consensus').length).toBeGreaterThan(0);
+    expect(msgs.some((m) => m.type === 'error' && m.code === 'unknown-handle')).toBe(false);
+    expect(app.orchestrator.getRunState().phase).toBe('pendingReview');
   });
 
   it('mixed valid+unknown mention errors without Copilot', async () => {

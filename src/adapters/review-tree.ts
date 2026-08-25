@@ -18,11 +18,18 @@ class ReviewItem extends vscode.TreeItem {
 export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private view: vscode.TreeView<ReviewItem> | undefined;
 
   constructor(private readonly app: Application) {}
 
+  attach(view: vscode.TreeView<ReviewItem>): void {
+    this.view = view;
+    this.syncChrome();
+  }
+
   refresh(): void {
     this._onDidChangeTreeData.fire();
+    this.syncChrome();
   }
 
   getTreeItem(element: ReviewItem): vscode.TreeItem {
@@ -53,6 +60,21 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     }
     return [];
   }
+
+  private syncChrome(): void {
+    if (!this.view) {
+      return;
+    }
+    const n = this.app.changesets.files?.length ?? 0;
+    if (!n || !this.app.changesets.hasPending()) {
+      this.view.badge = undefined;
+      this.view.message = undefined;
+      return;
+    }
+    const label = n === 1 ? '1 file · pending review' : `${n} files · pending review`;
+    this.view.badge = { value: n, tooltip: label };
+    this.view.message = label;
+  }
 }
 
 export async function openProposedDiff(
@@ -62,9 +84,10 @@ export async function openProposedDiff(
   const folder = vscode.workspace.workspaceFolders?.[0];
   const basename = nodePath.posix.basename(file.path);
   const right = proposed.uriFor(file.path);
+  const preview = { preview: true };
   if (file.op === 'create') {
     const title = `${basename} (Empty ↔ Proposed)`;
-    await vscode.commands.executeCommand('vscode.diff', proposed.emptyUri(), right, title);
+    await vscode.commands.executeCommand('vscode.diff', proposed.emptyUri(), right, title, preview);
     return;
   }
   if (!folder) {
@@ -73,11 +96,11 @@ export async function openProposedDiff(
   const left = vscode.Uri.joinPath(folder.uri, ...file.path.split('/'));
   if (file.op === 'delete') {
     const title = `${basename} (Workspace ↔ Deleted)`;
-    await vscode.commands.executeCommand('vscode.diff', left, proposed.emptyUri(), title);
+    await vscode.commands.executeCommand('vscode.diff', left, proposed.emptyUri(), title, preview);
     return;
   }
   const title = `${basename} (Workspace ↔ Proposed)`;
-  await vscode.commands.executeCommand('vscode.diff', left, right, title);
+  await vscode.commands.executeCommand('vscode.diff', left, right, title, preview);
 }
 
 function group(name: string, count: number): ReviewItem {
@@ -96,11 +119,11 @@ function fileItem(file: ChangeFile): ReviewItem {
   };
   item.resourceUri = vscode.Uri.parse(`file:${file.path}`);
   if (file.op === 'create') {
-    item.description = 'A';
+    item.description = 'Added';
   } else if (file.op === 'delete') {
-    item.description = 'D';
+    item.description = 'Deleted';
   } else {
-    item.description = 'M';
+    item.description = 'Modified';
   }
   return item;
 }

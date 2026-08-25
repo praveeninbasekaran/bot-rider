@@ -3,7 +3,7 @@ import { Application } from '../src/app/application';
 import { COPY } from '../src/app/copy';
 import { APPLY_FAILED_MESSAGE } from '../src/domain/changeset';
 import type { HostToUi } from '../src/protocol/messages';
-import { FakeGateway, FixedWorkspace, MemoryFs, MemoryStore, defaultWorkspace } from './fakes';
+import { changesetFence, FakeGateway, FixedWorkspace, MemoryFs, MemoryStore, defaultWorkspace } from './fakes';
 
 function harness(folderFsPath?: string) {
   const gw = new FakeGateway();
@@ -70,6 +70,43 @@ describe('Application approve/reject/retry', () => {
     const failed = msgs.find((m) => m.type === 'changeset/apply-failed');
     expect(failed).toMatchObject({ type: 'changeset/apply-failed', message: APPLY_FAILED_MESSAGE });
     expect(msgs.some((m) => m.type === 'chat/notice')).toBe(false);
+  });
+
+  it('applyEdit is invoked only by Approve and Retry, not reject or implementer', async () => {
+    const { app, gw, fs } = harness('/tmp/bot-rider-ws');
+    await app.createBot({ name: 'Alpha', handle: 'alpha', persona: 'a', role: 'lead', instructions: 'one' });
+    gw.script = ({ turn }) => {
+      if (turn === 'direct') {
+        return 'need it\nNEED_EDIT';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'impl.ts', op: 'create', content: 'x' }]);
+      }
+      return 'x';
+    };
+    await app.send('@alpha edit please');
+    expect(app.changesets.hasPending()).toBe(true);
+    expect(fs.applyCalls).toBe(0);
+    expect(fs.files.has('impl.ts')).toBe(false);
+
+    await app.reject();
+    expect(fs.applyCalls).toBe(0);
+    expect(fs.files.has('impl.ts')).toBe(false);
+
+    app.changesets.setPending([{ path: 'a.ts', op: 'create', content: 'n' }]);
+    await app.approve();
+    expect(fs.applyCalls).toBe(1);
+    expect(fs.files.get('a.ts')).toBe('n');
+
+    app.changesets.setPending([{ path: 'b.ts', op: 'create', content: 'm' }]);
+    fs.applyResult = false;
+    await app.approve();
+    expect(fs.applyCalls).toBe(2);
+    fs.applyResult = true;
+    const ok = await app.retry();
+    expect(ok).toBe(true);
+    expect(fs.applyCalls).toBe(3);
+    expect(fs.files.get('b.ts')).toBe('m');
   });
 
   it('retry uses the same approve() caller with buildEdit retry', async () => {

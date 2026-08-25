@@ -140,11 +140,31 @@ export class Application {
   async handleUi(msg: UiToHost): Promise<void> {
     switch (msg.type) {
       case 'bots/create':
-        await this.createBot(msg);
+        await this.createBot({
+          name: msg.draft.name,
+          handle: msg.draft.handle,
+          persona: msg.draft.persona,
+          role: msg.draft.role,
+          instructions: msg.draft.instructions,
+          active: msg.draft.active,
+        });
         break;
-      case 'bots/update':
-        await this.updateBot(msg.id, msg);
+      case 'bots/update': {
+        const existing = this.registry.getById(msg.id);
+        if (!existing) {
+          break;
+        }
+        const patch = msg.patch ?? {};
+        await this.updateBot(msg.id, {
+          name: patch.name ?? msg.name ?? existing.name,
+          handle: patch.handle ?? msg.handle ?? existing.handle,
+          persona: patch.persona ?? msg.persona ?? existing.persona,
+          role: patch.role ?? msg.role ?? existing.role,
+          instructions: patch.instructions ?? msg.instructions ?? existing.instructions,
+          active: msg.active ?? existing.active,
+        });
         break;
+      }
       case 'bots/toggle':
         await this.toggleBot(msg.id, msg.active);
         break;
@@ -161,9 +181,7 @@ export class Application {
         await this.continueDebate();
         break;
       case 'split/pick':
-        if (msg.botId) {
-          await this.pick(msg.botId);
-        }
+        await this.pick(msg.botId);
         break;
       case 'changeset/approve':
         await this.approve();
