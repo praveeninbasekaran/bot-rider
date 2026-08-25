@@ -197,7 +197,7 @@ export class Orchestrator {
   stop(): void {
     this.cts?.cancel();
     if (this.state.debateRunning) {
-      this.enterSplit(COPY.splitPaused, COPY.stoppedNoImpl, true);
+      this.enterSplit(COPY.splitPaused, COPY.splitPausedReason, true);
       return;
     }
     if (this.state.splitOpen) {

@@ -173,9 +173,18 @@ describe('Orchestrator negative', () => {
     expect(gw.turns.includes('implement')).toBe(false);
     expect(app.orchestrator.getRunState().splitOpen).toBe(true);
     expect(app.orchestrator.getRunState().phase).toBe('split');
-    expect(
-      msgs.some((m) => m.type === 'chat/split' && m.title === COPY.splitPaused && m.paused === true),
-    ).toBe(true);
+    const split = msgs.find((m) => m.type === 'chat/split');
+    const frozen = app.orchestrator.getFrozenBots();
+    expect(split).toMatchObject({
+      type: 'chat/split',
+      title: COPY.splitPaused,
+      reason: COPY.splitPausedReason,
+      paused: true,
+    });
+    expect(split && split.type === 'chat/split' && split.reason).toBe('Debate paused. Positions so far:');
+    expect(split && split.type === 'chat/split' && split.reason).not.toBe(COPY.stoppedNoImpl);
+    expect(split && split.type === 'chat/split' && split.positions).toHaveLength(frozen.length);
+    expect(split && split.type === 'chat/split' && split.positions).toHaveLength(2);
   });
 
   it('send is ignored while splitOpen', async () => {
@@ -270,6 +279,15 @@ describe('Orchestrator negative', () => {
     expect(gw.requestCount).toBe(count);
     release();
     await first;
+  });
+
+  it('recheck ensureAvailable emits copilot/status without streaming', async () => {
+    const { app, gw, msgs } = harness();
+    gw.status = 'noPermissions';
+    await app.handleUi({ type: 'copilot/recheck' });
+    expect(gw.ensureCalls).toBe(1);
+    expect(gw.requestCount).toBe(0);
+    expect(msgs.some((m) => m.type === 'copilot/status' && m.status === 'noPermissions')).toBe(true);
   });
 
   it('copilot not ready emits copilot/status and does not stream', async () => {
