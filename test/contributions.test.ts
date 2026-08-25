@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { globSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = join(__dirname, '..');
+
+// Node 20-safe walk of src .ts files. fs.globSync is Node 22+.
+function listSrcTs(dir: string, prefix = 'src'): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const rel = `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      out.push(...listSrcTs(join(dir, entry.name), rel));
+    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+      out.push(rel);
+    }
+  }
+  return out;
+}
 
 describe('contribution points', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
@@ -103,7 +117,7 @@ describe('contribution points', () => {
   });
 
   it('source hygiene: no Settings Sync, no Copilot auth session, no other vendors, no writeFile apply path', () => {
-    const files = globSync('src/**/*.ts', { cwd: root });
+    const files = listSrcTs(join(root, 'src'));
     const blobs = files.map((f) => ({ f, t: readFileSync(join(root, f), 'utf8') }));
     for (const { f, t } of blobs) {
       expect(t, f).not.toMatch(/setKeysForSync/);
