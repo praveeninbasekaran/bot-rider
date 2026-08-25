@@ -1,8 +1,8 @@
 # Bot Rider architecture (rev 7)
 
-Host-owned UI and protocol for the MVP. The webview never calls `vscode.lm` or `workspace.applyEdit`.
+Canonical blueprint: [architecture-mvp.md](./architecture-mvp.md). UI/UX: [ui-ux-spec.md](./ui-ux-spec.md).
 
-Fuller MVP write-up: [architecture-mvp.md](./architecture-mvp.md). UI copy and surfaces: [ui-ux-spec.md](./ui-ux-spec.md). OpenSpec: [openspec/changes/bot-rider-mvp](../openspec/changes/bot-rider-mvp/proposal.md).
+Host-owned UI and protocol for the MVP. The webview never calls `vscode.lm` or `workspace.applyEdit`.
 
 ## Host ids
 

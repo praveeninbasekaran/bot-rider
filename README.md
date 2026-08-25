@@ -30,7 +30,7 @@ Copilot sign-in is the **Sign in to GitHub Copilot** command (`botrider.copilot.
 
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) — host ids and protocol (rev 7)
-- [docs/architecture-mvp.md](docs/architecture-mvp.md) — MVP architecture (BR-1 … BR-6)
-- [docs/ui-ux-spec.md](docs/ui-ux-spec.md) — views, copy, webview rules
-- [openspec/changes/bot-rider-mvp](openspec/changes/bot-rider-mvp) — OpenSpec proposal, spec, tasks
+- [docs/architecture-mvp.md](docs/architecture-mvp.md) — architecture blueprint revision 7
+- [docs/ui-ux-spec.md](docs/ui-ux-spec.md) — Bot Rider UI/UX Specification
+- [openspec/README.md](openspec/README.md) — OpenSpec index
+- [openspec/specs.md](openspec/specs.md) — BR-1 … BR-6
