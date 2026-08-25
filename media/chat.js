@@ -173,6 +173,24 @@
     thread.scrollTop = thread.scrollHeight;
   }
 
+  function markInterrupted() {
+    if (!state.current) {
+      return;
+    }
+    const host = state.current.el || (state.current.pre && state.current.pre.closest('.msg'));
+    if (!host || host.querySelector('.interrupted')) {
+      return;
+    }
+    if (state.current.speak) state.current.speak.style.display = 'none';
+    if (state.current.think) state.current.think.style.display = 'none';
+    const note = document.createElement('div');
+    note.className = 'notice interrupted';
+    note.textContent = 'Interrupted';
+    const bubble = host.querySelector('.bubble') || host;
+    bubble.appendChild(note);
+    thread.scrollTop = thread.scrollHeight;
+  }
+
   function closePicker() {
     state.pickerOpen = false;
     picker.classList.remove('open');
@@ -412,7 +430,8 @@
       '<button type="button" id="split-continue">Continue</button>' +
       '<button type="button" id="split-pick">Pick a bot to decide</button>' +
       '<button type="button" class="secondary" id="split-stop">Stop</button></div>';
-    card.querySelector('#split-continue').addEventListener('click', function () {
+    const continueBtn = card.querySelector('#split-continue');
+    continueBtn.addEventListener('click', function () {
       vscode.postMessage({ type: 'split/continue' });
     });
     card.querySelector('#split-pick').addEventListener('click', function () {
@@ -421,13 +440,14 @@
     card.querySelector('#split-stop').addEventListener('click', function () {
       vscode.postMessage({ type: 'chat/stop' });
     });
+    continueBtn.focus();
     thread.scrollTop = thread.scrollHeight;
   }
 
   function hideSplit() {
     const card = document.getElementById('split-card');
     if (card) {
-      card.classList.remove('visible');
+      card.remove();
     }
   }
 
@@ -518,6 +538,7 @@
       state.current = {
         botId: msg.botId,
         name: msg.name,
+        el: el,
         pre: el.querySelector('pre'),
         think: el.querySelector('.think'),
         speak: el.querySelector('.speak'),
@@ -543,11 +564,19 @@
       announce((state.current && state.current.name ? state.current.name : 'Bot') + ' finished');
       state.current = null;
     } else if (msg.type === 'chat/split') {
+      if (msg.paused) {
+        markInterrupted();
+      }
       state.splitOpen = true;
       lockComposer();
       showSplit(msg);
     } else if (msg.type === 'chat/notice') {
-      appendNotice(msg.text || '');
+      if (msg.text === 'Interrupted') {
+        markInterrupted();
+      } else {
+        hideSplit();
+        appendNotice(msg.text || '');
+      }
     } else if (msg.type === 'error') {
       const el = document.createElement('div');
       el.className = 'error';

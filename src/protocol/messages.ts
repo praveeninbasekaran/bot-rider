@@ -65,10 +65,10 @@ export type HostToUi =
     }
   | {
       type: 'chat/split';
-      positions: SplitPosition[];
-      title?: string;
-      reason?: string;
+      title: string;
+      reason: string;
       paused?: boolean;
+      positions: SplitPosition[];
     }
   | { type: 'chat/notice'; text: string }
   | { type: 'ui/expanded'; expanded: boolean }

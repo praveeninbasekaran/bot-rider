@@ -197,10 +197,12 @@ export class Orchestrator {
   stop(): void {
     this.cts?.cancel();
     if (this.state.debateRunning) {
-      this.enterSplit(COPY.splitPaused, COPY.stoppedNoImpl, true);
+      this.emit({ type: 'chat/notice', text: COPY.interrupted });
+      this.enterSplit(COPY.splitPaused, COPY.splitPausedReason, true);
       return;
     }
     if (this.state.splitOpen) {
+      this.emit({ type: 'chat/notice', text: COPY.stoppedNoImpl });
       this.exitToIdle();
     }
   }
