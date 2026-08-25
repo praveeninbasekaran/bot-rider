@@ -1,0 +1,231 @@
+{
+  "name": "bot-rider",
+  "displayName": "Bot Rider",
+  "description": "A Copilot-powered swarm of persona bots that debate, then propose workspace edits for review.",
+  "version": "0.1.0",
+  "publisher": "botrider",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/praveeninbasekaran/bot-rider.git"
+  },
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "categories": [
+    "Chat",
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/vscode": "^1.99.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "botrider.bots.create",
+        "title": "New Bot",
+        "category": "Bot Rider",
+        "icon": "$(add)"
+      },
+      {
+        "command": "botrider.bots.edit",
+        "title": "Edit Bot",
+        "category": "Bot Rider",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "botrider.bots.delete",
+        "title": "Delete Bot",
+        "category": "Bot Rider",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "botrider.bots.toggle",
+        "title": "Toggle Active",
+        "category": "Bot Rider"
+      },
+      {
+        "command": "botrider.chat.expand",
+        "title": "Expand",
+        "category": "Bot Rider",
+        "icon": "$(screen-full)"
+      },
+      {
+        "command": "botrider.chat.stop",
+        "title": "Stop",
+        "category": "Bot Rider",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "botrider.changeset.approve",
+        "title": "Approve",
+        "category": "Bot Rider",
+        "icon": "$(check)"
+      },
+      {
+        "command": "botrider.changeset.reject",
+        "title": "Reject",
+        "category": "Bot Rider",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "botrider.review.openDiff",
+        "title": "Open Diff",
+        "category": "Bot Rider",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "botrider.split.continue",
+        "title": "Continue",
+        "category": "Bot Rider"
+      },
+      {
+        "command": "botrider.split.pick",
+        "title": "Pick a Bot to Decide",
+        "category": "Bot Rider"
+      },
+      {
+        "command": "botrider.copilot.recheck",
+        "title": "Sign in to GitHub Copilot",
+        "category": "Bot Rider"
+      },
+      {
+        "command": "botrider.changeset.retry",
+        "title": "Retry",
+        "category": "Bot Rider",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "botrider.bots.edit",
+          "when": "false"
+        },
+        {
+          "command": "botrider.bots.delete",
+          "when": "false"
+        },
+        {
+          "command": "botrider.bots.toggle",
+          "when": "false"
+        },
+        {
+          "command": "botrider.review.openDiff",
+          "when": "false"
+        },
+        {
+          "command": "botrider.split.continue",
+          "when": "botrider.splitOpen"
+        },
+        {
+          "command": "botrider.split.pick",
+          "when": "botrider.splitOpen"
+        },
+        {
+          "command": "botrider.chat.stop",
+          "when": "botrider.debateRunning || botrider.splitOpen"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "botrider.bots.create",
+          "when": "view == botrider.bots",
+          "group": "navigation"
+        },
+        {
+          "command": "botrider.chat.expand",
+          "when": "view == botrider.chat && !botrider.chatExpanded",
+          "group": "navigation"
+        },
+        {
+          "command": "botrider.chat.stop",
+          "when": "view == botrider.chat && botrider.debateRunning",
+          "group": "navigation"
+        },
+        {
+          "command": "botrider.changeset.approve",
+          "when": "view == botrider.review && botrider.hasPendingChanges",
+          "group": "navigation@1"
+        },
+        {
+          "command": "botrider.changeset.reject",
+          "when": "view == botrider.review && botrider.hasPendingChanges",
+          "group": "navigation@2"
+        },
+        {
+          "command": "botrider.changeset.retry",
+          "when": "view == botrider.review && botrider.applyFailed",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "botrider.bots.edit",
+          "when": "view == botrider.bots && viewItem == bot",
+          "group": "inline@1"
+        },
+        {
+          "command": "botrider.bots.delete",
+          "when": "view == botrider.bots && viewItem == bot",
+          "group": "inline@2"
+        },
+        {
+          "command": "botrider.review.openDiff",
+          "when": "view == botrider.review && viewItem == proposedFile",
+          "group": "inline"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "botrider",
+          "title": "Bot Rider",
+          "icon": "media/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "botrider": [
+        {
+          "id": "botrider.bots",
+          "name": "Bots"
+        },
+        {
+          "id": "botrider.chat",
+          "name": "Swarm",
+          "type": "webview"
+        },
+        {
+          "id": "botrider.review",
+          "name": "Proposed Changes",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "botrider.bots",
+        "contents": "No bots yet. Create a bot with a name, persona, and role, then send a master prompt in Swarm.\n[New Bot](command:botrider.bots.create)",
+        "when": "!botrider.hasBots"
+      },
+      {
+        "view": "botrider.review",
+        "contents": "No proposed edits. After the swarm agrees, proposed WorkspaceEdits appear here for review.\nApprove applies the whole batch. Reject discards it.",
+        "when": "!botrider.hasPendingChanges"
+      }
+    ]
+  }
+}
