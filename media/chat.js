@@ -412,7 +412,8 @@
       '<button type="button" id="split-continue">Continue</button>' +
       '<button type="button" id="split-pick">Pick a bot to decide</button>' +
       '<button type="button" class="secondary" id="split-stop">Stop</button></div>';
-    card.querySelector('#split-continue').addEventListener('click', function () {
+    const continueBtn = card.querySelector('#split-continue');
+    continueBtn.addEventListener('click', function () {
       vscode.postMessage({ type: 'split/continue' });
     });
     card.querySelector('#split-pick').addEventListener('click', function () {
@@ -421,13 +422,14 @@
     card.querySelector('#split-stop').addEventListener('click', function () {
       vscode.postMessage({ type: 'chat/stop' });
     });
+    continueBtn.focus();
     thread.scrollTop = thread.scrollHeight;
   }
 
   function hideSplit() {
     const card = document.getElementById('split-card');
     if (card) {
-      card.classList.remove('visible');
+      card.remove();
     }
   }
 
@@ -547,6 +549,7 @@
       lockComposer();
       showSplit(msg);
     } else if (msg.type === 'chat/notice') {
+      hideSplit();
       appendNotice(msg.text || '');
     } else if (msg.type === 'error') {
       const el = document.createElement('div');

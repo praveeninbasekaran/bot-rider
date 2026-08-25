@@ -53,6 +53,13 @@ describe('Orchestrator positive', () => {
       true,
     );
     expect(tokens.every((m) => m.type === 'chat/token' && !('text' in m))).toBe(true);
+    const consensusEnds = msgs.filter((m) => m.type === 'chat/turn-end' && m.turn === 'consensus');
+    expect(consensusEnds.length).toBe(4);
+    expect(
+      consensusEnds.every(
+        (m) => m.type === 'chat/turn-end' && !/\bAGREE\b/i.test(m.text) && !/\bDISSENT\b/i.test(m.text),
+      ),
+    ).toBe(true);
   });
 
   it('@known solo then NEED_EDIT implementer for that bot', async () => {
@@ -185,6 +192,25 @@ describe('Orchestrator negative', () => {
     expect(split && split.type === 'chat/split' && split.reason).not.toBe(COPY.stoppedNoImpl);
     expect(split && split.type === 'chat/split' && split.positions).toHaveLength(frozen.length);
     expect(split && split.type === 'chat/split' && split.positions).toHaveLength(2);
+    expect(msgs.some((m) => m.type === 'chat/notice' && m.text === COPY.stoppedNoImpl)).toBe(false);
+  });
+
+  it('Stop on an already-open split emits stopped notice and never implements', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    gw.script = ({ turn }) => (turn === 'consensus' ? 'DISSENT' : 'talk');
+    await app.send('first');
+    expect(app.orchestrator.getRunState().splitOpen).toBe(true);
+    expect(app.orchestrator.getRunState().debateRunning).toBe(false);
+    expect(gw.turns.includes('implement')).toBe(false);
+    msgs.length = 0;
+    app.stop();
+    expect(msgs.some((m) => m.type === 'chat/notice' && m.text === COPY.stoppedNoImpl)).toBe(true);
+    expect(msgs.some((m) => m.type === 'chat/split')).toBe(false);
+    expect(gw.turns.includes('implement')).toBe(false);
+    expect(app.orchestrator.getRunState().splitOpen).toBe(false);
+    expect(app.orchestrator.getRunState().debateRunning).toBe(false);
+    expect(app.orchestrator.getRunState().phase).toBe('idle');
   });
 
   it('send is ignored while splitOpen', async () => {

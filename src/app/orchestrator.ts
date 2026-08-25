@@ -201,6 +201,7 @@ export class Orchestrator {
       return;
     }
     if (this.state.splitOpen) {
+      this.emit({ type: 'chat/notice', text: COPY.stoppedNoImpl });
       this.exitToIdle();
     }
   }

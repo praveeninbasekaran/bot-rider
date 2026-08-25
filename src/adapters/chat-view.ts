@@ -67,7 +67,7 @@ export class ChatHub {
       }
       return;
     }
-    if (msg.type === 'chat/turn-end' || msg.type === 'error' || msg.type === 'chat/split') {
+    if (msg.type === 'chat/turn-end' || msg.type === 'error' || msg.type === 'chat/split' || msg.type === 'chat/notice') {
       this.flushTokens();
     }
     this.broadcast(msg);
