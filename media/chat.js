@@ -9,6 +9,7 @@
     splitOpen: false,
     debateRunning: false,
     lastPhaseKey: '',
+    lastTurn: '',
     current: null,
     pendingSend: '',
     pickerIndex: 0,
@@ -155,6 +156,227 @@
 
   function announce(text) {
     live.textContent = text;
+  }
+
+  function reduceMotion() {
+    if (document.body.classList.contains('vscode-reduce-motion')) {
+      return true;
+    }
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
+  function mcpTurnAllowed(turn) {
+    return turn === 'propose' || turn === 'critique' || turn === 'direct';
+  }
+
+  function mcpSkipBody(reason, server, message) {
+    if (reason === 'missing') {
+      return 'Not in this workspace.';
+    }
+    if (reason === 'unauthenticated') {
+      return 'Not signed in. Sign in from VS Code MCP settings.';
+    }
+    if (reason === 'tool-missing') {
+      return 'Tool not available.';
+    }
+    if (reason === 'mutating-blocked') {
+      return "Writes through " + server + " aren't available in Bot Rider.";
+    }
+    const raw = String(message || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return raw.slice(0, 140);
+  }
+
+  function mcpPreviewText(preview) {
+    const text = String(preview || '')
+      .replace(/\r/g, '')
+      .trim();
+    if (!text) {
+      return '';
+    }
+    const first = text[0];
+    if (first === '{' || first === '[') {
+      return '';
+    }
+    return text.split('\n').slice(0, 3).join('\n');
+  }
+
+  function findMcpArticle(botId) {
+    if (state.current && state.current.el && state.current.botId === botId) {
+      return state.current.el;
+    }
+    let found = null;
+    const msgs = thread.querySelectorAll('.msg');
+    for (let i = 0; i < msgs.length; i++) {
+      if (msgs[i].getAttribute('data-bot-id') === botId) {
+        found = msgs[i];
+      }
+    }
+    return found;
+  }
+
+  function findMcpInFlight(botId, server, tool) {
+    const rows = thread.querySelectorAll('.mcp-read.is-reading');
+    let found = null;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.getAttribute('data-server') !== server || row.getAttribute('data-tool') !== tool) {
+        continue;
+      }
+      const host = row.closest('.msg');
+      if (!host || host.getAttribute('data-bot-id') !== botId) {
+        continue;
+      }
+      found = row;
+    }
+    return found;
+  }
+
+  function insertMcpRow(article, row) {
+    const bubble = article.querySelector('.bubble') || article;
+    const pre = bubble.querySelector('pre.body') || bubble.querySelector('pre');
+    const before = pre && pre.parentNode && pre.parentNode !== bubble && pre.parentNode.classList.contains('body') ? pre.parentNode : pre;
+    bubble.insertBefore(row, before || null);
+  }
+
+  function canPaintNewMcpRow(article) {
+    if (!mcpTurnAllowed(state.lastTurn)) {
+      return false;
+    }
+    if (!article) {
+      return false;
+    }
+    return mcpTurnAllowed(article.getAttribute('data-turn'));
+  }
+
+  function createMcpStartRow(msg) {
+    const row = document.createElement('div');
+    row.className = 'mcp-read is-reading';
+    row.setAttribute('data-server', msg.server);
+    row.setAttribute('data-tool', msg.tool);
+    const title = document.createElement('span');
+    title.className = 'mcp-read-title';
+    title.textContent = 'Reading ' + msg.server + ' · ' + msg.tool;
+    row.appendChild(title);
+    if (reduceMotion()) {
+      const staticLabel = document.createElement('span');
+      staticLabel.className = 'mcp-read-static';
+      staticLabel.textContent = 'Reading…';
+      row.appendChild(staticLabel);
+    } else {
+      const spinner = document.createElement('span');
+      spinner.className = 'mcp-read-spinner';
+      spinner.setAttribute('aria-hidden', 'true');
+      row.appendChild(spinner);
+    }
+    return row;
+  }
+
+  function paintMcpEnd(row, msg) {
+    const preview = mcpPreviewText(msg.preview);
+    row.className = 'mcp-read is-done';
+    row.setAttribute('data-server', msg.server);
+    row.setAttribute('data-tool', msg.tool);
+    row.setAttribute('aria-label', '@' + msg.handle + ' read ' + msg.server + ' ' + msg.tool);
+    row.removeAttribute('role');
+    row.replaceChildren();
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mcp-read-toggle';
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', 'Read ' + msg.server + ' ' + msg.tool + ', collapsed');
+    const chevron = document.createElement('span');
+    chevron.className = 'mcp-read-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    const title = document.createElement('span');
+    title.className = 'mcp-read-title';
+    title.textContent = 'Read ' + msg.server + ' · ' + msg.tool;
+    btn.appendChild(chevron);
+    btn.appendChild(title);
+    row.appendChild(btn);
+    if (preview) {
+      const previewEl = document.createElement('div');
+      previewEl.className = 'mcp-read-preview';
+      previewEl.hidden = true;
+      previewEl.textContent = preview;
+      btn.addEventListener('click', function () {
+        const open = btn.getAttribute('aria-expanded') === 'true';
+        const next = !open;
+        btn.setAttribute('aria-expanded', next ? 'true' : 'false');
+        btn.setAttribute('aria-label', 'Read ' + msg.server + ' ' + msg.tool + ', ' + (next ? 'expanded' : 'collapsed'));
+        previewEl.hidden = !next;
+        row.classList.toggle('is-expanded', next);
+      });
+      row.appendChild(previewEl);
+    } else {
+      btn.disabled = true;
+    }
+  }
+
+  function paintMcpSkip(row, msg) {
+    row.className = 'mcp-read ' + (msg.reason === 'error' ? 'is-error' : 'is-skip');
+    row.setAttribute('data-server', msg.server);
+    row.setAttribute('data-tool', msg.tool);
+    row.setAttribute('role', 'status');
+    row.removeAttribute('aria-label');
+    row.replaceChildren();
+    const title = document.createElement('span');
+    title.className = 'mcp-read-title';
+    title.textContent = 'Skipped ' + msg.server + ' · ' + msg.tool;
+    const body = document.createElement('span');
+    body.className = 'mcp-read-body';
+    body.textContent = mcpSkipBody(msg.reason, msg.server, msg.message);
+    row.appendChild(title);
+    row.appendChild(body);
+  }
+
+  function onMcpReadStart(msg) {
+    const article = findMcpArticle(msg.botId);
+    if (!canPaintNewMcpRow(article)) {
+      return;
+    }
+    const inFlight = findMcpInFlight(msg.botId, msg.server, msg.tool);
+    if (inFlight && inFlight.closest('.msg') === article) {
+      return;
+    }
+    insertMcpRow(article, createMcpStartRow(msg));
+    announce('@' + msg.handle + ' is reading ' + msg.server);
+    thread.scrollTop = thread.scrollHeight;
+  }
+
+  function onMcpReadEnd(msg) {
+    const inFlight = findMcpInFlight(msg.botId, msg.server, msg.tool);
+    if (inFlight) {
+      paintMcpEnd(inFlight, msg);
+      thread.scrollTop = thread.scrollHeight;
+      return;
+    }
+    const article = findMcpArticle(msg.botId);
+    if (!canPaintNewMcpRow(article)) {
+      return;
+    }
+    const row = document.createElement('div');
+    paintMcpEnd(row, msg);
+    insertMcpRow(article, row);
+    thread.scrollTop = thread.scrollHeight;
+  }
+
+  function onMcpSkip(msg) {
+    const inFlight = findMcpInFlight(msg.botId, msg.server, msg.tool);
+    if (inFlight) {
+      paintMcpSkip(inFlight, msg);
+      thread.scrollTop = thread.scrollHeight;
+      return;
+    }
+    const article = findMcpArticle(msg.botId);
+    if (!canPaintNewMcpRow(article)) {
+      return;
+    }
+    const row = document.createElement('div');
+    paintMcpSkip(row, msg);
+    insertMcpRow(article, row);
+    thread.scrollTop = thread.scrollHeight;
   }
 
   function appendUser(text) {
@@ -514,12 +736,16 @@
       }
       renderEmpty();
     } else if (msg.type === 'chat/turn-start') {
+      state.lastTurn = msg.turn;
       if (msg.turn === 'implement' || msg.turn === 'consensus') {
         return;
       }
       maybePhaseHeader(msg.turn, msg.handle, msg.round);
       const el = document.createElement('div');
       el.className = 'msg';
+      el.setAttribute('data-bot-id', msg.botId);
+      el.setAttribute('data-turn', msg.turn);
+      el.setAttribute('data-handle', msg.handle);
       const solo = msg.solo ? '<span>SOLO · @' + esc(msg.handle) + '</span>' : '';
       const chips =
         '<span class="chips"><span class="chip think">thinking</span><span class="chip speak" style="display:none">speaking</span></span>';
@@ -538,6 +764,8 @@
       state.current = {
         botId: msg.botId,
         name: msg.name,
+        handle: msg.handle,
+        turn: msg.turn,
         el: el,
         pre: el.querySelector('pre'),
         think: el.querySelector('.think'),
@@ -554,6 +782,18 @@
         if (state.current.speak) state.current.speak.style.display = 'inline';
         announce((state.current.name || 'Bot') + ' is speaking');
         thread.scrollTop = thread.scrollHeight;
+      }
+    } else if (msg.type === 'chat/mcp-read-start' || msg.type === 'chat/mcp-read-end' || msg.type === 'chat/mcp-skip') {
+      switch (msg.type) {
+        case 'chat/mcp-read-start':
+          onMcpReadStart(msg);
+          break;
+        case 'chat/mcp-read-end':
+          onMcpReadEnd(msg);
+          break;
+        case 'chat/mcp-skip':
+          onMcpSkip(msg);
+          break;
       }
     } else if (msg.type === 'chat/turn-end') {
       if (state.current && state.current.speak) state.current.speak.style.display = 'none';
