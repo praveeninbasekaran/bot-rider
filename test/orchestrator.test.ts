@@ -189,9 +189,12 @@ describe('Orchestrator negative', () => {
       paused: true,
     });
     expect(split && split.type === 'chat/split' && split.reason).toBe('Debate paused. Positions so far:');
+    expect(split && split.type === 'chat/split' && split.title).toBe('Debate paused');
     expect(split && split.type === 'chat/split' && split.reason).not.toBe(COPY.stoppedNoImpl);
+    expect(split && split.type === 'chat/split' && split.reason).not.toBe(COPY.interrupted);
     expect(split && split.type === 'chat/split' && split.positions).toHaveLength(frozen.length);
     expect(split && split.type === 'chat/split' && split.positions).toHaveLength(2);
+    expect(msgs.some((m) => m.type === 'chat/notice' && m.text === COPY.interrupted)).toBe(true);
     expect(msgs.some((m) => m.type === 'chat/notice' && m.text === COPY.stoppedNoImpl)).toBe(false);
   });
 
@@ -206,6 +209,7 @@ describe('Orchestrator negative', () => {
     msgs.length = 0;
     app.stop();
     expect(msgs.some((m) => m.type === 'chat/notice' && m.text === COPY.stoppedNoImpl)).toBe(true);
+    expect(msgs.some((m) => m.type === 'chat/notice' && m.text === COPY.interrupted)).toBe(false);
     expect(msgs.some((m) => m.type === 'chat/split')).toBe(false);
     expect(gw.turns.includes('implement')).toBe(false);
     expect(app.orchestrator.getRunState().splitOpen).toBe(false);

@@ -197,6 +197,7 @@ export class Orchestrator {
   stop(): void {
     this.cts?.cancel();
     if (this.state.debateRunning) {
+      this.emit({ type: 'chat/notice', text: COPY.interrupted });
       this.enterSplit(COPY.splitPaused, COPY.splitPausedReason, true);
       return;
     }

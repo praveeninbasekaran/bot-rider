@@ -7,6 +7,7 @@ export const COPY = {
   splitNoConsensus: 'No consensus',
   splitPaused: 'Debate paused',
   splitPausedReason: 'Debate paused. Positions so far:',
+  interrupted: 'Interrupted',
   stoppedNoImpl: 'Stopped without implementation.',
   pickDirection: (name: string) => `${name}'s position selected as the direction.`,
   pickTitle: 'Pick a bot to decide',

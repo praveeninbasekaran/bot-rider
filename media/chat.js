@@ -173,6 +173,24 @@
     thread.scrollTop = thread.scrollHeight;
   }
 
+  function markInterrupted() {
+    if (!state.current) {
+      return;
+    }
+    const host = state.current.el || (state.current.pre && state.current.pre.closest('.msg'));
+    if (!host || host.querySelector('.interrupted')) {
+      return;
+    }
+    if (state.current.speak) state.current.speak.style.display = 'none';
+    if (state.current.think) state.current.think.style.display = 'none';
+    const note = document.createElement('div');
+    note.className = 'notice interrupted';
+    note.textContent = 'Interrupted';
+    const bubble = host.querySelector('.bubble') || host;
+    bubble.appendChild(note);
+    thread.scrollTop = thread.scrollHeight;
+  }
+
   function closePicker() {
     state.pickerOpen = false;
     picker.classList.remove('open');
@@ -520,6 +538,7 @@
       state.current = {
         botId: msg.botId,
         name: msg.name,
+        el: el,
         pre: el.querySelector('pre'),
         think: el.querySelector('.think'),
         speak: el.querySelector('.speak'),
@@ -545,12 +564,19 @@
       announce((state.current && state.current.name ? state.current.name : 'Bot') + ' finished');
       state.current = null;
     } else if (msg.type === 'chat/split') {
+      if (msg.paused) {
+        markInterrupted();
+      }
       state.splitOpen = true;
       lockComposer();
       showSplit(msg);
     } else if (msg.type === 'chat/notice') {
-      hideSplit();
-      appendNotice(msg.text || '');
+      if (msg.text === 'Interrupted') {
+        markInterrupted();
+      } else {
+        hideSplit();
+        appendNotice(msg.text || '');
+      }
     } else if (msg.type === 'error') {
       const el = document.createElement('div');
       el.className = 'error';
