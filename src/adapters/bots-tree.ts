@@ -7,9 +7,12 @@ export class BotTreeItem extends vscode.TreeItem {
   constructor(public readonly bot: BotRecord) {
     super(bot.name, vscode.TreeItemCollapsibleState.None);
     this.id = bot.id;
-    this.description = `@${bot.handle}`;
+    this.description = bot.active ? bot.role : `${bot.role} · Inactive`;
     this.contextValue = 'bot';
     this.tooltip = `${bot.name} (@${bot.handle})\n${bot.role}`;
+    this.accessibilityInformation = {
+      label: `${bot.name}, ${bot.role}, ${bot.active ? 'active' : 'inactive'}`,
+    };
     this.command = {
       command: 'botrider.bots.edit',
       title: 'Edit Bot',

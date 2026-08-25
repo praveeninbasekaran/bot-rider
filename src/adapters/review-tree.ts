@@ -8,7 +8,7 @@ class ReviewItem extends vscode.TreeItem {
   constructor(
     label: string,
     collapsible: vscode.TreeItemCollapsibleState,
-    public readonly kind: 'group' | 'file',
+    public readonly kind: 'file',
     public readonly file?: ChangeFile,
   ) {
     super(label, collapsible);
@@ -37,28 +37,13 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   }
 
   getChildren(element?: ReviewItem): ReviewItem[] {
-    const files = this.app.changesets.files ?? [];
-    if (!element) {
-      const modified = files.filter((f) => f.op === 'update');
-      const added = files.filter((f) => f.op === 'create');
-      const deleted = files.filter((f) => f.op === 'delete');
-      const groups: ReviewItem[] = [];
-      if (modified.length) {
-        groups.push(group('Modified', modified.length));
-      }
-      if (added.length) {
-        groups.push(group('Added', added.length));
-      }
-      if (deleted.length) {
-        groups.push(group('Deleted', deleted.length));
-      }
-      return groups;
+    if (element) {
+      return [];
     }
-    if (element.kind === 'group') {
-      const op = groupOp(element.label as string);
-      return files.filter((f) => f.op === op).map((f) => fileItem(f));
-    }
-    return [];
+    return (this.app.changesets.files ?? [])
+      .slice()
+      .sort((a, b) => a.path.localeCompare(b.path))
+      .map((f) => fileItem(f));
   }
 
   private syncChrome(): void {
@@ -103,12 +88,6 @@ export async function openProposedDiff(
   await vscode.commands.executeCommand('vscode.diff', left, right, title, preview);
 }
 
-function group(name: string, count: number): ReviewItem {
-  const item = new ReviewItem(`${name} (${count})`, vscode.TreeItemCollapsibleState.Expanded, 'group');
-  item.contextValue = 'proposedGroup';
-  return item;
-}
-
 function fileItem(file: ChangeFile): ReviewItem {
   const item = new ReviewItem(file.path, vscode.TreeItemCollapsibleState.None, 'file', file);
   item.contextValue = 'proposedFile';
@@ -126,14 +105,4 @@ function fileItem(file: ChangeFile): ReviewItem {
     item.description = 'Modified';
   }
   return item;
-}
-
-function groupOp(label: string): FileOp {
-  if (label.startsWith('Added')) {
-    return 'create';
-  }
-  if (label.startsWith('Deleted')) {
-    return 'delete';
-  }
-  return 'update';
 }

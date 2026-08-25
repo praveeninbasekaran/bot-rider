@@ -27,8 +27,8 @@ describe('contribution points', () => {
     activationEvents: unknown[];
     extensionDependencies?: unknown;
     contributes: {
-      commands: { command: string; title: string; category: string; enablement?: string }[];
-      menus: Record<string, { command: string; when?: string }[]>;
+      commands: { command: string; title: string; tooltip?: string; category: string; enablement?: string }[];
+      menus: Record<string, { command: string; when?: string; group?: string }[]>;
       viewsContainers: { activitybar: { id: string }[] };
       views: Record<string, { id: string; visibility?: string; type?: string }[]>;
       viewsWelcome: { view: string; when: string; contents: string }[];
@@ -104,6 +104,40 @@ describe('contribution points', () => {
     expect(titles.find((m) => m.command === 'botrider.chat.stop')?.when).toBe(
       'view == botrider.chat && (botrider.debateRunning || botrider.splitOpen)',
     );
+
+    const approve = pkg.contributes.commands.find((c) => c.command === 'botrider.changeset.approve');
+    const reject = pkg.contributes.commands.find((c) => c.command === 'botrider.changeset.reject');
+    expect(approve?.title).toBe('Approve');
+    expect(reject?.title).toBe('Reject');
+    expect(approve?.tooltip).toBe('Approve and apply all proposed edits');
+    expect(reject?.tooltip).toBe('Reject and discard all proposed edits');
+
+    const itemCtx = pkg.contributes.menus['view/item/context'];
+    expect(itemCtx.find((m) => m.command === 'botrider.bots.edit')?.group).toBe('inline@1');
+    expect(itemCtx.find((m) => m.command === 'botrider.bots.delete')?.group).toBe('1_modification');
+    expect(itemCtx.find((m) => m.command === 'botrider.bots.delete')?.group).not.toMatch(/^inline/);
+  });
+
+  it('Proposed Changes is a flat localeCompare file list', () => {
+    const src = readFileSync(join(root, 'src/adapters/review-tree.ts'), 'utf8');
+    expect(src).toContain('localeCompare');
+    expect(src).not.toMatch(/kind: 'group'/);
+    expect(src).not.toMatch(/proposedGroup/);
+    expect(src).not.toMatch(/function group\(/);
+    expect(src).toMatch(/description = 'Added'/);
+    expect(src).toMatch(/description = 'Deleted'/);
+    expect(src).toMatch(/description = 'Modified'/);
+    expect(src).toContain('files · pending review');
+    expect(src).toContain('1 file · pending review');
+  });
+
+  it('Bots tree a11y label and Inactive description suffix', () => {
+    const src = readFileSync(join(root, 'src/adapters/bots-tree.ts'), 'utf8');
+    expect(src).toContain('accessibilityInformation');
+    expect(src).toContain("${bot.name}, ${bot.role}, ${bot.active ? 'active' : 'inactive'}");
+    expect(src).toContain('`${bot.role} · Inactive`');
+    expect(src).not.toMatch(/this\.description = `@\$\{bot\.handle\}`/);
+    expect(src).toMatch(/command:\s*'botrider\.bots\.edit'/);
   });
 
   it('welcome views match copy', () => {

@@ -70,12 +70,14 @@
       {
         "command": "botrider.changeset.approve",
         "title": "Approve",
+        "tooltip": "Approve and apply all proposed edits",
         "category": "Bot Rider",
         "icon": "$(check)"
       },
       {
         "command": "botrider.changeset.reject",
         "title": "Reject",
+        "tooltip": "Reject and discard all proposed edits",
         "category": "Bot Rider",
         "icon": "$(discard)"
       },
@@ -184,7 +186,7 @@
         {
           "command": "botrider.bots.delete",
           "when": "view == botrider.bots && viewItem == bot",
-          "group": "inline@2"
+          "group": "1_modification"
         },
         {
           "command": "botrider.review.openDiff",
