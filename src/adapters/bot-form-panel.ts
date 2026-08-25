@@ -26,30 +26,60 @@ export class BotFormPanel {
     panel.webview.html = webviewHtml({
       webview: panel.webview,
       extensionUri: this.extensionUri,
-      scriptFile: 'form.js',
-      styleFile: 'form.css',
+      scriptFile: 'bot-form.js',
+      styleFile: 'bot-form.css',
+      extraStyles: ['vscode-webview.css'],
       bodyClass: 'form',
       extra: `<form id="bot-form"></form>`,
     });
-    const sub = panel.webview.onDidReceiveMessage(async (msg: UiToHost | { type: 'form/ready' }) => {
-      if (msg.type === 'form/ready') {
-        void panel.webview.postMessage({
-          type: 'form/load',
-          bot,
-          suggestedHandle: bot?.handle ?? deriveHandle(''),
-        });
-        return;
-      }
-      try {
-        if (msg.type === 'bots/create' || msg.type === 'bots/update') {
-          await this.app.handleUi(msg);
-          panel.dispose();
+    const sub = panel.webview.onDidReceiveMessage(
+      async (
+        msg: UiToHost | { type: 'form/ready' } | { type: 'form/cancel' },
+      ) => {
+        if (msg.type === 'form/ready') {
+          void panel.webview.postMessage({
+            type: 'form/load',
+            bot,
+            bots: this.app.registry.list(),
+            suggestedHandle: bot?.handle ?? deriveHandle(''),
+          });
+          return;
         }
-      } catch (err) {
-        void vscode.window.showErrorMessage(err instanceof Error ? err.message : String(err));
-      }
-    });
+        if (msg.type === 'form/cancel') {
+          panel.dispose();
+          return;
+        }
+        if (msg.type === 'bots/delete' && bot) {
+          const pick = await vscode.window.showWarningMessage(
+            `Delete bot "${bot.name}"?`,
+            { modal: true },
+            'Delete',
+          );
+          if (pick === 'Delete') {
+            await this.app.deleteBot(bot.id);
+            panel.dispose();
+          }
+          return;
+        }
+        try {
+          if (msg.type === 'bots/create' || msg.type === 'bots/update') {
+            await this.app.handleUi(msg);
+            panel.dispose();
+          }
+        } catch (err) {
+          void panel.webview.postMessage({
+            type: 'form/error',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      },
+    );
     panel.onDidDispose(() => sub.dispose());
-    void panel.webview.postMessage({ type: 'form/load', bot, suggestedHandle: bot?.handle ?? '' });
+    void panel.webview.postMessage({
+      type: 'form/load',
+      bot,
+      bots: this.app.registry.list(),
+      suggestedHandle: bot?.handle ?? '',
+    });
   }
 }

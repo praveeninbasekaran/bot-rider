@@ -17,6 +17,7 @@ export class ChatExpandPanel {
   reveal(): void {
     if (this.panel) {
       this.panel.reveal(vscode.ViewColumn.Active);
+      this.hub.post({ type: 'ui/expanded', expanded: true });
       return;
     }
     this.panel = vscode.window.createWebviewPanel(
@@ -25,6 +26,7 @@ export class ChatExpandPanel {
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
+        enableCommandUris: true,
         retainContextWhenHidden: true,
         localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'media')],
       },
@@ -34,16 +36,19 @@ export class ChatExpandPanel {
       extensionUri: this.extensionUri,
       scriptFile: 'chat.js',
       styleFile: 'chat.css',
+      extraStyles: ['vscode-webview.css'],
       bodyClass: 'swarm expanded',
     });
     const d = this.hub.attach(this.panel.webview);
     this.onExpanded(true);
     void this.keys.set('botrider.chatExpanded', true);
+    this.hub.post({ type: 'ui/expanded', expanded: true });
     this.panel.onDidDispose(() => {
       d.dispose();
       this.panel = undefined;
       this.onExpanded(false);
       void this.keys.set('botrider.chatExpanded', false);
+      this.hub.post({ type: 'ui/expanded', expanded: false });
     });
   }
 

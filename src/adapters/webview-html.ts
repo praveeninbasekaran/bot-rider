@@ -24,6 +24,7 @@ export function webviewHtml(args: {
   extensionUri: vscode.Uri;
   scriptFile: string;
   styleFile: string;
+  extraStyles?: string[];
   bodyClass?: string;
   extra?: string;
 }): string {
@@ -31,8 +32,11 @@ export function webviewHtml(args: {
   const scriptUri = args.webview.asWebviewUri(
     vscode.Uri.joinPath(args.extensionUri, 'media', args.scriptFile),
   );
-  const styleUri = args.webview.asWebviewUri(
-    vscode.Uri.joinPath(args.extensionUri, 'media', args.styleFile),
+  const styles = [...(args.extraStyles ?? []), args.styleFile].map(
+    (file) =>
+      `<link rel="stylesheet" href="${args.webview.asWebviewUri(
+        vscode.Uri.joinPath(args.extensionUri, 'media', file),
+      )}" />`,
   );
   const policy = csp(args.webview, nonce);
   return `<!DOCTYPE html>
@@ -41,7 +45,7 @@ export function webviewHtml(args: {
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="${policy}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="${styleUri}" />
+  ${styles.join('\n  ')}
   <title>Bot Rider</title>
 </head>
 <body class="${args.bodyClass ?? ''}">

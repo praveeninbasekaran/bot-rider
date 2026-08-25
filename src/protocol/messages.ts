@@ -22,6 +22,16 @@ export type ErrorCode =
   | 'validate-failed'
   | 'copilot';
 
+export interface SplitPosition {
+  botId: string;
+  handle: string;
+  text: string;
+}
+
+export type BotCreateDraft = Omit<BotRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
+export type BotPatch = Partial<Pick<BotRecord, 'name' | 'handle' | 'persona' | 'role' | 'instructions'>>;
+
 export interface PromptMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -43,16 +53,25 @@ export type HostToUi =
       inactiveNotice?: string;
       solo?: boolean;
     }
-  | { type: 'chat/token'; text: string }
+  | { type: 'chat/token'; botId: string; delta: string }
   | {
       type: 'chat/turn-end';
-      text: string;
-      handle: string;
+      botId: string;
+      turn: TurnKind;
+      text?: string;
+      handle?: string;
       vote?: 'AGREE' | 'DISSENT';
       trailer?: 'NEED_EDIT' | 'NO_EDIT';
     }
-  | { type: 'chat/split'; title: string; reason: string; paused?: boolean }
+  | {
+      type: 'chat/split';
+      positions: SplitPosition[];
+      title?: string;
+      reason?: string;
+      paused?: boolean;
+    }
   | { type: 'chat/notice'; text: string }
+  | { type: 'ui/expanded'; expanded: boolean }
   | { type: 'changeset/preview'; files: ProposedFileDto[] }
   | {
       type: 'changeset/apply-failed';
@@ -64,31 +83,24 @@ export type HostToUi =
   | { type: 'error'; code: ErrorCode; message: string };
 
 export type UiToHost =
-  | {
-      type: 'bots/create';
-      name: string;
-      handle?: string;
-      persona: string;
-      role: string;
-      instructions: string;
-      active?: boolean;
-    }
+  | { type: 'bots/create'; draft: BotCreateDraft }
   | {
       type: 'bots/update';
       id: string;
-      name: string;
-      handle: string;
-      persona: string;
-      role: string;
-      instructions: string;
-      active: boolean;
+      patch?: BotPatch;
+      name?: string;
+      handle?: string;
+      persona?: string;
+      role?: string;
+      instructions?: string;
+      active?: boolean;
     }
   | { type: 'bots/toggle'; id: string; active: boolean }
   | { type: 'bots/delete'; id: string }
   | { type: 'chat/send'; text: string }
   | { type: 'chat/stop' }
   | { type: 'split/continue' }
-  | { type: 'split/pick'; botId?: string }
+  | { type: 'split/pick'; botId: string }
   | { type: 'changeset/approve' }
   | { type: 'changeset/retry' }
   | { type: 'changeset/reject' }

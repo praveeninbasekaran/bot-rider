@@ -345,7 +345,7 @@ export class Orchestrator {
     try {
       const streamed = await this.gateway.stream(messages, this.cts!.token, (chunk) => {
         full += chunk;
-        this.emit({ type: 'chat/token', text: chunk });
+        this.emit({ type: 'chat/token', botId: bot.id, delta: chunk });
       });
       if (streamed === 'cancelled' || this.cancelled()) {
         return 'cancelled';
@@ -393,7 +393,15 @@ export class Orchestrator {
 
     this.history.push({ handle: bot.handle, text: visible });
     this.thread.append({ role: 'assistant', text: visible, handle: bot.handle, botId: bot.id });
-    this.emit({ type: 'chat/turn-end', text: visible, handle: bot.handle, vote, trailer });
+    this.emit({
+      type: 'chat/turn-end',
+      botId: bot.id,
+      turn,
+      text: visibleBody(visible, vote, trailer),
+      handle: bot.handle,
+      vote,
+      trailer,
+    });
     return { ok: true, text: turn === 'implement' ? full : visible, trailer, vote };
   }
 
@@ -407,7 +415,21 @@ export class Orchestrator {
       frozenBotIds: this.freeze.map((b) => b.id),
     };
     this.pushState();
-    this.emit({ type: 'chat/split', title, reason, paused });
+    this.emit({
+      type: 'chat/split',
+      positions: this.splitPositions(),
+      title,
+      reason,
+      paused,
+    });
+  }
+
+  private splitPositions(): { botId: string; handle: string; text: string }[] {
+    return this.freeze.map((bot) => ({
+      botId: bot.id,
+      handle: bot.handle,
+      text: this.positionOneLiner(bot.handle),
+    }));
   }
 
   private exitToIdle(): void {
@@ -483,4 +505,19 @@ type TurnResult =
 
 function isTurnOk(result: TurnResult): result is { ok: true; text: string; trailer?: 'NEED_EDIT' | 'NO_EDIT'; vote?: 'AGREE' | 'DISSENT' } {
   return typeof result === 'object' && result.ok === true;
+}
+
+function visibleBody(
+  text: string,
+  vote?: 'AGREE' | 'DISSENT',
+  trailer?: 'NEED_EDIT' | 'NO_EDIT',
+): string {
+  let out = text;
+  if (trailer) {
+    out = out.replace(/\s*(NEED_EDIT|NO_EDIT)\.?$/i, '').replace(/\s+$/g, '');
+  }
+  if (vote) {
+    out = out.replace(/^\s*(AGREE|DISSENT)\b[^\n]*/i, '').trimStart();
+  }
+  return out;
 }

@@ -10,9 +10,15 @@ export class BotTreeItem extends vscode.TreeItem {
     this.description = `@${bot.handle}`;
     this.contextValue = 'bot';
     this.tooltip = `${bot.name} (@${bot.handle})\n${bot.role}`;
-    this.checkboxState = bot.active
-      ? vscode.TreeItemCheckboxState.Checked
-      : vscode.TreeItemCheckboxState.Unchecked;
+    this.command = {
+      command: 'botrider.bots.edit',
+      title: 'Edit Bot',
+      arguments: [this],
+    };
+    this.checkboxState = {
+      state: bot.active ? vscode.TreeItemCheckboxState.Checked : vscode.TreeItemCheckboxState.Unchecked,
+      tooltip: bot.active ? 'Active in swarm' : 'Inactive',
+    };
     const svg = avatarSvg(bot.name, bot.colorIndex);
     this.iconPath = vscode.Uri.from({
       scheme: 'data',

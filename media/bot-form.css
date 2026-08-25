@@ -1,8 +1,9 @@
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
+  font-size: var(--vscode-font-size, 13px);
   color: var(--vscode-foreground);
   background: var(--vscode-editor-background);
 }
@@ -21,7 +22,8 @@ label {
   color: var(--vscode-descriptionForeground);
 }
 
-input, textarea {
+input,
+textarea {
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
   color: var(--vscode-input-foreground);
@@ -35,14 +37,41 @@ textarea {
   resize: vertical;
 }
 
+.handle-field {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.handle-field .prefix {
+  padding: 6px 8px;
+  color: var(--vscode-descriptionForeground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+  border-right: none;
+  background: var(--vscode-input-background);
+}
+
+.handle-field input {
+  border-left: none;
+}
+
 .row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.footer .grow {
+  margin-right: auto;
+}
+
 button {
-  justify-self: start;
   font-family: var(--vscode-font-family);
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
@@ -51,8 +80,24 @@ button {
   cursor: pointer;
 }
 
+button.secondary {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+}
+
+button.link {
+  background: transparent;
+  color: var(--vscode-errorForeground);
+  padding: 0;
+  text-decoration: underline;
+}
+
 button:hover {
   background: var(--vscode-button-hoverBackground);
+}
+
+button.secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-secondaryBackground));
 }
 
 .error {
