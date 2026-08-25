@@ -7,6 +7,7 @@ import { CancelSource } from './cancel';
 import type { BotRegistry } from './bot-registry';
 import type { ICopilotGateway } from './copilot-gateway';
 import { HungError, mapCopilotError } from './copilot-gateway';
+import { EmptyMcpPort, McpGateway } from './mcp-gateway';
 import { PromptBuilder, turnInstruction, type HistoryTurn } from './prompt-builder';
 import { PatchParser } from './patch-parser';
 import type { ChangesetStore } from './changeset-store';
@@ -32,6 +33,7 @@ export class Orchestrator {
     private readonly thread: ThreadStore,
     private readonly workspacePort: WorkspaceContextPort,
     private readonly emit: (msg: HostToUi) => void,
+    private readonly mcp: McpGateway = new McpGateway(new EmptyMcpPort(), emit, { settleMs: 0 }),
   ) {}
 
   getRunState(): RunStateDto {
@@ -109,6 +111,8 @@ export class Orchestrator {
       return;
     }
 
+    await this.mcp.ensureStartedFromSend();
+
     this.userText = text;
     this.history = [];
     this.cts = new CancelSource();
@@ -154,6 +158,7 @@ export class Orchestrator {
       this.emitCopilot(copilot);
       return;
     }
+    await this.mcp.ensureStartedFromSend();
     this.cts = new CancelSource();
     this.loopActive = true;
     this.state = {
@@ -341,14 +346,20 @@ export class Orchestrator {
       history: this.history,
       instruction,
       counter: this.gateway,
+      mcpContext: this.mcp.contextLines(),
     });
 
     let full = '';
     try {
-      const streamed = await this.gateway.stream(messages, this.cts!.token, (chunk) => {
-        full += chunk;
-        this.emit({ type: 'chat/token', botId: bot.id, delta: chunk });
-      });
+      const streamed = await this.gateway.send(
+        messages,
+        this.cts!.token,
+        (chunk) => {
+          full += chunk;
+          this.emit({ type: 'chat/token', botId: bot.id, delta: chunk });
+        },
+        { tools: this.toolsFor(turn), botId: bot.id, handle: bot.handle },
+      );
       if (streamed === 'cancelled' || this.cancelled()) {
         return 'cancelled';
       }
@@ -405,6 +416,13 @@ export class Orchestrator {
       trailer,
     });
     return { ok: true, text: turn === 'implement' ? full : visible, trailer, vote };
+  }
+
+  private toolsFor(turn: TurnKind): 'mcp-readonly' | 'none' {
+    if (turn === 'propose' || turn === 'critique' || turn === 'direct') {
+      return this.mcp.noneConfigured() ? 'none' : 'mcp-readonly';
+    }
+    return 'none';
   }
 
   private enterSplit(title: string, reason: string, paused: boolean): void {

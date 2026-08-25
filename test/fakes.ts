@@ -1,10 +1,16 @@
 import type { StateStore, ApplyEditPort, FileSystemPort, WorkspaceContextPort, CancelToken } from '../src/app/ports';
 import type { FileEditOp } from '../src/domain/changeset';
-import type { PromptMessage, WorkspaceContext } from '../src/protocol/messages';
-import type { ICopilotGateway } from '../src/app/copilot-gateway';
+import type { PromptMessage, WorkspaceContext, HostToUi } from '../src/protocol/messages';
+import type { ICopilotGateway, CopilotSendOpts } from '../src/app/copilot-gateway';
 import { HungError } from '../src/app/copilot-gateway';
 import type { CopilotStatus } from '../src/protocol/messages';
 import type { TurnKind } from '../src/domain/run-state';
+import type { McpPort, McpToolInfo } from '../src/app/mcp-gateway';
+import { McpGateway } from '../src/app/mcp-gateway';
+import type { McpPort, McpToolInfo } from '../src/app/mcp-gateway';
+import { McpGateway } from '../src/app/mcp-gateway';
+import type { HostToUi } from '../src/protocol/messages';
+import type { CancelToken } from '../src/app/ports';
 
 export class MemoryStore implements StateStore {
   private readonly data = new Map<string, unknown>();
@@ -71,6 +77,7 @@ export class FakeGateway implements ICopilotGateway {
   settled = true;
   hang = false;
   lastMessages: PromptMessage[][] = [];
+  lastSendOpts: CopilotSendOpts[] = [];
   turns: TurnKind[] = [];
   script: (info: { turn: TurnKind; instruction: string; messages: PromptMessage[] }) => string = () =>
     'AGREE looks good';
@@ -85,6 +92,16 @@ export class FakeGateway implements ICopilotGateway {
       return 'ready';
     }
     return this.status;
+  }
+
+  async send(
+    messages: PromptMessage[],
+    token: CancelToken,
+    onText: (chunk: string) => void,
+    opts: CopilotSendOpts = {},
+  ): Promise<'ok' | 'cancelled'> {
+    this.lastSendOpts.push(opts);
+    return this.stream(messages, token, onText);
   }
 
   async stream(
@@ -136,3 +153,46 @@ export const defaultWorkspace: WorkspaceContext = {
   activeEditor: { path: 'src/app.ts', content: 'export const n = 1;\n', selection: 'n = 1' },
   otherTabPaths: ['src/other.ts', 'README.md'],
 };
+
+export class FakeMcpPort implements McpPort {
+  tools: McpToolInfo[] = [];
+  config = false;
+  invokeCalls: { name: string; input: unknown }[] = [];
+  startCalls = 0;
+  nextResult: unknown = { content: [{ value: '{"items":[{"title":"Alpha"}]}' }] };
+
+  listTools(): McpToolInfo[] {
+    return this.tools;
+  }
+
+  hasConfig(): boolean {
+    return this.config;
+  }
+
+  async startServers(): Promise<void> {
+    this.startCalls += 1;
+  }
+
+  async invokeTool(name: string, input: unknown, _token: CancelToken): Promise<unknown> {
+    this.invokeCalls.push({ name, input });
+    return this.nextResult;
+  }
+}
+
+export function readOnlyMcpTool(overrides: Partial<McpToolInfo> = {}): McpToolInfo {
+  return {
+    name: 'list_issues',
+    description: 'List issues',
+    tags: ['mcp'],
+    annotations: { readOnlyHint: true },
+    source: { name: 'github' },
+    ...overrides,
+  };
+}
+
+export function configuredMcp(emit: (msg: HostToUi) => void, tools?: McpToolInfo[]): { port: FakeMcpPort; mcp: McpGateway } {
+  const port = new FakeMcpPort();
+  port.config = true;
+  port.tools = tools ?? [readOnlyMcpTool()];
+  return { port, mcp: new McpGateway(port, emit, { settleMs: 0 }) };
+}

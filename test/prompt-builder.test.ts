@@ -66,4 +66,42 @@ describe('PromptBuilder', () => {
     expect(trimmed[trimmed.length - 1]?.content).toContain(instruction);
     expect(trimmed.filter((m) => m.role === 'assistant').every((m) => m.handle)).toBe(true);
   });
+
+  it('drops MCP context first when over tokens and keeps editor/selection/tabs', async () => {
+    const builder = new PromptBuilder();
+    const mcpNote = 'MCP-UNIQUE-NOTE-' + 'X'.repeat(80);
+    const history = [{ handle: 'alpha', text: 'KEEP-HISTORY-TURN' }];
+    const instruction = 'Role: propose now';
+    const counter: TokenCounter = {
+      maxInputTokens: 1_000_000,
+      countTokens: async (m) => m.reduce((n, x) => n + x.content.length, 0),
+    };
+    const full = await builder.build({
+      bot,
+      workspace: defaultWorkspace,
+      history,
+      instruction,
+      counter,
+      mcpContext: [mcpNote],
+    });
+    expect(full.some((m) => m.content.includes('MCP-UNIQUE-NOTE'))).toBe(true);
+    const fullLen = await counter.countTokens(full);
+    const tight: TokenCounter = {
+      maxInputTokens: fullLen - 10,
+      countTokens: async (m) => m.reduce((n, x) => n + x.content.length, 0),
+    };
+    const trimmed = await builder.build({
+      bot,
+      workspace: defaultWorkspace,
+      history,
+      instruction,
+      counter: tight,
+      mcpContext: [mcpNote],
+    });
+    const joined = trimmed.map((m) => m.content).join('\n');
+    expect(joined).not.toContain('MCP-UNIQUE-NOTE');
+    expect(joined).toContain('KEEP-HISTORY-TURN');
+    expect(joined).toContain('export const n = 1;');
+    expect(joined).toContain('src/other.ts');
+  });
 });

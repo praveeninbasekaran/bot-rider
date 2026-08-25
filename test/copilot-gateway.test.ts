@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CopilotGateway, mapCopilotError } from '../src/app/copilot-gateway';
-import type { LanguageModelPort, LmModel, CancelToken } from '../src/app/ports';
+import type { LanguageModelPort, LmModel, CancelToken, LmSendOptions } from '../src/app/ports';
 import type { PromptMessage } from '../src/protocol/messages';
-import { COPILOT_JUSTIFICATION } from '../src/app/copy';
+import { COPILOT_JUSTIFICATION, COPY } from '../src/app/copy';
+import { McpGateway } from '../src/app/mcp-gateway';
+import { FakeMcpPort, readOnlyMcpTool } from './fakes';
 
 class FakeLm implements LanguageModelPort {
   selectCalls = 0;
@@ -10,7 +12,7 @@ class FakeLm implements LanguageModelPort {
   can: boolean | undefined = true;
   private readonly modelLs = new Set<() => void>();
   private readonly accessLs = new Set<() => void>();
-  lastOptions: { justification: string } | undefined;
+  lastOptions: LmSendOptions | undefined;
 
   async selectChatModels(selector: { vendor: 'copilot' }): Promise<LmModel[]> {
     this.selectCalls += 1;
@@ -50,7 +52,7 @@ function model(overrides: Partial<LmModel> = {}): LmModel {
     vendor: 'copilot',
     maxInputTokens: 1000,
     countTokens: async () => 1,
-    sendRequest: async (messages: PromptMessage[], options: { justification: string }, _token: CancelToken) => {
+    sendRequest: async (messages: PromptMessage[], options: LmSendOptions, _token: CancelToken) => {
       void messages;
       void _token;
       return { text: (async function* () { yield 'ok'; })() };
@@ -78,7 +80,7 @@ describe('CopilotGateway status', () => {
 
   it('recheck selectChatModels uses vendor copilot only and maps noPermissions', async () => {
     const lm = new FakeLm();
-    const captured: { justification: string }[] = [];
+    const captured: LmSendOptions[] = [];
     lm.models = [
       model({
         sendRequest: async (_m, options) => {
@@ -111,5 +113,96 @@ describe('CopilotGateway status', () => {
     expect(mapCopilotError({ message: 'quota exceeded' })).toBe('quota');
     expect(mapCopilotError({ message: 'rate limit' })).toBe('quota');
     expect(mapCopilotError({ message: 'boom' })).toBe('streamFailed');
+  });
+});
+
+describe('CopilotGateway MCP tools', () => {
+  const idle = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) };
+
+  it('propose/direct can pass the mcp-readonly tool list on sendRequest', async () => {
+    const port = new FakeMcpPort();
+    port.config = true;
+    port.tools = [readOnlyMcpTool({ name: 'list_issues', description: 'List issues' })];
+    const mcp = new McpGateway(port, () => undefined, { settleMs: 0 });
+    await mcp.ensureStartedFromSend();
+    const captured: LmSendOptions[] = [];
+    const lm = new FakeLm();
+    lm.models = [
+      model({
+        sendRequest: async (_m, options) => {
+          captured.push(options);
+          return { text: (async function* () { yield 'ok'; })() };
+        },
+      }),
+    ];
+    const gw = new CopilotGateway(lm, () => undefined, 60_000, mcp);
+    await gw.ensureAvailable();
+    await gw.send([{ role: 'user', content: 'hi' }], idle, () => undefined, {
+      tools: 'mcp-readonly',
+      botId: 'b1',
+      handle: 'alpha',
+    });
+    expect(captured[0]?.tools).toEqual([
+      { name: 'list_issues', description: 'List issues', inputSchema: undefined },
+    ]);
+  });
+
+  it('mutating-blocked skip copy is exact and invokeTool is not called from the tool loop', async () => {
+    const port = new FakeMcpPort();
+    port.config = true;
+    port.tools = [
+      readOnlyMcpTool({ name: 'list_issues' }),
+      readOnlyMcpTool({
+        name: 'create_issue',
+        description: 'Create',
+        annotations: { readOnlyHint: false },
+        source: { name: 'github' },
+      }),
+    ];
+    const msgs: import('../src/protocol/messages').HostToUi[] = [];
+    const mcp = new McpGateway(port, (m) => msgs.push(m), { settleMs: 0 });
+    await mcp.ensureStartedFromSend();
+    let round = 0;
+    const lm = new FakeLm();
+    lm.models = [
+      model({
+        sendRequest: async () => {
+          round += 1;
+          if (round === 1) {
+            return {
+              text: (async function* () {})(),
+              stream: (async function* () {
+                yield {
+                  kind: 'tool-call' as const,
+                  callId: 'c1',
+                  name: 'create_issue',
+                  input: { title: 'x' },
+                };
+              })(),
+            };
+          }
+          return { text: (async function* () { yield 'done'; })() };
+        },
+      }),
+    ];
+    const gw = new CopilotGateway(lm, () => undefined, 60_000, mcp);
+    await gw.ensureAvailable();
+    const chunks: string[] = [];
+    await gw.send([{ role: 'user', content: 'hi' }], idle, (c) => chunks.push(c), {
+      tools: 'mcp-readonly',
+      botId: 'b1',
+      handle: 'alpha',
+    });
+    expect(port.invokeCalls).toEqual([]);
+    expect(msgs).toContainEqual({
+      type: 'chat/mcp-skip',
+      botId: 'b1',
+      handle: 'alpha',
+      server: 'github',
+      tool: 'create_issue',
+      reason: 'mutating-blocked',
+      message: COPY.mcpSkipMutating('github'),
+    });
+    expect(chunks.join('')).toBe('done');
   });
 });

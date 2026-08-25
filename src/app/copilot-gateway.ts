@@ -1,7 +1,25 @@
 import type { CopilotStatus, PromptMessage } from '../protocol/messages';
-import type { CancelToken, LanguageModelPort, LmModel } from './ports';
+import type {
+  CancelToken,
+  LanguageModelPort,
+  LmChatMessage,
+  LmChatTool,
+  LmModel,
+  LmSendOptions,
+  LmStreamPart,
+  LmToolCall,
+} from './ports';
 import { COPILOT_JUSTIFICATION } from './copy';
 import { waitForCancel } from './cancel';
+import type { McpGateway } from './mcp-gateway';
+
+export const MAX_MCP_TOOL_ROUNDS = 8;
+
+export interface CopilotSendOpts {
+  tools?: 'mcp-readonly' | 'none';
+  botId?: string;
+  handle?: string;
+}
 
 export interface ICopilotGateway {
   requestCount: number;
@@ -14,6 +32,12 @@ export interface ICopilotGateway {
     messages: PromptMessage[],
     token: CancelToken,
     onText: (chunk: string) => void,
+  ): Promise<'ok' | 'cancelled'>;
+  send(
+    messages: PromptMessage[],
+    token: CancelToken,
+    onText: (chunk: string) => void,
+    opts?: CopilotSendOpts,
   ): Promise<'ok' | 'cancelled'>;
 }
 
@@ -92,6 +116,7 @@ export class CopilotGateway implements ICopilotGateway {
     private readonly lm: LanguageModelPort,
     private readonly onStatus: (status: CopilotStatus) => void = () => undefined,
     hangMs = 60_000,
+    private readonly mcp?: McpGateway,
   ) {
     this.hangMs = hangMs;
     this.lm.onDidChangeChatModels(() => {
@@ -144,6 +169,15 @@ export class CopilotGateway implements ICopilotGateway {
     token: CancelToken,
     onText: (chunk: string) => void,
   ): Promise<'ok' | 'cancelled'> {
+    return this.send(messages, token, onText, { tools: 'none' });
+  }
+
+  async send(
+    messages: PromptMessage[],
+    token: CancelToken,
+    onText: (chunk: string) => void,
+    opts: CopilotSendOpts = {},
+  ): Promise<'ok' | 'cancelled'> {
     if (this.inflight) {
       throw new OverlapError();
     }
@@ -161,18 +195,41 @@ export class CopilotGateway implements ICopilotGateway {
         this.setStatus('noPermissions');
         throw Object.assign(new Error('noPermissions'), { code: 'NoPermissions' });
       }
-      const response = await this.model.sendRequest(
-        messages,
-        { justification: COPILOT_JUSTIFICATION },
-        token,
-      );
-      const outcome = await readTextStream(response.text, onText, token, this.hangMs);
-      if (outcome === 'hung') {
-        this.setStatus('hung');
-        throw new HungError();
-      }
-      if (outcome === 'cancelled' || token.isCancellationRequested) {
-        return 'cancelled';
+      const chatTools = this.toolsFor(opts.tools);
+      const requestOptions: LmSendOptions = chatTools
+        ? { justification: COPILOT_JUSTIFICATION, tools: chatTools }
+        : { justification: COPILOT_JUSTIFICATION };
+      const allowTools = !!chatTools?.length;
+      let convo: LmChatMessage[] = [...messages];
+      for (let round = 0; round < MAX_MCP_TOOL_ROUNDS; round++) {
+        const response = await this.model.sendRequest(convo, requestOptions, token);
+        const consumed = await consumeResponse(response, onText, token, this.hangMs, allowTools);
+        if (consumed.outcome === 'hung') {
+          this.setStatus('hung');
+          throw new HungError();
+        }
+        if (consumed.outcome === 'cancelled' || token.isCancellationRequested) {
+          return 'cancelled';
+        }
+        if (!allowTools || !this.mcp || consumed.toolCalls.length === 0) {
+          return 'ok';
+        }
+        const results: Array<{ callId: string; content: string }> = [];
+        for (const call of consumed.toolCalls) {
+          if (token.isCancellationRequested) {
+            return 'cancelled';
+          }
+          const invoked = await this.mcp.invoke(call, token, opts.botId ?? '', opts.handle ?? '');
+          if (invoked.cancelled || token.isCancellationRequested) {
+            return 'cancelled';
+          }
+          results.push({ callId: call.callId, content: invoked.text || 'Skipped.' });
+        }
+        convo = [
+          ...convo,
+          { role: 'assistant', toolCalls: consumed.toolCalls },
+          { role: 'user', toolResults: results },
+        ];
       }
       return 'ok';
     } catch (err) {
@@ -188,6 +245,14 @@ export class CopilotGateway implements ICopilotGateway {
     } finally {
       this.inflight = false;
     }
+  }
+
+  private toolsFor(mode: CopilotSendOpts['tools']): LmChatTool[] | undefined {
+    if (mode !== 'mcp-readonly' || !this.mcp || this.mcp.noneConfigured()) {
+      return undefined;
+    }
+    const tools = this.mcp.listReadOnly();
+    return tools.length ? tools : undefined;
   }
 
   private setStatus(status: CopilotStatus): void {
@@ -232,6 +297,40 @@ export async function readTextStream(
     onText(String(raced.value ?? ''));
   }
   return 'cancelled';
+}
+
+async function consumeResponse(
+  response: { text: AsyncIterable<string>; stream?: AsyncIterable<LmStreamPart> },
+  onText: (chunk: string) => void,
+  token: CancelToken,
+  hangMs: number,
+  allowTools: boolean,
+): Promise<{ outcome: 'ok' | 'hung' | 'cancelled'; toolCalls: LmToolCall[] }> {
+  if (!response.stream) {
+    const outcome = await readTextStream(response.text, onText, token, hangMs);
+    return { outcome, toolCalls: [] };
+  }
+  const iterator = response.stream[Symbol.asyncIterator]();
+  const toolCalls: LmToolCall[] = [];
+  while (!token.isCancellationRequested) {
+    const raced = await raceHang(iterator.next(), hangMs, token);
+    if (raced === 'hung') {
+      return { outcome: 'hung', toolCalls };
+    }
+    if (raced === 'cancelled') {
+      return { outcome: 'cancelled', toolCalls };
+    }
+    if (raced.done) {
+      return { outcome: 'ok', toolCalls };
+    }
+    const part = raced.value;
+    if (part.kind === 'text') {
+      onText(part.value);
+    } else if (part.kind === 'tool-call' && allowTools) {
+      toolCalls.push({ callId: part.callId, name: part.name, input: part.input });
+    }
+  }
+  return { outcome: 'cancelled', toolCalls };
 }
 
 async function raceHang<T>(

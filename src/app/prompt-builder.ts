@@ -77,6 +77,7 @@ export class PromptBuilder {
     history: HistoryTurn[];
     instruction: string;
     counter: TokenCounter;
+    mcpContext?: string[];
   }): Promise<PromptMessage[]> {
     const persona: PromptMessage = { role: 'user', content: personaBlock(args.bot) };
     const workspace: PromptMessage = { role: 'user', content: workspaceBlock(args.workspace) };
@@ -86,14 +87,18 @@ export class PromptBuilder {
       content: h.text,
       handle: h.handle,
     }));
+    let mcp = mcpMessage(args.mcpContext);
 
-    let messages = assemble(persona, workspace, history, instruction);
-    while (
-      history.length > 0 &&
-      (await args.counter.countTokens(messages)) > args.counter.maxInputTokens
-    ) {
-      history.shift();
-      messages = assemble(persona, workspace, history, instruction);
+    let messages = assemble(persona, workspace, mcp, history, instruction);
+    while ((await args.counter.countTokens(messages)) > args.counter.maxInputTokens) {
+      if (mcp) {
+        mcp = undefined;
+      } else if (history.length > 0) {
+        history.shift();
+      } else {
+        break;
+      }
+      messages = assemble(persona, workspace, mcp, history, instruction);
     }
 
     if ((await args.counter.countTokens(messages)) > args.counter.maxInputTokens) {
@@ -105,19 +110,30 @@ export class PromptBuilder {
           args.counter,
         ),
       };
-      messages = assemble(persona, truncatedWorkspace, [], instruction);
+      messages = assemble(persona, truncatedWorkspace, undefined, [], instruction);
     }
     return messages;
   }
 }
 
+function mcpMessage(notes: string[] | undefined): PromptMessage | undefined {
+  if (!notes?.length) {
+    return undefined;
+  }
+  return {
+    role: 'user',
+    content: `Read-only workspace MCP notes:\n${notes.map((note) => `- ${note}`).join('\n')}`,
+  };
+}
+
 function assemble(
   persona: PromptMessage,
   workspace: PromptMessage,
+  mcp: PromptMessage | undefined,
   history: PromptMessage[],
   instruction: PromptMessage,
 ): PromptMessage[] {
-  return [persona, workspace, ...history, instruction];
+  return mcp ? [persona, workspace, mcp, ...history, instruction] : [persona, workspace, ...history, instruction];
 }
 
 function trimToBudget(

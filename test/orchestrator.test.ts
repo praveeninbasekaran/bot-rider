@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { Application } from '../src/app/application';
 import { COPY } from '../src/app/copy';
 import type { HostToUi } from '../src/protocol/messages';
-import { changesetFence, defaultWorkspace, FakeGateway, FixedWorkspace, MemoryFs, MemoryStore } from './fakes';
+import { changesetFence, configuredMcp, defaultWorkspace, FakeGateway, FakeMcpPort, FixedWorkspace, MemoryFs, MemoryStore } from './fakes';
+import { McpGateway } from '../src/app/mcp-gateway';
 
-function harness() {
+function harness(mcp?: import('../src/app/mcp-gateway').McpGateway) {
   const gw = new FakeGateway();
   const fs = new MemoryFs();
   const msgs: HostToUi[] = [];
@@ -15,6 +16,9 @@ function harness() {
     fs,
     new FixedWorkspace(defaultWorkspace),
     (m) => msgs.push(m),
+    undefined,
+    undefined,
+    mcp,
   );
   return { app, gw, fs, msgs };
 }
@@ -408,5 +412,63 @@ describe('Orchestrator negative', () => {
     await app.pick(summaries[0]!.botId);
     expect(gw.turns.includes('implement')).toBe(true);
     expect(app.orchestrator.getRunState().phase).toBe('pendingReview');
+  });
+});
+
+describe('Orchestrator MCP turn flags', () => {
+  it('WM-1 AC2: none configured emits no mcp events on send', async () => {
+    const port = new FakeMcpPort();
+    const mcp = new McpGateway(port, () => undefined, { settleMs: 0 });
+    const { app, gw, msgs } = harness(mcp);
+    await twoBots(app);
+    gw.script = ({ turn, instruction }) => {
+      const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
+      if (turn === 'consensus') {
+        return round === 1 ? 'DISSENT' : 'AGREE';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'n.ts', op: 'create', content: 'n' }]);
+      }
+      return 'talk';
+    };
+    await app.send('build it');
+    expect(msgs.filter((m) => m.type.startsWith('chat/mcp-'))).toEqual([]);
+    expect(gw.lastSendOpts.every((opts) => (opts.tools ?? 'none') === 'none')).toBe(true);
+    expect(app.mcp.noneConfigured()).toBe(true);
+    expect(port.startCalls).toBe(0);
+    expect(port.invokeCalls).toEqual([]);
+  });
+
+  it('implementer and consensus send with tools none; propose/direct can pass mcp-readonly', async () => {
+    const msgs: HostToUi[] = [];
+    const { mcp } = configuredMcp((m) => msgs.push(m));
+    const { app, gw } = harness(mcp);
+    await twoBots(app);
+    gw.script = ({ turn, instruction }) => {
+      const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
+      if (turn === 'consensus') {
+        return round === 1 ? 'DISSENT' : 'AGREE';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'm.ts', op: 'create', content: 'm' }]);
+      }
+      return 'talk';
+    };
+    await app.send('debate then ship');
+    const paired = gw.turns.map((turn, i) => ({ turn, tools: gw.lastSendOpts[i]?.tools }));
+    expect(paired.filter((p) => p.turn === 'propose').every((p) => p.tools === 'mcp-readonly')).toBe(true);
+    expect(paired.filter((p) => p.turn === 'critique').every((p) => p.tools === 'mcp-readonly')).toBe(true);
+    expect(paired.filter((p) => p.turn === 'consensus').every((p) => p.tools === 'none')).toBe(true);
+    expect(paired.filter((p) => p.turn === 'implement').every((p) => p.tools === 'none')).toBe(true);
+  });
+
+  it('direct @ turns can pass mcp-readonly when MCP is configured', async () => {
+    const { mcp } = configuredMcp(() => undefined);
+    const { app, gw } = harness(mcp);
+    await twoBots(app);
+    gw.script = ({ turn }) => (turn === 'direct' ? 'ok\nNO_EDIT' : 'x');
+    await app.send('@alpha ping');
+    expect(gw.turns[0]).toBe('direct');
+    expect(gw.lastSendOpts[0]?.tools).toBe('mcp-readonly');
   });
 });
