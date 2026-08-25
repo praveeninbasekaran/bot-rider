@@ -2,7 +2,7 @@ import type { BotRecord } from '../domain/bot';
 import type { RunStateDto, TurnKind } from '../domain/run-state';
 import { idleRunState } from '../domain/run-state';
 import type { HostToUi, WorkspaceContext } from '../protocol/messages';
-import { COPY } from './copy';
+import { COPY, copilotStatusMessage } from './copy';
 import { CancelSource } from './cancel';
 import type { BotRegistry } from './bot-registry';
 import type { ICopilotGateway } from './copilot-gateway';
@@ -11,7 +11,7 @@ import { PromptBuilder, turnInstruction, type HistoryTurn } from './prompt-build
 import { PatchParser } from './patch-parser';
 import type { ChangesetStore } from './changeset-store';
 import type { ThreadStore } from './thread-store';
-import { parseMentions, parseVote, stripNeedEditTrailer } from './mentions';
+import { oneLine, parseMentions, parseVote, stripNeedEditTrailer } from './mentions';
 import type { WorkspaceContextPort } from './ports';
 
 export class Orchestrator {
@@ -42,6 +42,14 @@ export class Orchestrator {
     return this.freeze.map((b) => ({ ...b }));
   }
 
+  getPositionSummaries(): { botId: string; name: string; summary: string }[] {
+    return this.freeze.map((bot) => ({
+      botId: bot.id,
+      name: bot.name,
+      summary: this.positionOneLiner(bot.handle),
+    }));
+  }
+
   noteApplyFailed(applyFailed: boolean): void {
     this.state = { ...this.state, applyFailed };
     if (!applyFailed && this.state.phase === 'pendingReview' && !this.changesets.hasPending()) {
@@ -62,24 +70,29 @@ export class Orchestrator {
     }
 
     const parsed = parseMentions(text);
-    if (parsed.invalid.length > 0) {
-      this.fail('unknown-handle', COPY.unknownHandle(parsed.invalid[0]!));
+    const resolved: BotRecord[] = [];
+    const unresolved: string[] = [];
+    for (const handle of parsed.handles) {
+      const bot = this.registry.getByHandle(handle);
+      if (bot) {
+        if (!resolved.some((b) => b.id === bot.id)) {
+          resolved.push(bot);
+        }
+      } else {
+        unresolved.push(handle);
+      }
+    }
+    if (unresolved.length > 0) {
+      this.fail('unknown-handle', COPY.unknownHandle(unresolved[0]!));
       return;
     }
-    if (parsed.handles.length > 1) {
+    if (resolved.length > 1) {
       this.fail('multiple-mentions', COPY.multipleMentions);
       return;
     }
 
-    let solo: BotRecord | undefined;
-    if (parsed.handles.length === 1) {
-      const handle = parsed.handles[0]!;
-      solo = this.registry.getByHandle(handle);
-      if (!solo) {
-        this.fail('unknown-handle', COPY.unknownHandle(handle));
-        return;
-      }
-    } else if (this.registry.snapshotActive().length === 0) {
+    const solo = resolved[0];
+    if (!solo && this.registry.snapshotActive().length === 0) {
       this.fail('zero-active', COPY.zeroActive);
       return;
     }
@@ -414,15 +427,23 @@ export class Orchestrator {
   }
 
   private emitCopilot(status: import('../protocol/messages').CopilotStatus): void {
-    const message =
-      status === 'hung'
-        ? COPY.hung
-        : status === 'missing'
-          ? COPY.missingCopilot
-          : status === 'noPermissions'
-            ? COPY.noPermissions
-            : undefined;
-    this.emit({ type: 'copilot/status', status, message });
+    this.emit({ type: 'copilot/status', status, message: copilotStatusMessage(status) });
+  }
+
+  private positionOneLiner(handle: string): string {
+    const key = handle.toLowerCase();
+    const mine = this.history.filter((h) => h.handle.toLowerCase() === key);
+    for (let i = mine.length - 1; i >= 0; i--) {
+      const line = oneLine(mine[i]!.text);
+      if (!line) {
+        continue;
+      }
+      const voteOnly = /^(AGREE|DISSENT)\b/i.test(line) && line.split(/\s+/).length <= 3;
+      if (!voteOnly) {
+        return line;
+      }
+    }
+    return oneLine(mine[mine.length - 1]?.text ?? '');
   }
 
   private cancelled(): boolean {

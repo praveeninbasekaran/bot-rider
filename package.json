@@ -104,7 +104,8 @@
         "command": "botrider.changeset.retry",
         "title": "Retry",
         "category": "Bot Rider",
-        "icon": "$(refresh)"
+        "icon": "$(refresh)",
+        "enablement": "botrider.applyFailed"
       }
     ],
     "menus": {
@@ -136,6 +137,10 @@
         {
           "command": "botrider.chat.stop",
           "when": "botrider.debateRunning || botrider.splitOpen"
+        },
+        {
+          "command": "botrider.changeset.retry",
+          "when": "botrider.applyFailed"
         }
       ],
       "view/title": [
@@ -151,7 +156,7 @@
         },
         {
           "command": "botrider.chat.stop",
-          "when": "view == botrider.chat && botrider.debateRunning",
+          "when": "view == botrider.chat && (botrider.debateRunning || botrider.splitOpen)",
           "group": "navigation"
         },
         {

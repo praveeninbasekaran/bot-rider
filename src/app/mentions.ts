@@ -1,43 +1,33 @@
-import { isValidHandle } from '../domain/bot';
-
 export interface MentionParse {
   handles: string[];
   invalid: string[];
   rest: string;
 }
 
-const MENTION_RE = /(^|\s)@([^\s]+)/g;
+/** `@` token: `[A-Za-z0-9_-]+`. Display names with spaces are not a single mention. */
+const MENTION_TOKEN_RE = /(?:^|[^A-Za-z0-9_])@([A-Za-z0-9_-]+)/g;
 
 export function parseMentions(text: string): MentionParse {
   const handles: string[] = [];
-  const invalid: string[] = [];
   const seen = new Set<string>();
+  const re = new RegExp(MENTION_TOKEN_RE.source, 'g');
   let match: RegExpExecArray | null;
-  const re = new RegExp(MENTION_RE.source, 'g');
   while ((match = re.exec(text)) !== null) {
-    const raw = stripTrailingPunct(match[2] ?? '');
+    const raw = match[1] ?? '';
     if (!raw) {
       continue;
     }
     const lower = raw.toLowerCase();
-    if (!isValidHandle(lower)) {
-      if (!seen.has(`!${lower}`)) {
-        invalid.push(raw);
-        seen.add(`!${lower}`);
-      }
-      continue;
-    }
     if (!seen.has(lower)) {
       handles.push(lower);
       seen.add(lower);
     }
   }
-  const rest = text.replace(/(^|\s)@[^\s]+/g, '$1').replace(/\s+/g, ' ').trim();
-  return { handles, invalid, rest };
-}
-
-function stripTrailingPunct(token: string): string {
-  return token.replace(/[.,;:!?]+$/g, '');
+  const rest = text
+    .replace(/(^|[^A-Za-z0-9_])@[A-Za-z0-9_-]+/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { handles, invalid: [], rest };
 }
 
 export function parseVote(text: string): 'AGREE' | 'DISSENT' {
@@ -68,4 +58,8 @@ export function stripNeedEditTrailer(text: string): {
     return { body, token: u };
   }
   return { body: text, token: 'NO_EDIT' };
+}
+
+export function oneLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
 }

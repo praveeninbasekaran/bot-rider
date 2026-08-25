@@ -14,6 +14,7 @@ import { openProposedDiff, ReviewTreeProvider } from './adapters/review-tree';
 import { createCopilotGateway } from './adapters/vscode-lm-gateway';
 import { VsCodeWorkspacePort } from './adapters/vscode-workspace';
 import type { HostToUi, UiToHost } from './protocol/messages';
+import { COPY, copilotStatusMessage } from './app/copy';
 
 class MementoStore {
   constructor(private readonly memento: vscode.Memento) {}
@@ -51,12 +52,15 @@ export function activate(context: vscode.ExtensionContext): void {
     ) {
       reviewTree?.refresh();
     }
+    if (msg.type === 'error' && msg.code === 'no-workspace' && msg.message === COPY.applyNoFolder) {
+      void vscode.window.showErrorMessage(msg.message);
+    }
     void syncKeys();
   };
 
   const gateway = createCopilotGateway(context, (status) => {
     gatewayStatus = status;
-    emit({ type: 'copilot/status', status });
+    emit({ type: 'copilot/status', status, message: copilotStatusMessage(status) });
   });
 
   const app = new Application(
@@ -131,9 +135,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('botrider.chat.expand', () => expand.reveal()),
     vscode.commands.registerCommand('botrider.chat.stop', () => app.stop()),
-    vscode.commands.registerCommand('botrider.changeset.approve', () => app.approve()),
+    vscode.commands.registerCommand('botrider.changeset.approve', () => approveChanges()),
     vscode.commands.registerCommand('botrider.changeset.reject', () => app.reject()),
-    vscode.commands.registerCommand('botrider.changeset.retry', () => app.retry()),
+    vscode.commands.registerCommand('botrider.changeset.retry', () => approveChanges('retry')),
     vscode.commands.registerCommand(
       'botrider.review.openDiff',
       async (item?: { file?: { path: string; op: 'create' | 'update' | 'delete' } }) => {
@@ -147,14 +151,22 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('botrider.copilot.recheck', () => app.recheck()),
   );
 
+  async function approveChanges(mode: 'initial' | 'retry' = 'initial'): Promise<void> {
+    const n = app.changesets.files?.length ?? 0;
+    const ok = await app.approve(mode);
+    if (ok) {
+      void vscode.window.showInformationMessage(COPY.appliedToast(n));
+    }
+  }
+
   async function pickBot(): Promise<void> {
-    const bots = app.orchestrator.getFrozenBots();
-    if (!bots.length) {
+    const items = app.orchestrator.getPositionSummaries();
+    if (!items.length) {
       return;
     }
     const picked = await vscode.window.showQuickPick(
-      bots.map((b) => ({ label: b.name, description: `@${b.handle}`, id: b.id })),
-      { title: 'Pick a Bot to Decide', placeHolder: 'Choose whose position becomes the direction' },
+      items.map((b) => ({ label: b.name, description: b.summary, id: b.botId })),
+      { title: COPY.pickTitle, placeHolder: COPY.pickTitle },
     );
     if (picked) {
       await app.pick(picked.id);

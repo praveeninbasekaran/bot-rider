@@ -26,7 +26,7 @@ async function twoBots(app: Application) {
 
 describe('Orchestrator positive', () => {
   it('two-round AGREE then implementer', async () => {
-    const { app, gw } = harness();
+    const { app, gw, msgs } = harness();
     await twoBots(app);
     gw.script = ({ turn, instruction }) => {
       const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
@@ -44,6 +44,9 @@ describe('Orchestrator positive', () => {
     expect(app.orchestrator.getRunState().phase).toBe('pendingReview');
     expect(app.changesets.files?.[0]?.path).toBe('src/out.ts');
     expect(app.changesets.applyFailed).toBe(false);
+    const starts = msgs.filter((m) => m.type === 'chat/turn-start');
+    expect(starts.some((m) => m.type === 'chat/turn-start' && m.turn === 'propose' && m.round === 1)).toBe(true);
+    expect(starts.some((m) => m.type === 'chat/turn-start' && m.turn === 'critique' && m.round === 1)).toBe(true);
   });
 
   it('@known solo then NEED_EDIT implementer for that bot', async () => {
@@ -164,6 +167,9 @@ describe('Orchestrator negative', () => {
     expect(gw.turns.includes('implement')).toBe(false);
     expect(app.orchestrator.getRunState().splitOpen).toBe(true);
     expect(app.orchestrator.getRunState().phase).toBe('split');
+    expect(
+      msgs.some((m) => m.type === 'chat/split' && m.title === COPY.splitPaused && m.paused === true),
+    ).toBe(true);
   });
 
   it('send is ignored while splitOpen', async () => {
@@ -208,5 +214,114 @@ describe('Orchestrator negative', () => {
     expect(gw.turns.includes('implement')).toBe(false);
     expect(app.orchestrator.getRunState().splitOpen).toBe(true);
     vi.useRealTimers();
+  });
+
+  it('send is ignored while debateRunning', async () => {
+    const { app, gw } = harness();
+    await twoBots(app);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const original = gw.stream.bind(gw);
+    gw.stream = async (messages, token, onText) => {
+      await gate;
+      return original(messages, token, onText);
+    };
+    const first = app.send('one');
+    await vi.waitFor(() => {
+      expect(app.orchestrator.getRunState().debateRunning).toBe(true);
+    });
+    const count = gw.requestCount;
+    await app.send('two during debate');
+    expect(gw.requestCount).toBe(count);
+    release();
+    await first;
+  });
+
+  it('copilot not ready emits copilot/status and does not stream', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    gw.status = 'missing';
+    await app.send('hello swarm');
+    expect(gw.requestCount).toBe(0);
+    expect(msgs.some((m) => m.type === 'copilot/status' && m.status === 'missing')).toBe(true);
+    expect(app.orchestrator.getRunState().debateRunning).toBe(false);
+  });
+
+  it('display-name spaces are not a handle lock; plain @handle is', async () => {
+    const { app, gw, msgs } = harness();
+    await app.createBot({
+      name: 'Alpha Bot',
+      handle: 'alpha-bot',
+      persona: 'a',
+      role: 'lead',
+      instructions: 'one',
+    });
+    gw.script = ({ turn }) => (turn === 'direct' ? 'ok\nNO_EDIT' : 'x');
+    await app.send('@Alpha Bot please');
+    expect(gw.requestCount).toBe(0);
+    expect(msgs.some((m) => m.type === 'error' && m.code === 'unknown-handle')).toBe(true);
+
+    msgs.length = 0;
+    await app.send('@alpha-bot please');
+    expect(gw.turns[0]).toBe('direct');
+  });
+
+  it('email-style @ is plain text not a mention token', async () => {
+    const { app, gw } = harness();
+    await twoBots(app);
+    gw.script = ({ turn, instruction }) => {
+      const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
+      if (turn === 'consensus') {
+        return round === 1 ? 'DISSENT' : 'AGREE';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'e.ts', op: 'create', content: 'e' }]);
+      }
+      return 'talk';
+    };
+    await app.send('ping me@host.com about this');
+    expect(gw.requestCount).toBeGreaterThan(0);
+  });
+
+  it('mixed valid+unknown mention errors without Copilot', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    await app.send('@alpha @ghost both');
+    expect(gw.requestCount).toBe(0);
+    expect(gw.ensureCalls).toBe(0);
+    expect(msgs.some((m) => m.type === 'error' && m.code === 'unknown-handle')).toBe(true);
+  });
+
+  it('split pick summaries are position one-liners from the freeze snapshot', async () => {
+    const { app, gw } = harness();
+    await twoBots(app);
+    gw.script = ({ turn }) => {
+      if (turn === 'propose') {
+        return 'Ship the cache layer now.';
+      }
+      if (turn === 'critique') {
+        return 'Cache is the right cut.';
+      }
+      if (turn === 'consensus') {
+        return 'DISSENT';
+      }
+      return 'talk';
+    };
+    await app.send('plan it');
+    expect(app.orchestrator.getRunState().splitOpen).toBe(true);
+    const summaries = app.orchestrator.getPositionSummaries();
+    expect(summaries.map((s) => s.name)).toEqual(['Alpha', 'Beta']);
+    expect(summaries[0]?.summary).toBe('Cache is the right cut.');
+    gw.script = ({ turn }) => {
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'picked.ts', op: 'create', content: 'p' }]);
+      }
+      return 'talk';
+    };
+    await app.pick(summaries[0]!.botId);
+    expect(gw.turns.includes('implement')).toBe(true);
+    expect(app.orchestrator.getRunState().phase).toBe('pendingReview');
   });
 });

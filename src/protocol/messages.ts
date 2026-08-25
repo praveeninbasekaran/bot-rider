@@ -52,6 +52,7 @@ export type HostToUi =
       trailer?: 'NEED_EDIT' | 'NO_EDIT';
     }
   | { type: 'chat/split'; title: string; reason: string; paused?: boolean }
+  | { type: 'chat/notice'; text: string }
   | { type: 'changeset/preview'; files: ProposedFileDto[] }
   | {
       type: 'changeset/apply-failed';

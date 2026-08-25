@@ -1,8 +1,10 @@
 import type { BotDraft, BotRecord } from '../domain/bot';
+import type { ApplyMode } from '../domain/changeset';
 import type { HostToUi, UiToHost } from '../protocol/messages';
 import { BotRegistry } from './bot-registry';
 import { ChangesetStore } from './changeset-store';
 import type { ICopilotGateway } from './copilot-gateway';
+import { COPY, copilotStatusMessage } from './copy';
 import { Orchestrator } from './orchestrator';
 import { PatchParser } from './patch-parser';
 import { PromptBuilder } from './prompt-builder';
@@ -29,7 +31,7 @@ export class Application {
     readonly gateway: ICopilotGateway,
     applyPort: ApplyEditPort,
     fs: FileSystemPort,
-    workspace: WorkspaceContextPort,
+    private readonly workspace: WorkspaceContextPort,
     private readonly emit: (msg: HostToUi) => void,
     docs?: ProposedDocHost,
     diffs?: DiffCloser,
@@ -95,26 +97,44 @@ export class Application {
     await this.orchestrator.pick(botId);
   }
 
-  async approve(): Promise<boolean> {
-    const ok = await this.changesets.approve('initial');
+  async approve(mode: ApplyMode = 'initial'): Promise<boolean> {
+    const files = this.changesets.files;
+    if (!files?.length) {
+      return false;
+    }
+    const ctx = await this.workspace.getContext();
+    if (!ctx.folderFsPath) {
+      this.emit({ type: 'error', code: 'no-workspace', message: COPY.applyNoFolder });
+      return false;
+    }
+    const n = files.length;
+    const ok = await this.changesets.approve(mode);
     this.orchestrator.noteApplyFailed(!ok && this.changesets.hasPending());
+    if (ok) {
+      const text = COPY.approvedNotice(n);
+      this.thread.append({ role: 'notice', text });
+      this.emit({ type: 'chat/notice', text });
+    }
     return ok;
   }
 
   async retry(): Promise<boolean> {
-    const ok = await this.changesets.approve('retry');
-    this.orchestrator.noteApplyFailed(!ok && this.changesets.hasPending());
-    return ok;
+    return this.approve('retry');
   }
 
   async reject(): Promise<void> {
+    const had = this.changesets.hasPending();
     await this.changesets.reject();
     this.orchestrator.noteApplyFailed(false);
+    if (had) {
+      this.thread.append({ role: 'notice', text: COPY.rejectedNotice });
+      this.emit({ type: 'chat/notice', text: COPY.rejectedNotice });
+    }
   }
 
   async recheck(): Promise<void> {
     const status = await this.gateway.ensureAvailable();
-    this.emit({ type: 'copilot/status', status });
+    this.emit({ type: 'copilot/status', status, message: copilotStatusMessage(status) });
   }
 
   async handleUi(msg: UiToHost): Promise<void> {

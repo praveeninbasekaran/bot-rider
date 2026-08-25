@@ -13,7 +13,7 @@ describe('contribution points', () => {
     activationEvents: unknown[];
     extensionDependencies?: unknown;
     contributes: {
-      commands: { command: string; title: string; category: string }[];
+      commands: { command: string; title: string; category: string; enablement?: string }[];
       menus: Record<string, { command: string; when?: string }[]>;
       viewsContainers: { activitybar: { id: string }[] };
       views: Record<string, { id: string; visibility?: string; type?: string }[]>;
@@ -65,6 +65,9 @@ describe('contribution points', () => {
       'Sign in to GitHub Copilot',
     );
     expect(pkg.contributes.commands.find((c) => c.command === 'botrider.changeset.retry')?.title).toBe('Retry');
+    expect(pkg.contributes.commands.find((c) => c.command === 'botrider.changeset.retry')?.enablement).toBe(
+      'botrider.applyFailed',
+    );
 
     const palette = pkg.contributes.menus.commandPalette;
     expect(palette.find((m) => m.command === 'botrider.bots.edit')?.when).toBe('false');
@@ -76,13 +79,17 @@ describe('contribution points', () => {
     expect(palette.find((m) => m.command === 'botrider.chat.stop')?.when).toBe(
       'botrider.debateRunning || botrider.splitOpen',
     );
+    expect(palette.find((m) => m.command === 'botrider.changeset.retry')?.when).toBe('botrider.applyFailed');
+    expect(palette.find((m) => m.command === 'botrider.changeset.retry')?.when).not.toContain('hasPendingChanges');
 
     const titles = pkg.contributes.menus['view/title'];
     expect(titles.find((m) => m.command === 'botrider.changeset.retry')?.when).toBe(
       'view == botrider.review && botrider.applyFailed',
     );
     expect(titles.find((m) => m.command === 'botrider.chat.expand')?.when).toContain('!botrider.chatExpanded');
-    expect(titles.find((m) => m.command === 'botrider.chat.stop')?.when).toContain('botrider.debateRunning');
+    expect(titles.find((m) => m.command === 'botrider.chat.stop')?.when).toBe(
+      'view == botrider.chat && (botrider.debateRunning || botrider.splitOpen)',
+    );
   });
 
   it('welcome views match copy', () => {
