@@ -230,6 +230,7 @@ export class CopilotGateway implements ICopilotGateway {
           { role: 'assistant', toolCalls: consumed.toolCalls },
           { role: 'user', toolResults: results },
         ];
+        await this.dropMcpExcerptsIfOver(convo);
       }
       return 'ok';
     } catch (err) {
@@ -253,6 +254,30 @@ export class CopilotGateway implements ICopilotGateway {
     }
     const tools = this.mcp.listReadOnly();
     return tools.length ? tools : undefined;
+  }
+
+  private async dropMcpExcerptsIfOver(convo: LmChatMessage[]): Promise<void> {
+    while ((await this.countTokens(convoToPrompt(convo))) > this.maxInputTokens) {
+      let dropped = false;
+      for (let i = convo.length - 1; i >= 0; i--) {
+        const msg = convo[i]!;
+        if ('toolResults' in msg && msg.toolResults.some((part) => part.content.length > 0 && part.content !== 'Dropped to fit token budget.')) {
+          for (const part of msg.toolResults) {
+            part.content = 'Dropped to fit token budget.';
+          }
+          dropped = true;
+          break;
+        }
+        if (!('toolResults' in msg) && !('toolCalls' in msg) && msg.content.startsWith('Read-only workspace MCP notes:')) {
+          convo.splice(i, 1);
+          dropped = true;
+          break;
+        }
+      }
+      if (!dropped) {
+        return;
+      }
+    }
   }
 
   private setStatus(status: CopilotStatus): void {
@@ -331,6 +356,18 @@ async function consumeResponse(
     }
   }
   return { outcome: 'cancelled', toolCalls };
+}
+
+function convoToPrompt(convo: LmChatMessage[]): PromptMessage[] {
+  return convo.map((msg) => {
+    if ('toolResults' in msg) {
+      return { role: 'user' as const, content: msg.toolResults.map((part) => part.content).join('\n') };
+    }
+    if ('toolCalls' in msg) {
+      return { role: 'assistant' as const, content: msg.content ?? '' };
+    }
+    return msg;
+  });
 }
 
 async function raceHang<T>(

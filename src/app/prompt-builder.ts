@@ -80,37 +80,33 @@ export class PromptBuilder {
     mcpContext?: string[];
   }): Promise<PromptMessage[]> {
     const persona: PromptMessage = { role: 'user', content: personaBlock(args.bot) };
-    const workspace: PromptMessage = { role: 'user', content: workspaceBlock(args.workspace) };
     const instruction: PromptMessage = { role: 'user', content: args.instruction };
     const history = args.history.map((h) => ({
       role: 'assistant' as const,
       content: h.text,
       handle: h.handle,
     }));
-    let mcp = mcpMessage(args.mcpContext);
+    let mcpNotes = [...(args.mcpContext ?? [])];
+    let otherTabPaths = [...args.workspace.otherTabPaths];
 
-    let messages = assemble(persona, workspace, mcp, history, instruction);
+    const workspaceMsg = (): PromptMessage => ({
+      role: 'user',
+      content: workspaceBlock({ ...args.workspace, otherTabPaths }),
+    });
+    const mcpMsg = (): PromptMessage | undefined => mcpMessage(mcpNotes);
+
+    let messages = assemble(persona, workspaceMsg(), mcpMsg(), history, instruction);
     while ((await args.counter.countTokens(messages)) > args.counter.maxInputTokens) {
-      if (mcp) {
-        mcp = undefined;
+      if (mcpNotes.length > 0) {
+        mcpNotes = [];
+      } else if (otherTabPaths.length > 0) {
+        otherTabPaths = [];
       } else if (history.length > 0) {
         history.shift();
       } else {
         break;
       }
-      messages = assemble(persona, workspace, mcp, history, instruction);
-    }
-
-    if ((await args.counter.countTokens(messages)) > args.counter.maxInputTokens) {
-      const truncatedWorkspace: PromptMessage = {
-        role: 'user',
-        content: trimToBudget(
-          workspace.content,
-          Math.max(0, args.counter.maxInputTokens - (await args.counter.countTokens([persona, instruction]))),
-          args.counter,
-        ),
-      };
-      messages = assemble(persona, truncatedWorkspace, undefined, [], instruction);
+      messages = assemble(persona, workspaceMsg(), mcpMsg(), history, instruction);
     }
     return messages;
   }
@@ -134,18 +130,4 @@ function assemble(
   instruction: PromptMessage,
 ): PromptMessage[] {
   return mcp ? [persona, workspace, mcp, ...history, instruction] : [persona, workspace, ...history, instruction];
-}
-
-function trimToBudget(
-  text: string,
-  budget: number,
-  _counter: TokenCounter,
-): string {
-  if (budget <= 0) {
-    return '';
-  }
-  if (text.length <= budget) {
-    return text;
-  }
-  return text.slice(0, budget);
 }

@@ -82,6 +82,11 @@ export function looksWriteIsh(name: string, title = ''): boolean {
   return WRITE_ISH_RE.test(`${normalizeIdent(name)} ${normalizeIdent(title)}`);
 }
 
+export function toolTitle(tool: McpToolInfo): string {
+  return `${tool.title ?? ''} ${tool.annotations?.title ?? ''}`;
+}
+
+/** Advertised to Copilot: MCP + readOnlyHint, fail-closed. Name gate is invoke-only (WM-Q2). */
 export function isReadOnlyMcp(tool: McpToolInfo): boolean {
   if (!isMcpTagged(tool)) {
     return false;
@@ -92,11 +97,11 @@ export function isReadOnlyMcp(tool: McpToolInfo): boolean {
   if (tool.annotations?.destructiveHint === true) {
     return false;
   }
-  const title = `${tool.title ?? ''} ${tool.annotations?.title ?? ''}`;
-  if (looksWriteIsh(tool.name, title)) {
-    return false;
-  }
   return true;
+}
+
+export function passesNameGate(tool: McpToolInfo): boolean {
+  return !looksWriteIsh(tool.name, toolTitle(tool));
 }
 
 export function listReadOnlyTools(tools: readonly McpToolInfo[]): LmChatTool[] {
@@ -205,11 +210,12 @@ export class McpGateway {
     const tools = this.port.listTools();
     const match = tools.find((tool) => tool.name === call.name);
     const ids = serverAndTool(match, call.name);
-    if (match && isReadOnlyMcp(match)) {
+    if (match && isReadOnlyMcp(match) && passesNameGate(match)) {
       return { ok: true, ...ids };
     }
     const writeKnown = !!(match && isMcpTagged(match) && !isReadOnlyMcp(match));
-    if (writeKnown || looksWriteIsh(call.name, match?.title ?? match?.annotations?.title ?? '')) {
+    const nameBlocked = looksWriteIsh(call.name, match ? toolTitle(match) : '') || (match ? !passesNameGate(match) : false);
+    if (writeKnown || nameBlocked) {
       return {
         ok: false,
         reason: 'mutating-blocked',
@@ -229,7 +235,11 @@ export class McpGateway {
     if (!this.hadConfig) {
       return;
     }
-    await this.port.startServers();
+    try {
+      await this.port.startServers();
+    } catch {
+      // Unused / failed starts stay silent (WM-Q3). Skip banners only for a tool call this turn.
+    }
     if (this.settleMs > 0) {
       await delay(this.settleMs);
     }

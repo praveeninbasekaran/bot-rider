@@ -155,7 +155,7 @@ describe('CopilotGateway MCP tools', () => {
       readOnlyMcpTool({
         name: 'create_issue',
         description: 'Create',
-        annotations: { readOnlyHint: false },
+        annotations: { readOnlyHint: true },
         source: { name: 'github' },
       }),
     ];
@@ -204,5 +204,25 @@ describe('CopilotGateway MCP tools', () => {
       message: COPY.mcpSkipMutating('github'),
     });
     expect(chunks.join('')).toBe('done');
+  });
+
+  it('emits no mcp start/end/skip when Copilot does not call a tool this turn', async () => {
+    const port = new FakeMcpPort();
+    port.config = true;
+    port.tools = [readOnlyMcpTool()];
+    const msgs: import('../src/protocol/messages').HostToUi[] = [];
+    const mcp = new McpGateway(port, (m) => msgs.push(m), { settleMs: 0 });
+    await mcp.ensureStartedFromSend();
+    const lm = new FakeLm();
+    lm.models = [model()];
+    const gw = new CopilotGateway(lm, () => undefined, 60_000, mcp);
+    await gw.ensureAvailable();
+    await gw.send([{ role: 'user', content: 'hi' }], idle, () => undefined, {
+      tools: 'mcp-readonly',
+      botId: 'b1',
+      handle: 'alpha',
+    });
+    expect(port.invokeCalls).toEqual([]);
+    expect(msgs.filter((m) => m.type.startsWith('chat/mcp-'))).toEqual([]);
   });
 });

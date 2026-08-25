@@ -11,7 +11,7 @@ import { FakeMcpPort, readOnlyMcpTool } from './fakes';
 const token = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) };
 
 describe('McpGateway listReadOnly', () => {
-  it('drops write-ish names and missing readOnlyHint', () => {
+  it('drops missing readOnlyHint and destructive tools, not by keyword (WM-Q2)', () => {
     const tools = [
       readOnlyMcpTool({ name: 'list_issues' }),
       readOnlyMcpTool({ name: 'create_issue', annotations: { readOnlyHint: true } }),
@@ -32,7 +32,7 @@ describe('McpGateway listReadOnly', () => {
       },
     ];
     const names = listReadOnlyTools(tools).map((t) => t.name);
-    expect(names).toEqual(['list_issues']);
+    expect(names).toEqual(['list_issues', 'create_issue', 'add_comment']);
     expect(looksWriteIsh('create_issue')).toBe(true);
     expect(looksWriteIsh('list_issues')).toBe(false);
   });
@@ -47,13 +47,14 @@ describe('McpGateway allow/invoke', () => {
       readOnlyMcpTool({
         name: 'create_issue',
         description: 'Create an issue',
-        annotations: { readOnlyHint: false },
+        annotations: { readOnlyHint: true },
         source: { name: 'github' },
       }),
     ];
     const msgs: HostToUi[] = [];
     const gw = new McpGateway(port, (m) => msgs.push(m), { settleMs: 0 });
     await gw.ensureStartedFromSend();
+    expect(gw.listReadOnly().map((t) => t.name)).toContain('create_issue');
     const result = await gw.invoke(
       { callId: '1', name: 'create_issue', input: { title: 'x' } },
       token,
@@ -72,5 +73,19 @@ describe('McpGateway allow/invoke', () => {
       message: COPY.mcpSkipMutating('github'),
     });
     expect(COPY.mcpSkipMutating('github')).toBe("Writes through github aren't available in Bot Rider.");
+  });
+
+  it('unused servers and failed starts emit nothing until a tool is called this turn', async () => {
+    const port = new FakeMcpPort();
+    port.config = true;
+    port.tools = [readOnlyMcpTool()];
+    port.startServers = async () => {
+      throw new Error('github MCP failed to start');
+    };
+    const msgs: HostToUi[] = [];
+    const gw = new McpGateway(port, (m) => msgs.push(m), { settleMs: 0 });
+    await gw.ensureStartedFromSend();
+    expect(msgs.filter((m) => m.type.startsWith('chat/mcp-'))).toEqual([]);
+    expect(port.invokeCalls).toEqual([]);
   });
 });
