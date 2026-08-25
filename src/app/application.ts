@@ -1,5 +1,6 @@
 import type { BotDraft, BotRecord } from '../domain/bot';
 import type { HostToUi, UiToHost } from '../protocol/messages';
+import { COPY } from './copy';
 import { BotRegistry } from './bot-registry';
 import { ChangesetStore } from './changeset-store';
 import type { ICopilotGateway } from './copilot-gateway';
@@ -120,7 +121,7 @@ export class Application {
   async handleUi(msg: UiToHost): Promise<void> {
     switch (msg.type) {
       case 'bots/create':
-        await this.createBot(msg);
+        await this.createBot(asCreateDraft(msg));
         break;
       case 'bots/update':
         await this.updateBot(msg.id, msg);
@@ -141,9 +142,11 @@ export class Application {
         await this.continueDebate();
         break;
       case 'split/pick':
-        if (msg.botId) {
-          await this.pick(msg.botId);
+        if (!msg.botId) {
+          this.emit({ type: 'error', code: 'unknown-handle', message: COPY.unknownHandle('') });
+          break;
         }
+        await this.pick(msg.botId);
         break;
       case 'changeset/approve':
         await this.approve();
@@ -161,4 +164,18 @@ export class Application {
         break;
     }
   }
+}
+
+function asCreateDraft(msg: { draft?: BotDraft } & Partial<BotDraft>): BotDraft {
+  if (msg.draft) {
+    return msg.draft;
+  }
+  return {
+    name: msg.name ?? '',
+    handle: msg.handle,
+    persona: msg.persona ?? '',
+    role: msg.role ?? '',
+    instructions: msg.instructions ?? '',
+    active: msg.active,
+  };
 }

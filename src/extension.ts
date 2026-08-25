@@ -13,6 +13,7 @@ import {
 import { openProposedDiff, ReviewTreeProvider } from './adapters/review-tree';
 import { createCopilotGateway } from './adapters/vscode-lm-gateway';
 import { VsCodeWorkspacePort } from './adapters/vscode-workspace';
+import { COPY } from './app/copy';
 import type { HostToUi, UiToHost } from './protocol/messages';
 
 class MementoStore {
@@ -50,6 +51,9 @@ export function activate(context: vscode.ExtensionContext): void {
       msg.type === 'changeset/apply-failed'
     ) {
       reviewTree?.refresh();
+    }
+    if (msg.type === 'changeset/cleared' && msg.reason === 'approve') {
+      void vscode.window.showInformationMessage(COPY.appliedToast(msg.fileCount));
     }
     void syncKeys();
   };
@@ -165,10 +169,6 @@ export function activate(context: vscode.ExtensionContext): void {
     try {
       if (msg.type === 'review/open-diff') {
         await openProposedDiff({ path: msg.path, op: msg.op ?? 'update' }, proposed);
-        return;
-      }
-      if (msg.type === 'split/pick' && !msg.botId) {
-        await pickBot();
         return;
       }
       await app.handleUi(msg);

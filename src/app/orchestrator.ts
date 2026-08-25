@@ -1,7 +1,7 @@
 import type { BotRecord } from '../domain/bot';
 import type { RunStateDto, TurnKind } from '../domain/run-state';
 import { idleRunState } from '../domain/run-state';
-import type { HostToUi, WorkspaceContext } from '../protocol/messages';
+import type { HostToUi, SplitCause, SplitPosition, WorkspaceContext } from '../protocol/messages';
 import { COPY } from './copy';
 import { CancelSource } from './cancel';
 import type { BotRegistry } from './bot-registry';
@@ -22,6 +22,7 @@ export class Orchestrator {
   private userText = '';
   private workspace: WorkspaceContext = { otherTabPaths: [] };
   private loopActive = false;
+  private lastPositions = new Map<string, SplitPosition>();
 
   constructor(
     private readonly registry: BotRegistry,
@@ -98,6 +99,7 @@ export class Orchestrator {
 
     this.userText = text;
     this.history = [];
+    this.lastPositions.clear();
     this.cts = new CancelSource();
     this.loopActive = true;
 
@@ -126,7 +128,7 @@ export class Orchestrator {
         frozenBotIds: this.freeze.map((b) => b.id),
       };
       this.pushState();
-      await this.runDebateRounds(1, 2);
+      await this.runDebateRounds(1, 2, 'cap');
     }
 
     this.loopActive = false;
@@ -151,7 +153,7 @@ export class Orchestrator {
     };
     this.pushState();
     const nextRound = this.state.round + 1;
-    await this.runDebateRounds(nextRound, nextRound);
+    await this.runDebateRounds(nextRound, nextRound, 'continue');
     this.loopActive = false;
   }
 
@@ -161,6 +163,7 @@ export class Orchestrator {
     }
     const bot = this.freeze.find((b) => b.id === botId);
     if (!bot) {
+      this.emit({ type: 'error', code: 'unknown-handle', message: COPY.unknownHandle('') });
       return;
     }
     const copilot = await this.gateway.ensureAvailable();
@@ -175,16 +178,18 @@ export class Orchestrator {
       splitOpen: false,
       debateRunning: true,
       phase: 'implement',
+      currentBotId: bot.id,
+      turn: 'implement',
     };
     this.pushState();
-    await this.runImplementer(bot, COPY.pickDirection(bot.name));
+    await this.runImplementer(bot);
     this.loopActive = false;
   }
 
   stop(): void {
     this.cts?.cancel();
     if (this.state.debateRunning) {
-      this.enterSplit(COPY.splitPaused, COPY.stoppedNoImpl, true);
+      this.enterSplit('interrupt');
       return;
     }
     if (this.state.splitOpen) {
@@ -192,7 +197,7 @@ export class Orchestrator {
     }
   }
 
-  private async runDebateRounds(fromRound: number, toRound: number): Promise<void> {
+  private async runDebateRounds(fromRound: number, toRound: number, splitCause: SplitCause): Promise<void> {
     for (let round = fromRound; round <= toRound; round++) {
       if (this.cancelled()) {
         return;
@@ -229,19 +234,12 @@ export class Orchestrator {
       }
     }
     if (!this.cancelled()) {
-      this.enterSplit(COPY.splitNoConsensus, 'The swarm did not reach AGREE. Continue for another round or pick a bot to decide.', false);
+      this.enterSplit(splitCause);
     }
   }
 
   private async runDirect(bot: BotRecord): Promise<void> {
-    const notice = bot.active ? undefined : COPY.inactiveTurn(bot.name);
-    const result = await this.runTurn(
-      bot,
-      'direct',
-      1,
-      turnInstruction('direct', 1, this.userText),
-      { inactiveNotice: notice, solo: true },
-    );
+    const result = await this.runTurn(bot, 'direct', 1, turnInstruction('direct', 1, this.userText));
     if (!isTurnOk(result)) {
       return;
     }
@@ -253,7 +251,7 @@ export class Orchestrator {
     this.exitToIdle();
   }
 
-  private async runImplementer(bot: BotRecord, notice?: string): Promise<void> {
+  private async runImplementer(bot: BotRecord): Promise<void> {
     if (this.cancelled()) {
       return;
     }
@@ -267,7 +265,6 @@ export class Orchestrator {
       'implement',
       this.state.round || 1,
       turnInstruction('implement', this.state.round || 1, this.userText),
-      { inactiveNotice: notice },
     );
     if (!isTurnOk(result)) {
       return;
@@ -299,7 +296,6 @@ export class Orchestrator {
     turn: TurnKind,
     round: number,
     instruction: string,
-    extras?: { inactiveNotice?: string; solo?: boolean },
   ): Promise<{ ok: true; text: string; trailer?: 'NEED_EDIT' | 'NO_EDIT'; vote?: 'AGREE' | 'DISSENT' } | 'hung' | 'cancelled' | 'error'> {
     if (this.cancelled()) {
       return 'cancelled';
@@ -308,17 +304,15 @@ export class Orchestrator {
     this.state.currentBotId = bot.id;
     this.state.round = round;
     this.pushState();
-    this.emit({
-      type: 'chat/turn-start',
-      botId: bot.id,
-      handle: bot.handle,
-      name: bot.name,
-      colorIndex: bot.colorIndex,
-      turn,
-      round,
-      inactiveNotice: extras?.inactiveNotice,
-      solo: extras?.solo,
-    });
+    const visibleChat = turn !== 'implement';
+    if (visibleChat) {
+      this.emit({
+        type: 'chat/turn-start',
+        botId: bot.id,
+        handle: bot.handle,
+        turn,
+      });
+    }
 
     const messages = await this.prompts.build({
       bot,
@@ -332,7 +326,9 @@ export class Orchestrator {
     try {
       const streamed = await this.gateway.stream(messages, this.cts!.token, (chunk) => {
         full += chunk;
-        this.emit({ type: 'chat/token', text: chunk });
+        if (visibleChat) {
+          this.emit({ type: 'chat/token', botId: bot.id, delta: chunk });
+        }
       });
       if (streamed === 'cancelled' || this.cancelled()) {
         return 'cancelled';
@@ -342,7 +338,7 @@ export class Orchestrator {
         return 'cancelled';
       }
       if (err instanceof HungError || mapCopilotError(err) === 'hung') {
-        this.emit({ type: 'copilot/status', status: 'hung', message: COPY.hung });
+        this.emit({ type: 'copilot/status', status: 'hung' });
         this.state.debateRunning = true;
         this.pushState();
         await this.waitUntilCancelled();
@@ -380,11 +376,14 @@ export class Orchestrator {
 
     this.history.push({ handle: bot.handle, text: visible });
     this.thread.append({ role: 'assistant', text: visible, handle: bot.handle, botId: bot.id });
-    this.emit({ type: 'chat/turn-end', text: visible, handle: bot.handle, vote, trailer });
+    if (visibleChat) {
+      this.lastPositions.set(bot.id, { botId: bot.id, handle: bot.handle, text: visible });
+      this.emit({ type: 'chat/turn-end', botId: bot.id, turn });
+    }
     return { ok: true, text: turn === 'implement' ? full : visible, trailer, vote };
   }
 
-  private enterSplit(title: string, reason: string, paused: boolean): void {
+  private enterSplit(cause: SplitCause): void {
     this.state = {
       phase: 'split',
       round: this.state.round,
@@ -394,7 +393,10 @@ export class Orchestrator {
       frozenBotIds: this.freeze.map((b) => b.id),
     };
     this.pushState();
-    this.emit({ type: 'chat/split', title, reason, paused });
+    const positions = this.freeze.map(
+      (b) => this.lastPositions.get(b.id) ?? { botId: b.id, handle: b.handle, text: '' },
+    );
+    this.emit({ type: 'chat/split', cause, positions });
   }
 
   private exitToIdle(): void {
@@ -414,15 +416,7 @@ export class Orchestrator {
   }
 
   private emitCopilot(status: import('../protocol/messages').CopilotStatus): void {
-    const message =
-      status === 'hung'
-        ? COPY.hung
-        : status === 'missing'
-          ? COPY.missingCopilot
-          : status === 'noPermissions'
-            ? COPY.noPermissions
-            : undefined;
-    this.emit({ type: 'copilot/status', status, message });
+    this.emit({ type: 'copilot/status', status });
   }
 
   private cancelled(): boolean {

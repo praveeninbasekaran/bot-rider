@@ -1,6 +1,6 @@
-# Bot Rider architecture (rev 7)
+# Bot Rider architecture (rev 8)
 
-Host-owned UI and protocol for the MVP. The webview never calls `vscode.lm` or `workspace.applyEdit`.
+Host-owned UI and protocol for the MVP. The webview never calls `vscode.lm` or `workspace.applyEdit`. Host core emits §5; the UI speaks §5. A thin `text`→`delta` map may exist in the chat adapter only and is not the contract.
 
 ## Host ids
 
@@ -22,6 +22,8 @@ Context keys: `botrider.hasBots`, `hasActiveBots`, `hasPendingChanges`, `debateR
 
 `TurnKind` = `propose` \| `critique` \| `consensus` \| `direct` \| `implement`
 
+`SplitCause` = `cap` \| `continue` \| `interrupt`
+
 `CopilotStatus` = `ready` \| `missing` \| `noPermissions` \| `notFound` \| `blocked` \| `quota` \| `hung` \| `streamFailed` \| `offTopic`
 
 `ErrorCode` = `unknown-handle` \| `multiple-mentions` \| `zero-active` \| `no-workspace` \| `parse-failed` \| `validate-failed` \| `copilot`
@@ -30,11 +32,33 @@ Copilot auth/quota/hung stay on `copilot/status`. `error` with code `copilot` is
 
 ### Host → UI
 
-`bots/snapshot`, `copilot/status`, `run/state`, `chat/turn-start`, `chat/token`, `chat/turn-end`, `chat/split`, `changeset/preview`, `changeset/apply-failed`, `changeset/cleared`, `error`
+- `bots/snapshot` `{ bots }`
+- `copilot/status` `{ status }`
+- `run/state` `{ state: RunStateDto }`
+- `chat/turn-start` `{ botId, handle, turn }` only. Name/colorIndex from snapshot. round from `run/state`. solo = `turn === 'direct'`
+- `chat/token` `{ botId, delta }`
+- `chat/turn-end` `{ botId, turn }` — vote/trailer are parser-internal, not on the wire
+- `chat/split` `{ cause: SplitCause, positions: { botId, handle, text }[] }` — positions required
+- `changeset/preview` `{ files: { path, op }[] }`
+- `changeset/apply-failed` `{ message, leftoverCreates, leftoverDeletes }`
+- `changeset/cleared` `{ reason: 'approve' \| 'reject', fileCount }`
+- `error` `{ code, message }`
+
+Implementer is not a visible chat turn (no `turn-start` / `token` / `turn-end`). The user sees `changeset/preview`.
 
 ### UI → host
 
-`bots/create`, `bots/update`, `bots/toggle`, `bots/delete`, `chat/send`, `chat/stop`, `split/continue`, `split/pick`, `changeset/approve`, `changeset/retry`, `changeset/reject`, `review/open-diff`, `copilot/recheck`
+- `bots/create` `{ draft }` (host may accept flattened as a shim; UI speaks `draft`)
+- `bots/update` `{ id, name, handle, persona, role, instructions, active }`
+- `bots/toggle` `{ id, active }`
+- `bots/delete` `{ id }`
+- `chat/send` `{ text }` — ignored while `splitOpen`
+- `chat/stop`
+- `split/continue`
+- `split/pick` `{ botId }` — `botId` required. If missing, `error` `unknown-handle`; do not call Copilot
+- `changeset/approve`, `changeset/retry`, `changeset/reject`
+- `review/open-diff` `{ path }`
+- `copilot/recheck`
 
 ## Apply table (`ChangesetStore.buildEdit`)
 

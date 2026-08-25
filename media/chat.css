@@ -7,9 +7,17 @@ html, body {
   margin: 0;
   padding: 0;
   font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
+  font-size: 13px;
   color: var(--vscode-foreground);
   background: var(--vscode-sideBar-background);
+}
+
+body.vscode-light,
+body.vscode-dark,
+body.vscode-high-contrast {
+  color: var(--vscode-foreground);
+  background: var(--vscode-sideBar-background);
+  font-size: 13px;
 }
 
 .swarm {
@@ -21,8 +29,8 @@ html, body {
 
 .banner {
   display: none;
-  padding: 8px 10px;
-  font-size: 12px;
+  padding: 8px;
+  font-size: 13px;
   background: var(--vscode-inputValidation-warningBackground);
   border-bottom: 1px solid var(--vscode-inputValidation-warningBorder);
   color: var(--vscode-foreground);
@@ -37,22 +45,23 @@ html, body {
 
 .banner button,
 .chip,
-.icon-btn,
 .send-btn,
-.split-actions button {
+.split-actions button,
+.split-pick-list button {
   font-family: var(--vscode-font-family);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
   border: none;
-  border-radius: 2px;
-  padding: 4px 10px;
+  border-radius: 4px;
+  padding: 4px 8px;
   cursor: pointer;
 }
 
 .banner button:hover,
 .send-btn:hover,
-.split-actions button:hover {
+.split-actions button:hover,
+.split-pick-list button:hover {
   background: var(--vscode-button-hoverBackground);
 }
 
@@ -64,21 +73,20 @@ html, body {
 .thread {
   flex: 1;
   overflow: auto;
-  padding: 8px 10px 12px;
+  padding: 8px;
 }
 
 .round-header {
-  margin: 10px 0 6px;
-  font-size: 11px;
+  margin: 8px 0 4px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--vscode-descriptionForeground);
 }
 
 .msg {
   display: grid;
-  grid-template-columns: 22px 1fr;
+  grid-template-columns: 24px 1fr;
   gap: 8px;
   margin: 8px 0;
   align-items: start;
@@ -89,8 +97,8 @@ html, body {
 }
 
 .avatar {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
 }
 
@@ -100,11 +108,11 @@ html, body {
 
 .meta {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--vscode-descriptionForeground);
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .handle {
@@ -117,7 +125,7 @@ html, body {
 }
 
 .chip {
-  padding: 1px 6px;
+  padding: 4px 8px;
   background: var(--vscode-badge-background);
   color: var(--vscode-badge-foreground);
 }
@@ -129,22 +137,22 @@ html, body {
 }
 
 .notice {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--vscode-descriptionForeground);
-  margin: 6px 0;
+  margin: 8px 0;
 }
 
 .error {
   color: var(--vscode-errorForeground);
-  font-size: 12px;
+  font-size: 13px;
   margin: 8px 0;
   white-space: pre-wrap;
 }
 
 .split-card {
   display: none;
-  margin: 10px 0;
-  padding: 10px;
+  margin: 8px 0;
+  padding: 8px;
   border: 1px solid var(--vscode-widget-border, var(--vscode-editorWidget-border));
   background: var(--vscode-editorWidget-background);
   border-radius: 4px;
@@ -155,19 +163,34 @@ html, body {
 }
 
 .split-card h3 {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   font-size: 13px;
 }
 
 .split-card p {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   color: var(--vscode-descriptionForeground);
 }
 
-.split-actions {
+.split-positions {
+  margin: 0 0 8px;
+  padding-left: 16px;
+  color: var(--vscode-foreground);
+}
+
+.split-positions li {
+  margin: 4px 0;
+}
+
+.split-actions,
+.split-pick-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+}
+
+.split-pick-list {
+  margin-top: 8px;
 }
 
 .composer-wrap {
@@ -180,23 +203,23 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .picker button {
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   border: 1px solid var(--vscode-input-border, transparent);
-  border-radius: 10px;
-  padding: 2px 8px;
-  font-size: 11px;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 13px;
   cursor: pointer;
 }
 
 .composer {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 6px;
+  gap: 8px;
   align-items: end;
 }
 
@@ -206,12 +229,12 @@ textarea {
   min-height: 40px;
   max-height: 120px;
   box-sizing: border-box;
-  padding: 6px 8px;
+  padding: 8px;
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   border: 1px solid var(--vscode-input-border, transparent);
   font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
+  font-size: 13px;
 }
 
 textarea:disabled {
@@ -220,7 +243,7 @@ textarea:disabled {
 
 .helper {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--vscode-descriptionForeground);
 }
 

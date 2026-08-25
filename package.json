@@ -151,7 +151,7 @@
         },
         {
           "command": "botrider.chat.stop",
-          "when": "view == botrider.chat && botrider.debateRunning",
+          "when": "view == botrider.chat && (botrider.debateRunning || botrider.splitOpen)",
           "group": "navigation"
         },
         {

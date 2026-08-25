@@ -89,7 +89,8 @@ export class ChangesetStore {
     const ops = this.buildEdit(mode);
     const ok = await this.applyPort.applyEdit(ops);
     if (ok) {
-      await this.clearSucceeded();
+      const fileCount = this.pending.length;
+      await this.clearSucceeded('approve', fileCount);
       return true;
     }
     this.applyFailed = true;
@@ -104,23 +105,24 @@ export class ChangesetStore {
   }
 
   async reject(): Promise<void> {
+    const fileCount = this.pending?.length ?? 0;
     this.pending = undefined;
     this.applyFailed = false;
     this.leftoverCreates = [];
     this.leftoverDeletes = [];
     this.docs?.clearProposed();
     await this.diffs?.closeProposedDiffs();
-    this.emit({ type: 'changeset/cleared' });
+    this.emit({ type: 'changeset/cleared', reason: 'reject', fileCount });
   }
 
-  private async clearSucceeded(): Promise<void> {
+  private async clearSucceeded(reason: 'approve' | 'reject', fileCount: number): Promise<void> {
     this.pending = undefined;
     this.applyFailed = false;
     this.leftoverCreates = [];
     this.leftoverDeletes = [];
     this.docs?.clearProposed();
     await this.diffs?.closeProposedDiffs();
-    this.emit({ type: 'changeset/cleared' });
+    this.emit({ type: 'changeset/cleared', reason, fileCount });
   }
 
   private async refreshLeftovers(): Promise<void> {

@@ -23,7 +23,7 @@ describe('ChangesetStore', () => {
     expect(store.applyFailed).toBe(false);
     expect(fs.files.get('src/new.ts')).toBe('n');
     expect(fs.files.get('src/app.ts')).toBe('new');
-    expect(msgs.some((m) => m.type === 'changeset/cleared')).toBe(true);
+    expect(msgs.some((m) => m.type === 'changeset/cleared' && m.reason === 'approve' && m.fileCount === 3)).toBe(true);
   });
 
   it('applyFailed is false on clean pending and true after failed apply', async () => {

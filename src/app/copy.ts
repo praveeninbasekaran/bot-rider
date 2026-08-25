@@ -4,6 +4,9 @@ export const COPY = {
   inactiveTurn: (name: string) => `${name} is inactive · answering this turn only.`,
   splitNoConsensus: 'No consensus',
   splitPaused: 'Debate paused',
+  splitCapBody: 'The swarm did not agree after two rounds.',
+  splitContinueBody: 'Still no consensus after the extra round.',
+  splitInterruptBody: 'Debate paused. Positions so far:',
   stoppedNoImpl: 'Stopped without implementation.',
   pickDirection: (name: string) => `${name}'s position selected as the direction.`,
   composerPlaceholder: 'Message the swarm. Use @handle to lock a bot.',
@@ -16,6 +19,10 @@ export const COPY = {
   missingCopilot: 'GitHub Copilot is not available. Sign in to GitHub Copilot, then retry Send.',
   noPermissions: 'Bot Rider does not have permission to use GitHub Copilot yet.',
   composerLocked: 'Resolve the split to send a new prompt.',
+  proposedChanges: (n: number) => `Proposed changes · ${n} files`,
+  appliedToast: (n: number) => `Applied ${n} file changes.`,
+  approvedChat: (n: number) => `Approved · ${n} files applied.`,
+  rejectedChat: 'Rejected · proposed edits discarded.',
 };
 
 export const BOTS_STATE_KEY = 'botrider.bots.v1';

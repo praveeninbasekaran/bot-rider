@@ -82,7 +82,9 @@ describe('contribution points', () => {
       'view == botrider.review && botrider.applyFailed',
     );
     expect(titles.find((m) => m.command === 'botrider.chat.expand')?.when).toContain('!botrider.chatExpanded');
-    expect(titles.find((m) => m.command === 'botrider.chat.stop')?.when).toContain('botrider.debateRunning');
+    expect(titles.find((m) => m.command === 'botrider.chat.stop')?.when).toBe(
+      'view == botrider.chat && (botrider.debateRunning || botrider.splitOpen)',
+    );
   });
 
   it('welcome views match copy', () => {

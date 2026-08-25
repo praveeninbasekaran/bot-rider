@@ -41,7 +41,7 @@
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     err.textContent = '';
-    const payload = {
+    const draft = {
       name: name.value,
       handle: handle.value.trim().toLowerCase(),
       persona: persona.value,
@@ -50,9 +50,18 @@
       active: active.checked,
     };
     if (editingId) {
-      vscode.postMessage(Object.assign({ type: 'bots/update', id: editingId }, payload));
+      vscode.postMessage({
+        type: 'bots/update',
+        id: editingId,
+        name: draft.name,
+        handle: draft.handle,
+        persona: draft.persona,
+        role: draft.role,
+        instructions: draft.instructions,
+        active: draft.active,
+      });
     } else {
-      vscode.postMessage(Object.assign({ type: 'bots/create' }, payload));
+      vscode.postMessage({ type: 'bots/create', draft: draft });
     }
   });
 
