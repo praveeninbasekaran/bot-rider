@@ -27,3 +27,10 @@ Bot Rider is a VS Code extension that runs a **swarm of persona bots** through G
 5. Proposed files appear under **Proposed Changes**. Approve applies the whole `WorkspaceEdit`. Reject discards it. If apply fails, **Retry** finishes leftovers; Bot Rider does not roll back files that already landed.
 
 Copilot sign-in is the **Sign in to GitHub Copilot** command (`botrider.copilot.recheck`), which calls `selectChatModels({ vendor: 'copilot' })` from that click. Send and `@bot` are the other user gestures that may select a Copilot model.
+
+## Documentation
+
+- [docs/architecture.md](docs/architecture.md) — host ids and protocol (rev 7)
+- [docs/architecture-mvp.md](docs/architecture-mvp.md) — MVP architecture (BR-1 … BR-6)
+- [docs/ui-ux-spec.md](docs/ui-ux-spec.md) — views, copy, webview rules
+- [openspec/changes/bot-rider-mvp](openspec/changes/bot-rider-mvp) — OpenSpec proposal, spec, tasks

@@ -2,6 +2,8 @@
 
 Host-owned UI and protocol for the MVP. The webview never calls `vscode.lm` or `workspace.applyEdit`.
 
+Fuller MVP write-up: [architecture-mvp.md](./architecture-mvp.md). UI copy and surfaces: [ui-ux-spec.md](./ui-ux-spec.md). OpenSpec: [openspec/changes/bot-rider-mvp](../openspec/changes/bot-rider-mvp/proposal.md).
+
 ## Host ids
 
 | Kind | Id | Role |

@@ -1,0 +1,16 @@
+schema: spec-driven
+
+context: |
+  Product: Bot Rider, a VS Code extension (publisher botrider, name bot-rider).
+  Tech stack: TypeScript, CommonJS, engines.vscode ^1.99.0, Vitest for node tests.
+  Copilot contract: vscode.lm.selectChatModels({ vendor: 'copilot' }) only. No API keys, no other vendors.
+
+  Product language:
+  - Write OpenSpec proposals and specs in user-facing product behavior language
+  - Requirements describe observable editor behavior and the Copilot/apply contract
+  - Put internal class names and file layout in design.md / docs/architecture-mvp.md unless the id is part of the product contract (contribution points, commands, context keys, protocol message types)
+
+  Related docs:
+  - docs/architecture.md (host ids and protocol, rev 7)
+  - docs/architecture-mvp.md (MVP architecture)
+  - docs/ui-ux-spec.md (views, copy, webview rules)
