@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Application } from '../src/app/application';
 import { COPY } from '../src/app/copy';
+import { MAX_MCP_TOOL_ROUNDS } from '../src/app/copilot-gateway';
+import { EmptyLspSlicePort, type LspSlicePort } from '../src/app/lsp-slice';
+import { isBoardEmpty } from '../src/app/run-board';
 import type { HostToUi } from '../src/protocol/messages';
 import { changesetFence, configuredMcp, defaultWorkspace, FakeGateway, FakeMcpPort, FixedWorkspace, MemoryFs, MemoryStore } from './fakes';
 import { McpGateway } from '../src/app/mcp-gateway';
 
-function harness(mcp?: import('../src/app/mcp-gateway').McpGateway) {
+function harness(mcp?: import('../src/app/mcp-gateway').McpGateway, lsp?: LspSlicePort) {
   const gw = new FakeGateway();
   const fs = new MemoryFs();
   const msgs: HostToUi[] = [];
@@ -19,6 +22,7 @@ function harness(mcp?: import('../src/app/mcp-gateway').McpGateway) {
     undefined,
     undefined,
     mcp,
+    lsp,
   );
   return { app, gw, fs, msgs };
 }
@@ -470,5 +474,195 @@ describe('Orchestrator MCP turn flags', () => {
     await app.send('@alpha ping');
     expect(gw.turns[0]).toBe('direct');
     expect(gw.lastSendOpts[0]?.tools).toBe('mcp-readonly');
+  });
+
+  it('does not raise MAX_MCP_TOOL_ROUNDS', () => {
+    expect(MAX_MCP_TOOL_ROUNDS).toBe(8);
+  });
+});
+
+function lastBoard(msgs: HostToUi[]) {
+  return [...msgs].reverse().find((m) => m.type === 'chat/board');
+}
+
+describe('Orchestrator TokenGovernor packs and RunBoard', () => {
+  it('debate and @ packs omit full buffer and history restuff; implementer includes full files', async () => {
+    const { app, gw } = harness();
+    await twoBots(app);
+    gw.script = ({ turn, instruction }) => {
+      const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
+      if (turn === 'propose') {
+        return 'UNIQUE-SPEECH-ALPHA-ZZZ';
+      }
+      if (turn === 'consensus') {
+        return round === 1 ? 'DISSENT not yet' : 'AGREE ship it';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'src/out.ts', op: 'create', content: 'ok' }]);
+      }
+      return 'language only';
+    };
+    await app.send('build the feature');
+    expect(gw.lastMessages.every((ms) => ms.every((m) => m.role === 'user'))).toBe(true);
+    for (let i = 0; i < gw.turns.length; i++) {
+      const turn = gw.turns[i]!;
+      const text = gw.lastMessages[i]!.map((m) => m.content).join('\n');
+      expect(text).not.toContain('UNIQUE-SPEECH-ALPHA-ZZZ');
+      expect(text).toContain('Run board:');
+      if (turn === 'propose' || turn === 'critique' || turn === 'direct') {
+        expect(text).toContain('LSP slice of active file');
+        expect(text).not.toContain('Active editor contents:');
+        expect(text).not.toContain('export const n = 1;');
+        expect(text).not.toContain('Files in play (full contents):');
+        expect(text).toContain('Open tabs (paths only):');
+      }
+      if (turn === 'consensus') {
+        expect(text).toContain('Role: vote');
+        expect(text).not.toContain('export const n = 1;');
+        expect(text).not.toContain('LSP slice of active file');
+        expect(text).not.toContain('Files in play (full contents):');
+      }
+      if (turn === 'implement') {
+        expect(text).toContain('Files in play (full contents):');
+        expect(text).toContain('export const n = 1;');
+        expect(text).not.toContain('LSP slice of active file');
+      }
+    }
+  });
+
+  it('pack-overflow emits exact copy and does not sendRequest', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    gw.maxInputTokens = 40;
+    await app.send('build the feature');
+    expect(gw.requestCount).toBe(0);
+    expect(gw.turns).toEqual([]);
+    const err = msgs.find((m) => m.type === 'error' && m.code === 'pack-overflow');
+    expect(err && err.type === 'error' && err.message).toBe(COPY.packOverflow);
+    expect(COPY.packOverflow).toBe(
+      "Prompt doesn't fit Copilot\nThe minimum context for this turn is larger than Copilot's window.\nShorten the prompt or shrink the active editor. Required context was not dropped.",
+    );
+    expect(msgs.some((m) => m.type === 'chat/turn-start')).toBe(false);
+  });
+
+  it('writes dissents only when Split opens and clears them on Continue and consensus', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    gw.script = ({ turn }) => (turn === 'consensus' ? 'DISSENT we differ' : 'talk');
+    await app.send('no consensus please');
+    expect(app.orchestrator.getRunState().splitOpen).toBe(true);
+    const splitBoard = lastBoard(msgs);
+    expect(splitBoard && splitBoard.type === 'chat/board' && splitBoard.board.dissents).toHaveLength(2);
+    expect(
+      splitBoard &&
+        splitBoard.type === 'chat/board' &&
+        splitBoard.board.dissents.every((d) => d.handle && d.text && !/^DISSENT\b/i.test(d.text)),
+    ).toBe(true);
+    const voteEnds = msgs.filter((m) => m.type === 'chat/turn-end' && m.turn === 'consensus');
+    expect(voteEnds.some((m) => m.type === 'chat/turn-end' && m.vote === 'DISSENT')).toBe(true);
+
+    msgs.length = 0;
+    gw.script = ({ turn }) => {
+      if (turn === 'consensus') {
+        return 'AGREE';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'c.ts', op: 'create', content: 'c' }]);
+      }
+      return 'talk';
+    };
+    await app.continueDebate();
+    const continued = msgs.filter((m) => m.type === 'chat/board');
+    expect(continued[0] && continued[0].type === 'chat/board' && continued[0].board.dissents).toEqual([]);
+    const after = lastBoard(msgs);
+    expect(after && after.type === 'chat/board' && after.board.dissents).toEqual([]);
+    expect(app.orchestrator.getRunState().phase).toBe('pendingReview');
+  });
+
+  it('agree-without-Split leaves dissents empty; vote DISSENT remainder is not dissents[]', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    gw.script = ({ turn, instruction }) => {
+      const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
+      if (turn === 'consensus') {
+        return round === 1 ? 'DISSENT not yet' : 'AGREE ship it';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'src/out.ts', op: 'create', content: 'ok' }]);
+      }
+      return 'language only';
+    };
+    await app.send('build the feature');
+    const boards = msgs.filter((m) => m.type === 'chat/board');
+    expect(boards.every((m) => m.type === 'chat/board' && m.board.dissents.length === 0)).toBe(true);
+    expect(msgs.some((m) => m.type === 'chat/split')).toBe(false);
+    expect(msgs.some((m) => m.type === 'chat/turn-end' && m.turn === 'consensus' && m.vote === 'DISSENT')).toBe(true);
+  });
+
+  it('Approve invalidates the LSP slice and emits an empty board; Reject does not invalidate', async () => {
+    const lsp = new EmptyLspSlicePort();
+    const { app, gw, msgs } = harness(undefined, lsp);
+    await twoBots(app);
+    gw.script = ({ turn, instruction }) => {
+      const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
+      if (turn === 'consensus') {
+        return round === 1 ? 'DISSENT' : 'AGREE';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'a.ts', op: 'create', content: 'n' }]);
+      }
+      return 'talk';
+    };
+    await app.send('build');
+    expect(app.changesets.hasPending()).toBe(true);
+    expect(lsp.invalidated).toBe(false);
+    const before = lastBoard(msgs);
+    expect(before && before.type === 'chat/board' && !isBoardEmpty(before.board)).toBe(true);
+
+    await app.reject();
+    expect(lsp.invalidated).toBe(false);
+    const rejected = lastBoard(msgs);
+    expect(rejected && rejected.type === 'chat/board' && isBoardEmpty(rejected.board)).toBe(true);
+
+    await app.send('build again');
+    expect(app.changesets.hasPending()).toBe(true);
+    lsp.invalidated = false;
+    await app.approve();
+    expect(lsp.invalidated).toBe(true);
+    const approved = lastBoard(msgs);
+    expect(approved && approved.type === 'chat/board' && isBoardEmpty(approved.board)).toBe(true);
+    expect(gw.ensureCalls).toBeGreaterThan(0);
+    const afterApproveTurns = gw.requestCount;
+    await app.approve();
+    expect(gw.requestCount).toBe(afterApproveTurns);
+  });
+
+  it('interrupt Split writes dissents from Split-card positions', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    let started = 0;
+    gw.script = ({ turn }) => {
+      if (turn === 'propose') {
+        started += 1;
+        if (started === 1) {
+          return 'Ship the cache layer now.';
+        }
+      }
+      return 'talk';
+    };
+    const original = gw.stream.bind(gw);
+    gw.stream = async (messages, token, onText) => {
+      if (gw.turns.length >= 1) {
+        app.stop();
+        return 'cancelled';
+      }
+      return original(messages, token, onText);
+    };
+    await app.send('go');
+    expect(app.orchestrator.getRunState().splitOpen).toBe(true);
+    const board = lastBoard(msgs);
+    expect(board && board.type === 'chat/board' && board.board.dissents).toHaveLength(2);
+    expect(board && board.type === 'chat/board' && board.board.dissents[0]?.handle).toBe('alpha');
+    expect(board && board.type === 'chat/board' && board.board.dissents[0]?.text).toBe('Ship the cache layer now.');
   });
 });

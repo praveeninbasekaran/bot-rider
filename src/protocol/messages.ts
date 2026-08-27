@@ -20,12 +20,21 @@ export type ErrorCode =
   | 'no-workspace'
   | 'parse-failed'
   | 'validate-failed'
-  | 'copilot';
+  | 'copilot'
+  | 'pack-overflow';
 
 export interface SplitPosition {
   botId: string;
   handle: string;
   text: string;
+}
+
+export interface RunBoardDto {
+  goal?: string;
+  todos: { id: string; text: string; status: 'pending' | 'current' | 'done' }[];
+  decisions: string[];
+  dissents: { handle: string; text: string }[];
+  files: { path: string; inChangeset: boolean }[];
 }
 
 export type BotCreateDraft = Omit<BotRecord, 'id' | 'createdAt' | 'updatedAt'>;
@@ -73,6 +82,7 @@ export type HostToUi =
       positions: SplitPosition[];
     }
   | { type: 'chat/notice'; text: string }
+  | { type: 'chat/board'; board: RunBoardDto }
   | { type: 'chat/mcp-read-start'; botId: string; handle: string; server: string; tool: string }
   | { type: 'chat/mcp-read-end'; botId: string; handle: string; server: string; tool: string; preview?: string }
   | {

@@ -12,6 +12,7 @@ export class ChatHub {
   private lastCopilot: HostToUi | undefined;
   private lastSnapshot: HostToUi | undefined;
   private lastExpanded: HostToUi | undefined;
+  private lastBoard: HostToUi | undefined;
 
   constructor(private readonly onUi: (msg: UiToHost | { type: 'ui/pick' } | { type: 'ui/focus-expanded' }) => Promise<void>) {}
 
@@ -51,6 +52,9 @@ export class ChatHub {
     if (msg.type === 'ui/expanded') {
       this.lastExpanded = msg;
     }
+    if (msg.type === 'chat/board') {
+      this.lastBoard = msg;
+    }
     if (msg.type === 'chat/turn-start') {
       this.flushTokens();
       this.broadcast(msg);
@@ -67,7 +71,13 @@ export class ChatHub {
       }
       return;
     }
-    if (msg.type === 'chat/turn-end' || msg.type === 'error' || msg.type === 'chat/split' || msg.type === 'chat/notice') {
+    if (
+      msg.type === 'chat/turn-end' ||
+      msg.type === 'error' ||
+      msg.type === 'chat/split' ||
+      msg.type === 'chat/notice' ||
+      msg.type === 'chat/board'
+    ) {
       this.flushTokens();
     }
     if (
@@ -107,6 +117,9 @@ export class ChatHub {
     }
     if (this.lastExpanded) {
       void webview.postMessage(this.lastExpanded);
+    }
+    if (this.lastBoard) {
+      void webview.postMessage(this.lastBoard);
     }
   }
 
