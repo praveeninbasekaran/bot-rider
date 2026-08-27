@@ -12,9 +12,11 @@ import {
 } from './adapters/proposed-content-provider';
 import { openProposedDiff, ReviewTreeProvider } from './adapters/review-tree';
 import { createCopilotGateway } from './adapters/vscode-lm-gateway';
+import { VsCodeMcpPort } from './adapters/vscode-mcp';
 import { VsCodeWorkspacePort } from './adapters/vscode-workspace';
 import type { HostToUi, UiToHost } from './protocol/messages';
 import { COPY, copilotStatusMessage } from './app/copy';
+import { MCP_SETTLE_MS, McpGateway } from './app/mcp-gateway';
 
 class MementoStore {
   constructor(private readonly memento: vscode.Memento) {}
@@ -58,10 +60,11 @@ export function activate(context: vscode.ExtensionContext): void {
     void syncKeys();
   };
 
+  const mcp = new McpGateway(new VsCodeMcpPort(), emit, { settleMs: MCP_SETTLE_MS });
   const gateway = createCopilotGateway(context, (status) => {
     gatewayStatus = status;
     emit({ type: 'copilot/status', status, message: copilotStatusMessage(status) });
-  });
+  }, mcp);
 
   const app = new Application(
     new MementoStore(context.globalState),
@@ -72,6 +75,7 @@ export function activate(context: vscode.ExtensionContext): void {
     emit,
     proposed,
     { closeProposedDiffs },
+    mcp,
   );
   appRef = app;
 

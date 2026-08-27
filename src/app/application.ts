@@ -5,6 +5,7 @@ import { BotRegistry } from './bot-registry';
 import { ChangesetStore } from './changeset-store';
 import type { ICopilotGateway } from './copilot-gateway';
 import { COPY, copilotStatusMessage } from './copy';
+import { EmptyMcpPort, McpGateway } from './mcp-gateway';
 import { Orchestrator } from './orchestrator';
 import { PatchParser } from './patch-parser';
 import { PromptBuilder } from './prompt-builder';
@@ -25,6 +26,7 @@ export class Application {
   readonly thread: ThreadStore;
   readonly parser = new PatchParser();
   readonly prompts = new PromptBuilder();
+  readonly mcp: McpGateway;
 
   constructor(
     store: StateStore,
@@ -35,7 +37,9 @@ export class Application {
     private readonly emit: (msg: HostToUi) => void,
     docs?: ProposedDocHost,
     diffs?: DiffCloser,
+    mcp?: McpGateway,
   ) {
+    this.mcp = mcp ?? new McpGateway(new EmptyMcpPort(), emit, { settleMs: 0 });
     this.registry = new BotRegistry(store);
     this.thread = new ThreadStore();
     this.changesets = new ChangesetStore(applyPort, fs, emit, docs, diffs);
@@ -48,6 +52,7 @@ export class Application {
       this.thread,
       workspace,
       emit,
+      this.mcp,
     );
   }
 

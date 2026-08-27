@@ -70,6 +70,13 @@ export class ChatHub {
     if (msg.type === 'chat/turn-end' || msg.type === 'error' || msg.type === 'chat/split' || msg.type === 'chat/notice') {
       this.flushTokens();
     }
+    if (
+      msg.type === 'chat/mcp-read-start' ||
+      msg.type === 'chat/mcp-read-end' ||
+      msg.type === 'chat/mcp-skip'
+    ) {
+      this.flushTokens();
+    }
     this.broadcast(msg);
   }
 

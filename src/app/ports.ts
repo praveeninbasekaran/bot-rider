@@ -28,15 +28,41 @@ export interface WorkspaceContextPort {
   getContext(): WorkspaceContext | Promise<WorkspaceContext>;
 }
 
+export interface LmChatTool {
+  name: string;
+  description: string;
+  inputSchema?: object;
+}
+
+export interface LmSendOptions {
+  justification: string;
+  tools?: LmChatTool[];
+}
+
+export type LmStreamPart =
+  | { kind: 'text'; value: string }
+  | { kind: 'tool-call'; callId: string; name: string; input: object };
+
+export interface LmToolCall {
+  callId: string;
+  name: string;
+  input: object;
+}
+
+export type LmChatMessage =
+  | PromptMessage
+  | { role: 'assistant'; content?: string; toolCalls: LmToolCall[] }
+  | { role: 'user'; toolResults: Array<{ callId: string; content: string }> };
+
 export interface LmModel {
   vendor: string;
   maxInputTokens: number;
   countTokens(messages: PromptMessage[]): Promise<number>;
   sendRequest(
-    messages: PromptMessage[],
-    options: { justification: string },
+    messages: LmChatMessage[],
+    options: LmSendOptions,
     token: CancelToken,
-  ): Promise<{ text: AsyncIterable<string> }>;
+  ): Promise<{ text: AsyncIterable<string>; stream?: AsyncIterable<LmStreamPart> }>;
 }
 
 export interface LanguageModelPort {

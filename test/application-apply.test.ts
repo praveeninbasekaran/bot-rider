@@ -130,4 +130,18 @@ describe('Application approve/reject/retry', () => {
     expect(fs.files.get('leftover.ts')).toBe('final');
     expect(app.changesets.hasPending()).toBe(false);
   });
+
+  it('Approve Retry Reject and CRUD never start MCP', async () => {
+    const { app } = harness('/tmp/bot-rider-ws');
+    await app.createBot({ name: 'Rho', persona: 'p', role: 'r', instructions: 'i' });
+    app.changesets.setPending([{ path: 'a.ts', op: 'create', content: 'n' }]);
+    await app.approve();
+    expect(app.mcp.didStart).toBe(false);
+    app.changesets.setPending([{ path: 'b.ts', op: 'create', content: 'm' }]);
+    await app.reject();
+    expect(app.mcp.didStart).toBe(false);
+    app.changesets.setPending([{ path: 'c.ts', op: 'create', content: 'c' }]);
+    await app.retry();
+    expect(app.mcp.didStart).toBe(false);
+  });
 });

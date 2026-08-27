@@ -25,6 +25,10 @@ export const COPY = {
   missingCopilot: 'GitHub Copilot is not available. Sign in to GitHub Copilot, then retry Send.',
   noPermissions: 'Bot Rider does not have permission to use GitHub Copilot yet.',
   composerLocked: 'Resolve the split to send a new prompt.',
+  mcpSkipMissing: 'Not in this workspace.',
+  mcpSkipUnauthenticated: 'Not signed in. Sign in from VS Code MCP settings.',
+  mcpSkipToolMissing: 'Tool not available.',
+  mcpSkipMutating: (server: string) => `Writes through ${server} aren't available in Bot Rider.`,
 };
 
 export function copilotStatusMessage(status: CopilotStatus): string | undefined {

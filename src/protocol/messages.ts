@@ -38,6 +38,8 @@ export interface PromptMessage {
   handle?: string;
 }
 
+export type McpSkipReason = 'missing' | 'unauthenticated' | 'mutating-blocked' | 'tool-missing' | 'error';
+
 export type HostToUi =
   | { type: 'bots/snapshot'; bots: BotRecord[] }
   | { type: 'copilot/status'; status: CopilotStatus; message?: string }
@@ -71,6 +73,17 @@ export type HostToUi =
       positions: SplitPosition[];
     }
   | { type: 'chat/notice'; text: string }
+  | { type: 'chat/mcp-read-start'; botId: string; handle: string; server: string; tool: string }
+  | { type: 'chat/mcp-read-end'; botId: string; handle: string; server: string; tool: string; preview?: string }
+  | {
+      type: 'chat/mcp-skip';
+      botId: string;
+      handle: string;
+      server: string;
+      tool: string;
+      reason: McpSkipReason;
+      message: string;
+    }
   | { type: 'ui/expanded'; expanded: boolean }
   | { type: 'changeset/preview'; files: ProposedFileDto[] }
   | {

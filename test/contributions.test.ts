@@ -165,5 +165,10 @@ describe('contribution points', () => {
     expect(applyFiles.some((b) => b.t.includes('applyEdit'))).toBe(true);
     expect(applyFiles.every((b) => !b.t.includes('writeFile'))).toBe(true);
     expect(applyFiles.every((b) => !/\bfs\.(writeFile|promises)/.test(b.t))).toBe(true);
+    for (const { f, t } of blobs) {
+      expect(t, f).not.toMatch(/registerMcpServerDefinitionProvider/);
+    }
+    expect(JSON.stringify(pkg.contributes)).not.toMatch(/languageModelTools/);
+    expect(JSON.stringify(pkg.contributes)).not.toMatch(/mcpServerDefinitionProviders/);
   });
 });
