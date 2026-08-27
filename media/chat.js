@@ -15,6 +15,10 @@
     pickerIndex: 0,
     pickerOpen: false,
     previewFiles: [],
+    board: null,
+    boardCollapsed: false,
+    todosExpanded: false,
+    lastBoardGoal: '',
   };
 
   if (document.body.classList.contains('vscode-high-contrast')) {
@@ -27,8 +31,18 @@
     '<div id="expand-banner" class="expand-banner"><span>Expanded in editor</span><button id="focus-expanded" type="button">Focus</button></div>' +
     '<div id="banner" class="banner"><span id="banner-text"></span><button id="recheck" type="button">Sign in to GitHub Copilot</button></div>' +
     '<div id="empty" class="empty-pane" hidden></div>' +
+    '<section id="run-board" class="run-board" hidden aria-label="Run">' +
+    '<button type="button" id="run-board-toggle" class="run-board-toggle" aria-expanded="true">' +
+    '<span id="run-board-label" class="run-board-label">Run</span>' +
+    '<span id="run-board-summary" class="run-board-summary" hidden>' +
+    '<span id="run-board-summary-goal" class="run-board-summary-goal"></span>' +
+    '<span id="run-board-summary-count" class="run-board-summary-count"></span>' +
+    '</span></button>' +
+    '<div id="run-board-body" class="run-board-body"></div>' +
+    '</section>' +
     '<div id="thread" class="thread" role="log" aria-live="polite"></div>' +
     '<div id="live" class="sr-only" aria-live="polite"></div>' +
+    '<div id="run-board-goal-live" class="sr-only" aria-live="polite"></div>' +
     '<div class="composer-wrap">' +
     '<div id="picker" class="picker" role="listbox"></div>' +
     '<div class="composer"><textarea id="input" rows="2" placeholder="Message the swarm. Use @handle to lock a bot."></textarea><button id="send" class="send-btn" type="button">Send</button></div>' +
@@ -47,12 +61,30 @@
   const picker = document.getElementById('picker');
   const helper = document.getElementById('helper');
   const recheck = document.getElementById('recheck');
+  const runBoard = document.getElementById('run-board');
+  const runBoardToggle = document.getElementById('run-board-toggle');
+  const runBoardLabel = document.getElementById('run-board-label');
+  const runBoardSummary = document.getElementById('run-board-summary');
+  const runBoardSummaryGoal = document.getElementById('run-board-summary-goal');
+  const runBoardSummaryCount = document.getElementById('run-board-summary-count');
+  const runBoardBody = document.getElementById('run-board-body');
+  const boardGoalLive = document.getElementById('run-board-goal-live');
+
+  const PACK_OVERFLOW_COPY =
+    "Prompt doesn't fit Copilot\nThe minimum context for this turn is larger than Copilot's window.\nShorten the prompt or shrink the active editor. Required context was not dropped.";
 
   document.getElementById('focus-expanded').addEventListener('click', function () {
     vscode.postMessage({ type: 'ui/focus-expanded' });
   });
   recheck.addEventListener('click', function () {
     vscode.postMessage({ type: 'copilot/recheck' });
+  });
+  runBoardToggle.addEventListener('click', function () {
+    if (runBoard.hidden) {
+      return;
+    }
+    state.boardCollapsed = !state.boardCollapsed;
+    paintBoard(state.board);
   });
   send.addEventListener('click', onSendOrStop);
   input.addEventListener('keydown', onKey);
@@ -156,6 +188,237 @@
 
   function announce(text) {
     live.textContent = text;
+  }
+
+  function boardIsEmpty(board) {
+    if (!board) {
+      return true;
+    }
+    const todos = board.todos || [];
+    const decisions = board.decisions || [];
+    const dissents = board.dissents || [];
+    const files = board.files || [];
+    return !board.goal && todos.length === 0 && decisions.length === 0 && dissents.length === 0 && files.length === 0;
+  }
+
+  function fileBaseName(path) {
+    const p = String(path || '');
+    const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+    return i >= 0 ? p.slice(i + 1) : p;
+  }
+
+  function todoCounts(todos) {
+    const list = todos || [];
+    let done = 0;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].status === 'done') {
+        done += 1;
+      }
+    }
+    return { done: done, total: list.length };
+  }
+
+  function hideBoardChrome() {
+    runBoard.hidden = true;
+    runBoard.classList.remove('is-collapsed');
+    runBoardBody.replaceChildren();
+    state.boardCollapsed = false;
+    state.todosExpanded = false;
+    state.lastBoardGoal = '';
+    boardGoalLive.textContent = '';
+  }
+
+  function todoItem(todo) {
+    const li = document.createElement('li');
+    li.setAttribute('role', 'listitem');
+    li.className = 'run-board-todo';
+    const status = todo.status === 'current' ? 'current' : todo.status === 'done' ? 'done' : 'pending';
+    const glyph = document.createElement('span');
+    glyph.className = 'run-board-todo-glyph is-' + status;
+    glyph.setAttribute('aria-hidden', 'true');
+    if (status === 'done') {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'run-board-check');
+      svg.setAttribute('width', '11');
+      svg.setAttribute('height', '11');
+      svg.setAttribute('viewBox', '0 0 16 16');
+      svg.setAttribute('focusable', 'false');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('fill', 'currentColor');
+      path.setAttribute('d', 'M14.35 3.65 6.2 11.8 1.65 7.26l1.2-1.2 3.35 3.34 6.95-6.95z');
+      svg.appendChild(path);
+      glyph.appendChild(svg);
+    } else if (status === 'current') {
+      glyph.textContent = '\u25cf';
+    } else {
+      glyph.textContent = '\u25cb';
+    }
+    const sr = document.createElement('span');
+    sr.className = 'sr-only';
+    sr.textContent = status + ', ';
+    const text = document.createElement('span');
+    text.className = 'run-board-todo-text';
+    text.textContent = todo.text || '';
+    li.appendChild(glyph);
+    li.appendChild(sr);
+    li.appendChild(text);
+    return li;
+  }
+
+  function fileChip(file) {
+    const inSet = !!file.inChangeset;
+    const el = document.createElement(inSet ? 'button' : 'span');
+    if (inSet) {
+      el.type = 'button';
+    }
+    el.className = 'run-board-file' + (inSet ? ' is-proposed' : '');
+    el.textContent = fileBaseName(file.path);
+    el.title = inSet ? 'Open diff' : 'Not proposed yet';
+    if (inSet) {
+      el.addEventListener('click', function () {
+        vscode.postMessage({ type: 'review/open-diff', path: file.path });
+      });
+    }
+    return el;
+  }
+
+  function renderBoardBody(board) {
+    runBoardBody.replaceChildren();
+    const todos = board.todos || [];
+    const decisions = board.decisions || [];
+    const dissents = board.dissents || [];
+    const files = board.files || [];
+
+    if (board.goal) {
+      const goal = document.createElement('div');
+      goal.className = 'run-board-goal';
+      goal.textContent = board.goal;
+      runBoardBody.appendChild(goal);
+    }
+
+    if (todos.length) {
+      const list = document.createElement('ul');
+      list.className = 'run-board-todos';
+      list.setAttribute('role', 'list');
+      const limit = state.todosExpanded || todos.length <= 7 ? todos.length : 7;
+      for (let i = 0; i < limit; i++) {
+        list.appendChild(todoItem(todos[i]));
+      }
+      runBoardBody.appendChild(list);
+      if (!state.todosExpanded && todos.length > 7) {
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'run-board-more';
+        more.textContent = '+' + (todos.length - 7) + ' more';
+        more.addEventListener('click', function (e) {
+          e.stopPropagation();
+          state.todosExpanded = true;
+          paintBoard(state.board);
+        });
+        runBoardBody.appendChild(more);
+      }
+    }
+
+    if (decisions.length) {
+      const list = document.createElement('ul');
+      list.className = 'run-board-decisions';
+      list.setAttribute('role', 'list');
+      for (let i = 0; i < decisions.length; i++) {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'listitem');
+        li.className = 'run-board-decision';
+        li.textContent = decisions[i];
+        list.appendChild(li);
+      }
+      runBoardBody.appendChild(list);
+    }
+
+    if (dissents.length) {
+      const list = document.createElement('ul');
+      list.className = 'run-board-dissents';
+      list.setAttribute('role', 'list');
+      const limit = dissents.length > 4 ? 4 : dissents.length;
+      for (let i = 0; i < limit; i++) {
+        const d = dissents[i];
+        const li = document.createElement('li');
+        li.setAttribute('role', 'listitem');
+        li.className = 'run-board-dissent';
+        li.textContent = '@' + (d.handle || '') + ' \u2014 ' + (d.text || '');
+        list.appendChild(li);
+      }
+      runBoardBody.appendChild(list);
+      if (dissents.length > 4) {
+        const more = document.createElement('div');
+        more.className = 'run-board-more';
+        more.textContent = '+' + (dissents.length - 4) + ' more';
+        runBoardBody.appendChild(more);
+      }
+    }
+
+    if (files.length) {
+      const wrap = document.createElement('div');
+      wrap.className = 'run-board-files';
+      const limit = files.length > 6 ? 6 : files.length;
+      for (let i = 0; i < limit; i++) {
+        wrap.appendChild(fileChip(files[i]));
+      }
+      if (files.length > 6) {
+        const more = document.createElement('span');
+        more.className = 'run-board-more';
+        more.textContent = '+' + (files.length - 6) + ' more';
+        wrap.appendChild(more);
+      }
+      runBoardBody.appendChild(wrap);
+    }
+  }
+
+  function paintBoard(board) {
+    state.board = board || null;
+    if (boardIsEmpty(board)) {
+      hideBoardChrome();
+      return;
+    }
+    runBoard.hidden = false;
+    const collapsed = !!state.boardCollapsed;
+    runBoard.classList.toggle('is-collapsed', collapsed);
+    const todos = board.todos || [];
+    const counts = todoCounts(todos);
+    runBoardToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    runBoardToggle.setAttribute(
+      'aria-label',
+      'Run, ' + counts.done + ' of ' + counts.total + ' todos, ' + (collapsed ? 'collapsed' : 'expanded'),
+    );
+    const goalText = String(board.goal || '');
+    runBoardSummaryGoal.textContent = goalText;
+    if (counts.total === 0) {
+      runBoardSummaryCount.textContent = '';
+      runBoardSummaryCount.hidden = true;
+    } else {
+      runBoardSummaryCount.textContent = (goalText ? ' \u00b7 ' : '') + counts.done + '/' + counts.total;
+      runBoardSummaryCount.hidden = false;
+    }
+    runBoardLabel.hidden = collapsed;
+    runBoardSummary.hidden = !collapsed;
+    runBoardBody.hidden = collapsed;
+    renderBoardBody(board);
+    if (goalText !== state.lastBoardGoal) {
+      boardGoalLive.textContent = goalText;
+      state.lastBoardGoal = goalText;
+    }
+  }
+
+  function paintPackOverflow(message) {
+    const el = document.createElement('div');
+    el.className = 'error system';
+    el.setAttribute('aria-live', 'polite');
+    el.textContent = message || PACK_OVERFLOW_COPY;
+    thread.appendChild(el);
+    thread.scrollTop = thread.scrollHeight;
+    state.debateRunning = false;
+    if (state.run) {
+      state.run.debateRunning = false;
+    }
+    lockComposer();
   }
 
   function reduceMotion() {
@@ -817,6 +1080,10 @@
         hideSplit();
         appendNotice(msg.text || '');
       }
+    } else if (msg.type === 'chat/board') {
+      paintBoard(msg.board);
+    } else if (msg.type === 'error' && msg.code === 'pack-overflow') {
+      paintPackOverflow(msg.message);
     } else if (msg.type === 'error') {
       const el = document.createElement('div');
       el.className = 'error';
