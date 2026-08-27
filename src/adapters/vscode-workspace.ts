@@ -47,6 +47,24 @@ export class VsCodeWorkspacePort implements ApplyEditPort, FileSystemPort, Works
     }
   }
 
+  async readText(relativePath: string): Promise<string | undefined> {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) {
+      return undefined;
+    }
+    const uri = vscode.Uri.joinPath(folder.uri, ...relativePath.split('/'));
+    const open = vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === uri.toString());
+    if (open) {
+      return open.getText();
+    }
+    try {
+      const data = await vscode.workspace.fs.readFile(uri);
+      return new TextDecoder().decode(data);
+    } catch {
+      return undefined;
+    }
+  }
+
   getContext(): WorkspaceContext {
     const folder = vscode.workspace.workspaceFolders?.[0];
     const editor = vscode.window.activeTextEditor;

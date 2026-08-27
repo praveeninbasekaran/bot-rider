@@ -530,6 +530,43 @@ describe('Orchestrator TokenGovernor packs and RunBoard', () => {
     }
   });
 
+  it('implementer pack includes full bodies of all files in play, not only the active editor', async () => {
+    const { app, gw, fs } = harness();
+    fs.files.set('src/other.ts', 'OTHER-TAB-FULL-BODY\n');
+    fs.files.set('README.md', 'README-FULL-BODY\n');
+    await twoBots(app);
+    gw.script = ({ turn, instruction }) => {
+      const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
+      if (turn === 'consensus') {
+        return round === 1 ? 'DISSENT' : 'AGREE';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'src/out.ts', op: 'create', content: 'ok' }]);
+      }
+      return 'talk';
+    };
+    await app.send('build the feature');
+    const impl = gw.turns.findIndex((t) => t === 'implement');
+    expect(impl).toBeGreaterThanOrEqual(0);
+    const implementText = gw.lastMessages[impl]!.map((m) => m.content).join('\n');
+    expect(implementText).toContain('Files in play (full contents):');
+    expect(implementText).toContain('--- src/app.ts ---');
+    expect(implementText).toContain('export const n = 1;');
+    expect(implementText).toContain('--- src/other.ts ---');
+    expect(implementText).toContain('OTHER-TAB-FULL-BODY');
+    expect(implementText).toContain('--- README.md ---');
+    expect(implementText).toContain('README-FULL-BODY');
+    expect(implementText).not.toContain('LSP slice of active file');
+    const propose = gw.turns.findIndex((t) => t === 'propose');
+    const proposeText = gw.lastMessages[propose]!.map((m) => m.content).join('\n');
+    expect(proposeText).toContain('src/other.ts');
+    expect(proposeText).toContain('README.md');
+    expect(proposeText).not.toContain('OTHER-TAB-FULL-BODY');
+    expect(proposeText).not.toContain('README-FULL-BODY');
+    expect(proposeText).not.toContain('export const n = 1;');
+    expect(gw.lastSendOpts[impl]?.tools ?? 'none').toBe('none');
+  });
+
   it('pack-overflow emits exact copy and does not sendRequest', async () => {
     const { app, gw, msgs } = harness();
     await twoBots(app);

@@ -62,6 +62,7 @@ export class Application {
       this.mcp,
       this.board,
       this.lsp,
+      fs,
     );
   }
 

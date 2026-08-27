@@ -32,6 +32,10 @@ export class MemoryFs implements ApplyEditPort, FileSystemPort {
     return this.files.has(relativePath);
   }
 
+  async readText(relativePath: string): Promise<string | undefined> {
+    return this.files.get(relativePath);
+  }
+
   async applyEdit(ops: FileEditOp[]): Promise<boolean> {
     this.applyCalls += 1;
     this.lastOps = ops;

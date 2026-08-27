@@ -13,7 +13,7 @@ import { PatchParser } from './patch-parser';
 import type { ChangesetStore } from './changeset-store';
 import type { ThreadStore } from './thread-store';
 import { oneLine, parseMentions, parseVote, stripNeedEditTrailer } from './mentions';
-import type { WorkspaceContextPort } from './ports';
+import type { WorkspaceContextPort, FileSystemPort } from './ports';
 import { EmptyLspSlicePort, withSelectionFallback, type LspSlicePort, type LspSliceSnapshot } from './lsp-slice';
 import { RunBoardStore } from './run-board';
 import { packKindFor } from './token-governor';
@@ -40,6 +40,7 @@ export class Orchestrator {
     private readonly mcp: McpGateway = new McpGateway(new EmptyMcpPort(), emit, { settleMs: 0 }),
     readonly board: RunBoardStore = new RunBoardStore(),
     readonly lsp: LspSlicePort = new EmptyLspSlicePort(),
+    private readonly files: FileSystemPort = { exists: async () => false, readText: async () => undefined },
   ) {}
 
   getRunState(): RunStateDto {
@@ -370,7 +371,7 @@ export class Orchestrator {
       workspace: this.workspace,
       counter: this.gateway,
       lspSlice: kind === 'debate' ? this.lspSlice : undefined,
-      implementerFiles: kind === 'implement' ? this.implementerFiles() : undefined,
+      implementerFiles: kind === 'implement' ? await this.implementerFiles() : undefined,
       mcpContext: kind === 'debate' ? this.mcp.contextLines() : undefined,
     });
     if (!packed.ok) {
@@ -599,9 +600,30 @@ export class Orchestrator {
     return paths;
   }
 
-  private implementerFiles(): { path: string; content: string }[] {
-    const editor = this.workspace.activeEditor;
-    return editor ? [{ path: editor.path, content: editor.content }] : [];
+  private filesInPlayPaths(): string[] {
+    const fromBoard = this.board.snapshot().files.map((f) => f.path);
+    const changeset = this.changesets.files?.map((f) => f.path) ?? [];
+    return this.trackedPaths([...fromBoard, ...changeset]);
+  }
+
+  private async implementerFiles(): Promise<{ path: string; content: string }[]> {
+    const paths = this.filesInPlayPaths();
+    const out: { path: string; content: string }[] = [];
+    for (const path of paths) {
+      out.push({ path, content: await this.readFileInPlay(path) });
+    }
+    return out;
+  }
+
+  private async readFileInPlay(path: string): Promise<string> {
+    if (this.workspace.activeEditor?.path === path) {
+      return this.workspace.activeEditor.content;
+    }
+    const pending = this.changesets.files?.find((f) => f.path === path);
+    if (pending && pending.op !== 'delete' && pending.content !== undefined) {
+      return pending.content;
+    }
+    return (await this.files.readText(path)) ?? '';
   }
 
   snapshotBoard(): RunBoardDto {
