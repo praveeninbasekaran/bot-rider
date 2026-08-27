@@ -157,18 +157,23 @@ describe('TokenGovernor pack', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('implementer includes full files and does not replace them with an LSP slice', async () => {
+  it('implementer includes full in-play files, not extra open-tab bodies or an LSP slice', async () => {
     const gov = new TokenGovernor();
     const files = [
       { path: 'src/app.ts', content: 'export const n = 1;\n' },
-      { path: 'src/other.ts', content: 'OTHER-TAB-FULL-BODY\n' },
-      { path: 'README.md', content: 'README-FULL-BODY\n' },
+      { path: 'lib/in-play.ts', content: 'CHANGESET-IN-PLAY-BODY\n' },
     ];
     const packed = await gov.pack({
       bot,
       kind: 'implement',
       instruction: turnInstruction('implement', 1, 'go'),
-      board,
+      board: {
+        ...board,
+        files: [
+          { path: 'src/app.ts', inChangeset: false },
+          { path: 'lib/in-play.ts', inChangeset: true },
+        ],
+      },
       workspace: defaultWorkspace,
       counter: lenCounter(),
       lspSlice: {
@@ -186,12 +191,15 @@ describe('TokenGovernor pack', () => {
     const text = joined(packed.messages);
     expect(text).toContain('Files in play (full contents):');
     expect(text).toContain('export const n = 1;');
-    expect(text).toContain('OTHER-TAB-FULL-BODY');
-    expect(text).toContain('README-FULL-BODY');
+    expect(text).toContain('CHANGESET-IN-PLAY-BODY');
     expect(text).toContain(implementerFilesBlock(files));
+    expect(text).toContain('Open tabs (paths only):');
+    expect(text).toContain('src/other.ts');
+    expect(text).toContain('README.md');
+    expect(text).not.toContain('OTHER-TAB-FULL-BODY');
+    expect(text).not.toContain('README-FULL-BODY');
     expect(text).not.toContain('SLICE-ONLY-SHOULD-NOT-APPEAR');
     expect(text).not.toContain('LSP slice of active file');
-    expect(text).toContain('Open tabs (paths only):');
   });
 
   it('vote pack is board + instruction with no file body and no transcript', async () => {

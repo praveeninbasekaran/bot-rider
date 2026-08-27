@@ -580,10 +580,11 @@ export class Orchestrator {
   private syncFiles(changesetPaths: string[] = []): void {
     const pending = this.changesets.files?.map((f) => f.path) ?? [];
     const extra = changesetPaths.length ? changesetPaths : pending;
-    this.board.setFiles(this.trackedPaths(extra), extra);
+    this.board.setFiles(this.filesInPlayPaths(extra), extra);
   }
 
-  private trackedPaths(extra: string[] = []): string[] {
+  /** Active editor + named/changeset paths. Not every open tab. */
+  private filesInPlayPaths(extra: string[] = []): string[] {
     const paths: string[] = [];
     const add = (p?: string): void => {
       if (p && !paths.includes(p)) {
@@ -591,19 +592,16 @@ export class Orchestrator {
       }
     };
     add(this.workspace.activeEditor?.path);
-    for (const p of this.workspace.otherTabPaths) {
-      add(p);
+    for (const f of this.board.snapshot().files) {
+      add(f.path);
     }
     for (const p of extra) {
       add(p);
     }
+    for (const f of this.changesets.files ?? []) {
+      add(f.path);
+    }
     return paths;
-  }
-
-  private filesInPlayPaths(): string[] {
-    const fromBoard = this.board.snapshot().files.map((f) => f.path);
-    const changeset = this.changesets.files?.map((f) => f.path) ?? [];
-    return this.trackedPaths([...fromBoard, ...changeset]);
   }
 
   private async implementerFiles(): Promise<{ path: string; content: string }[]> {

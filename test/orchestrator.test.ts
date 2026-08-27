@@ -530,10 +530,12 @@ describe('Orchestrator TokenGovernor packs and RunBoard', () => {
     }
   });
 
-  it('implementer pack includes full bodies of all files in play, not only the active editor', async () => {
-    const { app, gw, fs } = harness();
+  it('implementer pack includes board+changeset bodies and not extra open-tab bodies', async () => {
+    const { app, gw, fs, msgs } = harness();
     fs.files.set('src/other.ts', 'OTHER-TAB-FULL-BODY\n');
     fs.files.set('README.md', 'README-FULL-BODY\n');
+    fs.files.set('lib/in-play.ts', 'CHANGESET-IN-PLAY-BODY\n');
+    app.changesets.setPending([{ path: 'lib/in-play.ts', op: 'update', content: 'CHANGESET-IN-PLAY-BODY\n' }]);
     await twoBots(app);
     gw.script = ({ turn, instruction }) => {
       const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
@@ -552,17 +554,27 @@ describe('Orchestrator TokenGovernor packs and RunBoard', () => {
     expect(implementText).toContain('Files in play (full contents):');
     expect(implementText).toContain('--- src/app.ts ---');
     expect(implementText).toContain('export const n = 1;');
-    expect(implementText).toContain('--- src/other.ts ---');
-    expect(implementText).toContain('OTHER-TAB-FULL-BODY');
-    expect(implementText).toContain('--- README.md ---');
-    expect(implementText).toContain('README-FULL-BODY');
+    expect(implementText).toContain('--- lib/in-play.ts ---');
+    expect(implementText).toContain('CHANGESET-IN-PLAY-BODY');
+    expect(implementText).toContain('Open tabs (paths only):');
+    expect(implementText).toContain('src/other.ts');
+    expect(implementText).toContain('README.md');
+    expect(implementText).not.toContain('OTHER-TAB-FULL-BODY');
+    expect(implementText).not.toContain('README-FULL-BODY');
     expect(implementText).not.toContain('LSP slice of active file');
+    const boardBeforeImpl = msgs.filter((m) => m.type === 'chat/board').find((m) => {
+      return m.type === 'chat/board' && m.board.files.some((f) => f.path === 'lib/in-play.ts');
+    });
+    expect(boardBeforeImpl && boardBeforeImpl.type === 'chat/board' && boardBeforeImpl.board.files.some((f) => f.path === 'src/other.ts')).toBe(
+      false,
+    );
     const propose = gw.turns.findIndex((t) => t === 'propose');
     const proposeText = gw.lastMessages[propose]!.map((m) => m.content).join('\n');
     expect(proposeText).toContain('src/other.ts');
     expect(proposeText).toContain('README.md');
     expect(proposeText).not.toContain('OTHER-TAB-FULL-BODY');
     expect(proposeText).not.toContain('README-FULL-BODY');
+    expect(proposeText).not.toContain('CHANGESET-IN-PLAY-BODY');
     expect(proposeText).not.toContain('export const n = 1;');
     expect(gw.lastSendOpts[impl]?.tools ?? 'none').toBe('none');
   });
