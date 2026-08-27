@@ -122,9 +122,11 @@ interface RunStateDto {
 
 ### Host → UI
 
-`bots/snapshot`, `copilot/status`, `run/state`, `chat/turn-start`, `chat/token`, `chat/turn-end`, `chat/split`, `chat/mcp-read-start`, `chat/mcp-read-end`, `chat/mcp-skip`, `changeset/preview`, `changeset/apply-failed`, `changeset/cleared`, `error`
+`bots/snapshot`, `copilot/status`, `run/state`, `chat/turn-start`, `chat/token`, `chat/turn-end`, `chat/split`, `chat/mcp-read-start`, `chat/mcp-read-end`, `chat/mcp-skip`, `chat/board`, `changeset/preview`, `changeset/apply-failed`, `changeset/cleared`, `error`
 
 Additive MCP HostToUi only (no UiToHost MCP). Read-only `vscode.lm` MCP tools on propose, critique, and @-direct. Vote and implementer send with `tools: 'none'`.
+
+Additive token-save: [architecture-token-save.md](./architecture-token-save.md). HostToUi `chat/board` only (no UiToHost for board edits). Chrome: [ui-ux-run-board.md](./ui-ux-run-board.md) §17. BR-1–BR-6 protocol frozen.
 
 ### UI → host
 
