@@ -103,19 +103,22 @@ describe('Run board chrome (QC-1 §17)', () => {
   it('paints pack-overflow as a polite thread error and keeps the composer enabled', () => {
     expect(chatJs).toContain("msg.code === 'pack-overflow'");
     expect(chatJs).toContain('paintPackOverflow(msg.message)');
-    expect(chatJs).toContain('el.setAttribute(\'aria-live\', \'polite\')');
-    expect(chatJs).toContain("className = 'error system'");
     expect(chatJs).toContain("Prompt doesn't fit Copilot");
     expect(chatJs).toContain("The minimum context for this turn is larger than Copilot's window.");
     expect(chatJs).toContain('Required context was not dropped.');
-    expect(chatJs).toContain('state.debateRunning = false');
-    expect(chatJs).toContain('lockComposer()');
     const overflowFn = chatJs.slice(chatJs.indexOf('function paintPackOverflow'), chatJs.indexOf('function reduceMotion'));
+    expect(overflowFn).toContain('el.setAttribute(\'aria-live\', \'polite\')');
+    expect(overflowFn).toContain("className = 'error system'");
+    expect(overflowFn).toContain('message || PACK_OVERFLOW_COPY');
+    expect(overflowFn).not.toContain('lockComposer()');
+    expect(overflowFn).not.toContain('input.disabled');
+    expect(overflowFn).not.toContain('send.disabled');
     expect(overflowFn).not.toContain('Sign in');
     expect(overflowFn).not.toContain('Retry');
     expect(overflowFn).not.toContain('Install');
     expect(overflowFn).not.toContain('paintBoard');
     expect(overflowFn).not.toContain("role', 'alert'");
+    expect(overflowFn).not.toMatch(/modal/i);
     expect(chatCss).toMatch(/\.error\s*\{[^}]*errorForeground/s);
   });
 });

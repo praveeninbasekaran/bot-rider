@@ -418,7 +418,6 @@
     if (state.run) {
       state.run.debateRunning = false;
     }
-    lockComposer();
   }
 
   function reduceMotion() {
