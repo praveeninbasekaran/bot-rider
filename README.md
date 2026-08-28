@@ -11,6 +11,8 @@ Bot Rider is a VS Code extension that runs a **swarm of persona bots** through G
 
 ## Run from source (F5)
 
+See [docs/INSTALL.md](docs/INSTALL.md) for the precise steps.
+
 1. Clone this repo and run `npm install`
 2. Open the folder in VS Code
 3. Press **F5** to launch the Extension Development Host (`Run Extension` in `.vscode/launch.json`)
@@ -30,6 +32,8 @@ Copilot sign-in is the **Sign in to GitHub Copilot** command (`botrider.copilot.
 
 ## Documentation
 
+- [docs/INSTALL.md](docs/INSTALL.md) — install from source (F5)
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — exact error copy
 - [docs/architecture-mvp.md](docs/architecture-mvp.md) — architecture blueprint revision 7
 - [docs/ui-ux-spec.md](docs/ui-ux-spec.md) — Bot Rider UI/UX Specification
 - [openspec/README.md](openspec/README.md) — OpenSpec index
