@@ -1,7 +1,7 @@
 import type { BotRecord } from '../domain/bot';
 import type { RunStateDto, TurnKind } from '../domain/run-state';
 import { idleRunState } from '../domain/run-state';
-import type { HostToUi, WorkspaceContext } from '../protocol/messages';
+import type { ErrorCode, HostToUi, RunBoardDto, WorkspaceContext } from '../protocol/messages';
 import { COPY, copilotStatusMessage } from './copy';
 import { CancelSource } from './cancel';
 import type { BotRegistry } from './bot-registry';
@@ -13,7 +13,10 @@ import { PatchParser } from './patch-parser';
 import type { ChangesetStore } from './changeset-store';
 import type { ThreadStore } from './thread-store';
 import { oneLine, parseMentions, parseVote, stripNeedEditTrailer } from './mentions';
-import type { WorkspaceContextPort } from './ports';
+import type { WorkspaceContextPort, FileSystemPort } from './ports';
+import { EmptyLspSlicePort, withSelectionFallback, type LspSlicePort, type LspSliceSnapshot } from './lsp-slice';
+import { RunBoardStore } from './run-board';
+import { packKindFor } from './token-governor';
 
 export class Orchestrator {
   private state: RunStateDto = idleRunState();
@@ -23,6 +26,7 @@ export class Orchestrator {
   private userText = '';
   private workspace: WorkspaceContext = { otherTabPaths: [] };
   private loopActive = false;
+  private lspSlice: LspSliceSnapshot = { diagnostics: [], symbols: [] };
 
   constructor(
     private readonly registry: BotRegistry,
@@ -34,6 +38,9 @@ export class Orchestrator {
     private readonly workspacePort: WorkspaceContextPort,
     private readonly emit: (msg: HostToUi) => void,
     private readonly mcp: McpGateway = new McpGateway(new EmptyMcpPort(), emit, { settleMs: 0 }),
+    readonly board: RunBoardStore = new RunBoardStore(),
+    readonly lsp: LspSlicePort = new EmptyLspSlicePort(),
+    private readonly files: FileSystemPort = { exists: async () => false, readText: async () => undefined },
   ) {}
 
   getRunState(): RunStateDto {
@@ -58,6 +65,16 @@ export class Orchestrator {
       this.state = { ...idleRunState(), applyFailed: false };
     }
     this.pushState();
+  }
+
+  /** Successful Approve: invalidate LSP slice and hide the board. Reject: hide only. */
+  noteRunCleared(opts: { invalidateSlice: boolean }): void {
+    if (opts.invalidateSlice) {
+      this.lsp.invalidate();
+      this.lspSlice = { diagnostics: [], symbols: [] };
+    }
+    this.hideBoard();
+    this.noteApplyFailed(false);
   }
 
   async send(text: string): Promise<void> {
@@ -117,6 +134,11 @@ export class Orchestrator {
     this.history = [];
     this.cts = new CancelSource();
     this.loopActive = true;
+    this.board.clear();
+    this.board.setGoal(text);
+    this.board.clearDissents();
+    this.syncFiles();
+    this.emitBoard();
 
     if (solo) {
       this.freeze = [{ ...solo }];
@@ -161,6 +183,9 @@ export class Orchestrator {
     await this.mcp.ensureStartedFromSend();
     this.cts = new CancelSource();
     this.loopActive = true;
+    this.board.clearDissents();
+    this.board.addDecision('Continue');
+    this.emitBoard();
     this.state = {
       ...this.state,
       phase: 'debate',
@@ -188,6 +213,9 @@ export class Orchestrator {
     }
     this.cts = new CancelSource();
     this.loopActive = true;
+    this.board.clearDissents();
+    this.board.addDecision(`Pick @${bot.handle}`);
+    this.emitBoard();
     this.state = {
       ...this.state,
       splitOpen: false,
@@ -241,6 +269,9 @@ export class Orchestrator {
       }
       const allAgree = this.freeze.every((b) => votes.get(b.id) === 'AGREE');
       if (allAgree) {
+        this.board.clearDissents();
+        this.board.addDecision('Consensus');
+        this.emitBoard();
         const implementer = this.freeze[0];
         if (implementer) {
           await this.runImplementer(implementer);
@@ -303,6 +334,8 @@ export class Orchestrator {
       return;
     }
     this.changesets.setPending(parsed.files);
+    this.syncFiles(parsed.files.map((f) => f.path));
+    this.emitBoard();
     this.state = {
       phase: 'pendingReview',
       round: this.state.round,
@@ -324,6 +357,31 @@ export class Orchestrator {
     if (this.cancelled()) {
       return 'cancelled';
     }
+
+    const kind = packKindFor(turn);
+    if (kind === 'debate') {
+      this.lspSlice = withSelectionFallback(await this.lsp.capture(this.workspace), this.workspace);
+    }
+
+    const packed = await this.prompts.pack({
+      bot,
+      kind,
+      instruction,
+      board: this.board.snapshot(),
+      workspace: this.workspace,
+      counter: this.gateway,
+      lspSlice: kind === 'debate' ? this.lspSlice : undefined,
+      implementerFiles: kind === 'implement' ? await this.implementerFiles() : undefined,
+      mcpContext: kind === 'debate' ? this.mcp.contextLines() : undefined,
+    });
+    if (!packed.ok) {
+      this.emit({ type: 'error', code: 'pack-overflow', message: COPY.packOverflow });
+      this.state.debateRunning = false;
+      this.state.phase = 'error';
+      this.pushState();
+      return 'error';
+    }
+
     this.state.turn = turn;
     this.state.currentBotId = bot.id;
     this.state.round = round;
@@ -340,19 +398,12 @@ export class Orchestrator {
       solo: extras?.solo,
     });
 
-    const messages = await this.prompts.build({
-      bot,
-      workspace: this.workspace,
-      history: this.history,
-      instruction,
-      counter: this.gateway,
-      mcpContext: this.mcp.contextLines(),
-    });
+    this.prompts.governor.recordSent(packed.tokens);
 
     let full = '';
     try {
       const streamed = await this.gateway.send(
-        messages,
+        packed.messages,
         this.cts!.token,
         (chunk) => {
           full += chunk;
@@ -406,6 +457,10 @@ export class Orchestrator {
 
     this.history.push({ handle: bot.handle, text: visible });
     this.thread.append({ role: 'assistant', text: visible, handle: bot.handle, botId: bot.id });
+    if (turn === 'propose' || turn === 'critique' || turn === 'direct') {
+      this.board.mergeParseableTodos(visible);
+      this.emitBoard();
+    }
     this.emit({
       type: 'chat/turn-end',
       botId: bot.id,
@@ -435,9 +490,13 @@ export class Orchestrator {
       frozenBotIds: this.freeze.map((b) => b.id),
     };
     this.pushState();
+    const positions = this.splitPositions();
+    this.board.setDissents(positions.map((p) => ({ handle: p.handle, text: p.text })));
+    this.board.addDecision(title);
+    this.emitBoard();
     this.emit({
       type: 'chat/split',
-      positions: this.splitPositions(),
+      positions,
       title,
       reason,
       paused,
@@ -453,6 +512,7 @@ export class Orchestrator {
   }
 
   private exitToIdle(): void {
+    this.hideBoard();
     this.state = {
       ...idleRunState(),
       applyFailed: this.changesets.applyFailed,
@@ -461,8 +521,11 @@ export class Orchestrator {
     this.pushState();
   }
 
-  private fail(code: 'unknown-handle' | 'multiple-mentions' | 'zero-active' | 'no-workspace' | 'parse-failed' | 'validate-failed' | 'copilot', message: string): void {
+  private fail(code: ErrorCode, message: string): void {
     this.emit({ type: 'error', code, message });
+    if (code !== 'pack-overflow') {
+      this.hideBoard();
+    }
     this.state = { ...idleRunState(), phase: 'error', applyFailed: this.changesets.applyFailed };
     this.state.debateRunning = false;
     this.pushState();
@@ -503,6 +566,66 @@ export class Orchestrator {
 
   private pushState(): void {
     this.emit({ type: 'run/state', state: this.getRunState() });
+  }
+
+  private emitBoard(): void {
+    this.emit({ type: 'chat/board', board: this.board.snapshot() });
+  }
+
+  private hideBoard(): void {
+    this.board.clear();
+    this.emitBoard();
+  }
+
+  private syncFiles(changesetPaths: string[] = []): void {
+    const pending = this.changesets.files?.map((f) => f.path) ?? [];
+    const extra = changesetPaths.length ? changesetPaths : pending;
+    this.board.setFiles(this.filesInPlayPaths(extra), extra);
+  }
+
+  /** Active editor + named/changeset paths. Not every open tab. */
+  private filesInPlayPaths(extra: string[] = []): string[] {
+    const paths: string[] = [];
+    const add = (p?: string): void => {
+      if (p && !paths.includes(p)) {
+        paths.push(p);
+      }
+    };
+    add(this.workspace.activeEditor?.path);
+    for (const f of this.board.snapshot().files) {
+      add(f.path);
+    }
+    for (const p of extra) {
+      add(p);
+    }
+    for (const f of this.changesets.files ?? []) {
+      add(f.path);
+    }
+    return paths;
+  }
+
+  private async implementerFiles(): Promise<{ path: string; content: string }[]> {
+    const paths = this.filesInPlayPaths();
+    const out: { path: string; content: string }[] = [];
+    for (const path of paths) {
+      out.push({ path, content: await this.readFileInPlay(path) });
+    }
+    return out;
+  }
+
+  private async readFileInPlay(path: string): Promise<string> {
+    if (this.workspace.activeEditor?.path === path) {
+      return this.workspace.activeEditor.content;
+    }
+    const pending = this.changesets.files?.find((f) => f.path === path);
+    if (pending && pending.op !== 'delete' && pending.content !== undefined) {
+      return pending.content;
+    }
+    return (await this.files.readText(path)) ?? '';
+  }
+
+  snapshotBoard(): RunBoardDto {
+    return this.board.snapshot();
   }
 }
 

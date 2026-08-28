@@ -160,7 +160,13 @@ describe('contribution points', () => {
       expect(t, f).not.toMatch(/createSourceControl/);
       expect(t, f).not.toMatch(/family:\s*['"]/);
       expect(t, f).not.toMatch(/vendor:\s*['"](?!copilot)/);
+      expect(t, f).not.toMatch(/Graphify/i);
+      expect(t, f).not.toMatch(/i-have-adhd/);
     }
+    const governor = blobs.find((b) => b.f === 'src/app/token-governor.ts');
+    expect(governor?.t).toBeTruthy();
+    expect(governor?.t).not.toMatch(/\.sendRequest\s*\(/);
+    expect(governor?.t).not.toMatch(/vscode\.lm/);
     const applyFiles = blobs.filter((b) => b.f.includes('changeset-store') || b.f.includes('vscode-workspace'));
     expect(applyFiles.some((b) => b.t.includes('applyEdit'))).toBe(true);
     expect(applyFiles.every((b) => !b.t.includes('writeFile'))).toBe(true);

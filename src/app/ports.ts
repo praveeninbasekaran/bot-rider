@@ -22,6 +22,7 @@ export interface ApplyEditPort {
 
 export interface FileSystemPort {
   exists(relativePath: string): Promise<boolean>;
+  readText(relativePath: string): Promise<string | undefined>;
 }
 
 export interface WorkspaceContextPort {

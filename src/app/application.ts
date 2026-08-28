@@ -10,6 +10,8 @@ import { Orchestrator } from './orchestrator';
 import { PatchParser } from './patch-parser';
 import { PromptBuilder } from './prompt-builder';
 import { ThreadStore } from './thread-store';
+import { EmptyLspSlicePort, type LspSlicePort } from './lsp-slice';
+import { RunBoardStore } from './run-board';
 import type {
   ApplyEditPort,
   DiffCloser,
@@ -26,6 +28,8 @@ export class Application {
   readonly thread: ThreadStore;
   readonly parser = new PatchParser();
   readonly prompts = new PromptBuilder();
+  readonly board: RunBoardStore;
+  readonly lsp: LspSlicePort;
   readonly mcp: McpGateway;
 
   constructor(
@@ -38,8 +42,11 @@ export class Application {
     docs?: ProposedDocHost,
     diffs?: DiffCloser,
     mcp?: McpGateway,
+    lsp?: LspSlicePort,
   ) {
     this.mcp = mcp ?? new McpGateway(new EmptyMcpPort(), emit, { settleMs: 0 });
+    this.lsp = lsp ?? new EmptyLspSlicePort();
+    this.board = new RunBoardStore();
     this.registry = new BotRegistry(store);
     this.thread = new ThreadStore();
     this.changesets = new ChangesetStore(applyPort, fs, emit, docs, diffs);
@@ -53,6 +60,9 @@ export class Application {
       workspace,
       emit,
       this.mcp,
+      this.board,
+      this.lsp,
+      fs,
     );
   }
 
@@ -114,11 +124,13 @@ export class Application {
     }
     const n = files.length;
     const ok = await this.changesets.approve(mode);
-    this.orchestrator.noteApplyFailed(!ok && this.changesets.hasPending());
     if (ok) {
+      this.orchestrator.noteRunCleared({ invalidateSlice: true });
       const text = COPY.approvedNotice(n);
       this.thread.append({ role: 'notice', text });
       this.emit({ type: 'chat/notice', text });
+    } else {
+      this.orchestrator.noteApplyFailed(this.changesets.hasPending());
     }
     return ok;
   }
@@ -130,7 +142,7 @@ export class Application {
   async reject(): Promise<void> {
     const had = this.changesets.hasPending();
     await this.changesets.reject();
-    this.orchestrator.noteApplyFailed(false);
+    this.orchestrator.noteRunCleared({ invalidateSlice: false });
     if (had) {
       this.thread.append({ role: 'notice', text: COPY.rejectedNotice });
       this.emit({ type: 'chat/notice', text: COPY.rejectedNotice });

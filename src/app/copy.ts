@@ -29,6 +29,8 @@ export const COPY = {
   mcpSkipUnauthenticated: 'Not signed in. Sign in from VS Code MCP settings.',
   mcpSkipToolMissing: 'Tool not available.',
   mcpSkipMutating: (server: string) => `Writes through ${server} aren't available in Bot Rider.`,
+  packOverflow:
+    "Prompt doesn't fit Copilot\nThe minimum context for this turn is larger than Copilot's window.\nShorten the prompt or shrink the active editor. Required context was not dropped.",
 };
 
 export function copilotStatusMessage(status: CopilotStatus): string | undefined {

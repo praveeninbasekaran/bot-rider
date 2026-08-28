@@ -14,6 +14,7 @@ import { openProposedDiff, ReviewTreeProvider } from './adapters/review-tree';
 import { createCopilotGateway } from './adapters/vscode-lm-gateway';
 import { VsCodeMcpPort } from './adapters/vscode-mcp';
 import { VsCodeWorkspacePort } from './adapters/vscode-workspace';
+import { VsCodeLspSlicePort } from './adapters/vscode-lsp';
 import type { HostToUi, UiToHost } from './protocol/messages';
 import { COPY, copilotStatusMessage } from './app/copy';
 import { MCP_SETTLE_MS, McpGateway } from './app/mcp-gateway';
@@ -65,6 +66,7 @@ export function activate(context: vscode.ExtensionContext): void {
     gatewayStatus = status;
     emit({ type: 'copilot/status', status, message: copilotStatusMessage(status) });
   }, mcp);
+  const lsp = new VsCodeLspSlicePort();
 
   const app = new Application(
     new MementoStore(context.globalState),
@@ -76,6 +78,7 @@ export function activate(context: vscode.ExtensionContext): void {
     proposed,
     { closeProposedDiffs },
     mcp,
+    lsp,
   );
   appRef = app;
 
