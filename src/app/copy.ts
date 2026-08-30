@@ -30,7 +30,7 @@ export const COPY = {
   mcpSkipToolMissing: 'Tool not available.',
   mcpSkipMutating: (server: string) => `Writes through ${server} aren't available in Bot Rider.`,
   mcpActionsFailed:
-    'MCP actions failed\n\nSome remote side effects (Figma, Azure Boards, or other servers) may already have happened and may not roll back.',
+    'MCP actions failed\nSome remote side effects (Figma, Azure Boards, or other servers) may already have happened and may not roll back.',
   mcpStagedResult: 'Staged for user Approve. Not executed.',
   packOverflow:
     "Prompt doesn't fit Copilot\nThe minimum context for this turn is larger than Copilot's window.\nShorten the prompt or shrink the active editor. Required context was not dropped.",

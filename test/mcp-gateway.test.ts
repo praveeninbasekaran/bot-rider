@@ -112,6 +112,8 @@ describe('McpGateway allow/invoke', () => {
     expect(src).not.toMatch(/Azure/);
     expect(COPY.mcpActionsFailed).toContain('Figma');
     expect(COPY.mcpActionsFailed).toContain('Azure Boards');
+    expect(COPY.mcpActionsFailed.split('\n')).toHaveLength(2);
+    expect(COPY.mcpActionsFailed).not.toContain('\n\n');
   });
 
   it('unused servers and failed starts emit nothing until a tool is called this turn', async () => {

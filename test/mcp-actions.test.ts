@@ -286,8 +286,13 @@ describe('MA staged MCP actions host', () => {
       leftoverIds: ids,
     });
     expect(COPY.mcpActionsFailed).toBe(
-      'MCP actions failed\n\nSome remote side effects (Figma, Azure Boards, or other servers) may already have happened and may not roll back.',
+      'MCP actions failed\nSome remote side effects (Figma, Azure Boards, or other servers) may already have happened and may not roll back.',
     );
+    expect(COPY.mcpActionsFailed.split('\n')).toEqual([
+      'MCP actions failed',
+      'Some remote side effects (Figma, Azure Boards, or other servers) may already have happened and may not roll back.',
+    ]);
+    expect(COPY.mcpActionsFailed).not.toContain('\n\n');
     expect(msgs.some((m) => m.type === 'mcp/actions-cleared')).toBe(false);
     expect(mcp.actions.snapshot().map((a) => a.id)).toEqual(ids);
     expect(port.invokeCalls).toHaveLength(1);
