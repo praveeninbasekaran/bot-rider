@@ -24,12 +24,14 @@ export class MemoryFs implements ApplyEditPort, FileSystemPort {
   applyResult: boolean | (() => boolean) = true;
   lastOps: FileEditOp[] = [];
   applyCalls = 0;
+  readTextCalls: string[] = [];
 
   async exists(relativePath: string): Promise<boolean> {
     return this.files.has(relativePath);
   }
 
   async readText(relativePath: string): Promise<string | undefined> {
+    this.readTextCalls.push(relativePath);
     return this.files.get(relativePath);
   }
 

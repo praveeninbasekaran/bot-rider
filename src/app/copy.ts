@@ -40,6 +40,12 @@ export const COPY = {
   voiceKeepTight: 'Keep it tight.',
   defaultNewBotPersona: 'A thoughtful teammate who talks like a person.',
   defaultNewBotInstructions: 'Speak in short conversational paragraphs. Keep it tight.',
+  attachNoFolder: 'Open a folder to attach files.',
+  attachDialogTitle: 'Attach workspace files',
+  attachSkipOutside: (name: string) => `Skipped ${name} · Not in this workspace.`,
+  attachSkipTooLarge: (name: string) => `Skipped ${name} · too large`,
+  attachSkipBinary: (name: string) => `Skipped ${name} · Binary file.`,
+  attachSkipUnreadable: (name: string) => `Skipped ${name} · Can't read this file.`,
 };
 
 export function copilotStatusMessage(status: CopilotStatus): string | undefined {

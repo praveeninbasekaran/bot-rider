@@ -39,7 +39,11 @@ export interface RunBoardDto {
 
 export type BotCreateDraft = Omit<BotRecord, 'id' | 'createdAt' | 'updatedAt'>;
 
-export type BotPatch = Partial<Pick<BotRecord, 'name' | 'handle' | 'persona' | 'role' | 'instructions'>>;
+export type BotPatch = Partial<
+  Pick<BotRecord, 'name' | 'handle' | 'persona' | 'role' | 'instructions' | 'attachments'>
+>;
+
+export type AttachSkipReason = 'unreadable' | 'binary' | 'too-large' | 'outside-workspace';
 
 export interface PromptMessage {
   role: 'user' | 'assistant';
@@ -115,6 +119,9 @@ export type HostToUi =
   | { type: 'mcp/actions-preview'; actions: McpActionDto[] }
   | { type: 'mcp/actions-cleared' }
   | { type: 'mcp/actions-failed'; message: string; leftoverIds: string[] }
+  | { type: 'bots/attach-added'; files: { path: string; name: string }[] }
+  | { type: 'bots/attach-skipped'; name: string; reason: AttachSkipReason; message: string }
+  | { type: 'bots/attach-mapped'; name?: string; handle?: string; persona?: string }
   | { type: 'error'; code: ErrorCode; message: string };
 
 export type UiToHost =
@@ -142,7 +149,9 @@ export type UiToHost =
   | { type: 'review/open-diff'; path: string; op?: FileOp }
   | { type: 'copilot/recheck' }
   | { type: 'mcp/actions-approve' }
-  | { type: 'mcp/actions-reject' };
+  | { type: 'mcp/actions-reject' }
+  | { type: 'bots/attach-pick' }
+  | { type: 'bots/attach-remove'; path: string };
 
 export interface WorkspaceContext {
   folderFsPath?: string;

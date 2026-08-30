@@ -1,4 +1,4 @@
-import type { BotRecord } from '../domain/bot';
+import { attachmentsOf, type BotAttachment, type BotRecord } from '../domain/bot';
 import type { TurnKind } from '../domain/run-state';
 import type { PromptMessage, RunBoardDto, WorkspaceContext } from '../protocol/messages';
 import { formatLspSlice, withSelectionFallback, type LspSliceSnapshot } from './lsp-slice';
@@ -91,6 +91,26 @@ function mcpMessage(notes: string[]): PromptMessage | undefined {
   };
 }
 
+export function attachmentsBlock(attachments: BotAttachment[]): string | undefined {
+  if (attachments.length === 0) {
+    return undefined;
+  }
+  const parts = ['Attached files'];
+  for (const file of attachments) {
+    parts.push(`${file.name} (${file.path})`);
+    parts.push(file.snapshot);
+  }
+  return parts.join('\n');
+}
+
+function extrasMessage(attachments: BotAttachment[]): PromptMessage | undefined {
+  const content = attachmentsBlock(attachments);
+  if (!content) {
+    return undefined;
+  }
+  return { role: 'user', content };
+}
+
 function assemble(parts: Array<PromptMessage | undefined>): PromptMessage[] {
   return parts.filter((p): p is PromptMessage => !!p);
 }
@@ -128,14 +148,21 @@ export class TokenGovernor {
 
     const allowMcp = args.kind === 'debate';
     let mcpNotes = allowMcp ? [...(args.mcpContext ?? [])] : [];
+    const allowAttach = args.kind === 'debate' || args.kind === 'implement';
+    let extras = allowAttach ? attachmentsOf(args.bot) : [];
 
     const build = (): PromptMessage[] =>
-      assemble([persona, board, fileMsg, tabs, mcpMessage(mcpNotes), instruction]);
+      assemble([persona, board, fileMsg, tabs, mcpMessage(mcpNotes), extrasMessage(extras), instruction]);
 
     let messages = build();
     while ((await args.counter.countTokens(messages)) > args.counter.maxInputTokens) {
       if (mcpNotes.length > 0) {
         mcpNotes = [];
+        messages = build();
+        continue;
+      }
+      if (extras.length > 0) {
+        extras = extras.slice(0, -1);
         messages = build();
         continue;
       }

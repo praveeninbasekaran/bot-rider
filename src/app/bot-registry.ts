@@ -1,4 +1,7 @@
 import {
+  attachmentsOf,
+  copyBotRecord,
+  type BotAttachment,
   type BotDraft,
   type BotRecord,
   deriveHandle,
@@ -23,26 +26,26 @@ export class BotRegistry {
     private readonly now: () => string = () => new Date().toISOString(),
   ) {
     const loaded = store.get<BotRecord[]>(BOTS_STATE_KEY);
-    this.bots = Array.isArray(loaded) ? loaded.map((b) => ({ ...b })) : [];
+    this.bots = Array.isArray(loaded) ? loaded.map((b) => copyBotRecord(b)) : [];
   }
 
   list(): BotRecord[] {
-    return this.bots.map((b) => ({ ...b }));
+    return this.bots.map((b) => copyBotRecord(b));
   }
 
   snapshotActive(): BotRecord[] {
-    return this.bots.filter((b) => b.active).map((b) => ({ ...b }));
+    return this.bots.filter((b) => b.active).map((b) => copyBotRecord(b));
   }
 
   getById(id: string): BotRecord | undefined {
     const found = this.bots.find((b) => b.id === id);
-    return found ? { ...found } : undefined;
+    return found ? copyBotRecord(found) : undefined;
   }
 
   getByHandle(handle: string): BotRecord | undefined {
     const key = handle.toLowerCase();
     const found = this.bots.find((b) => b.handle.toLowerCase() === key);
-    return found ? { ...found } : undefined;
+    return found ? copyBotRecord(found) : undefined;
   }
 
   async create(draft: BotDraft): Promise<BotRecord> {
@@ -50,12 +53,7 @@ export class BotRegistry {
     if (!name) {
       throw new BotRegistryError('Name is required.');
     }
-    const handle = this.uniqueHandle(
-      (draft.handle?.trim() ? draft.handle.trim().toLowerCase() : deriveHandle(name)),
-    );
-    if (!isValidHandle(handle)) {
-      throw new BotRegistryError(`Invalid handle "${handle}".`);
-    }
+    const handle = this.resolveCreateHandle(name, draft.handle);
     const ts = this.now();
     const bot: BotRecord = {
       id: this.idFactory(),
@@ -68,6 +66,7 @@ export class BotRegistry {
       colorIndex: this.nextColorIndex(),
       createdAt: ts,
       updatedAt: ts,
+      attachments: copyAttachments(draft.attachments),
     };
     this.bots.push(bot);
     await this.persist();
@@ -95,6 +94,8 @@ export class BotRegistry {
       role: draft.role.trim(),
       instructions: draft.instructions.trim(),
       active: draft.active,
+      attachments:
+        draft.attachments !== undefined ? copyAttachments(draft.attachments) : attachmentsOf(prev),
       updatedAt: this.now(),
     };
     this.bots[index] = next;
@@ -133,6 +134,24 @@ export class BotRegistry {
     );
   }
 
+  private resolveCreateHandle(name: string, raw?: string): string {
+    if (raw?.trim()) {
+      const handle = raw.trim().toLowerCase();
+      if (!isValidHandle(handle)) {
+        throw new BotRegistryError(`Invalid handle "${handle}".`);
+      }
+      if (this.handleTaken(handle)) {
+        throw new BotRegistryError(`@${handle} is already taken.`);
+      }
+      return handle;
+    }
+    const handle = this.uniqueHandle(deriveHandle(name));
+    if (!isValidHandle(handle)) {
+      throw new BotRegistryError(`Invalid handle "${handle}".`);
+    }
+    return handle;
+  }
+
   uniqueHandle(base: string): string {
     let candidate = base.toLowerCase();
     if (!isValidHandle(candidate)) {
@@ -162,4 +181,8 @@ export class BotRegistry {
   private async persist(): Promise<void> {
     await this.store.update(BOTS_STATE_KEY, this.list());
   }
+}
+
+function copyAttachments(items?: BotAttachment[]): BotAttachment[] {
+  return attachmentsOf({ attachments: items });
 }
