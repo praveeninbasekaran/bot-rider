@@ -4,8 +4,14 @@ import type { Application } from '../app/application';
 import type { ChangeFile, FileOp } from '../domain/changeset';
 import { resolveProposedOpen } from '../app/deliverable-open';
 import type { McpActionDto } from '../protocol/messages';
-import { ProposedContentProvider } from './proposed-content-provider';
-import { mcpFailedViewMessage, reviewChromeMode } from './review-chrome';
+import { ProposedContentProvider, PROPOSED_SCHEME, proposedUri } from './proposed-content-provider';
+import {
+  htmlPreviewDocument,
+  mcpFailedViewMessage,
+  proposedCreateDecoration,
+  proposedFileChrome,
+  reviewChromeMode,
+} from './review-chrome';
 
 export type { ReviewChromeMode } from './review-chrome';
 export { mcpFailedViewMessage, reviewChromeMode };
@@ -24,14 +30,43 @@ class ReviewItem extends vscode.TreeItem {
   }
 }
 
+export class ProposedFileDecorationProvider implements vscode.FileDecorationProvider {
+  private readonly _onDidChangeFileDecorations = new vscode.EventEmitter<
+    vscode.Uri | vscode.Uri[] | undefined
+  >();
+  readonly onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
+
+  constructor(private readonly app: Application) {}
+
+  refresh(): void {
+    this._onDidChangeFileDecorations.fire(undefined);
+  }
+
+  provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+    if (uri.scheme !== PROPOSED_SCHEME) {
+      return undefined;
+    }
+    const rel = uri.path.replace(/^\/+/, '').replace(/\\/g, '/');
+    const file = this.app.changesets.files?.find((f) => f.path.replace(/\\/g, '/') === rel);
+    if (file?.op !== 'create') {
+      return undefined;
+    }
+    const dec = proposedCreateDecoration();
+    return new vscode.FileDecoration(dec.badge, dec.tooltip);
+  }
+}
+
 export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  readonly decorations: ProposedFileDecorationProvider;
   private view: vscode.TreeView<ReviewItem> | undefined;
   private mcpFailed = false;
   private mcpFocus: ReviewItem | undefined;
 
-  constructor(private readonly app: Application) {}
+  constructor(private readonly app: Application) {
+    this.decorations = new ProposedFileDecorationProvider(app);
+  }
 
   attach(view: vscode.TreeView<ReviewItem>): void {
     this.view = view;
@@ -44,6 +79,7 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
+    this.decorations.refresh();
     this.syncChrome();
   }
 
@@ -189,7 +225,7 @@ export async function openHtmlPreview(title: string, html: string): Promise<void
     'botrider.deliverablePreview',
     title,
     { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
-    { enableScripts: false, retainContextWhenHidden: true },
+    { enableScripts: false, retainContextWhenHidden: false },
   );
   panel.webview.html = htmlPreviewDocument(html);
   htmlPreviewPanels.push(panel);
@@ -208,17 +244,6 @@ export async function closeDeliverablePreviews(): Promise<void> {
   htmlPreviewPanels.length = 0;
 }
 
-function htmlPreviewDocument(html: string): string {
-  const csp = `default-src 'none'; img-src data:; style-src 'unsafe-inline'`;
-  if (/<html[\s>]/i.test(html)) {
-    if (/<head[\s>]/i.test(html)) {
-      return html.replace(/<head([^>]*)>/i, `<head$1><meta http-equiv="Content-Security-Policy" content="${csp}" />`);
-    }
-    return html.replace(/<html([^>]*)>/i, `<html$1><head><meta http-equiv="Content-Security-Policy" content="${csp}" /></head>`);
-  }
-  return `<!DOCTYPE html><html><head><meta charset="utf-8" /><meta http-equiv="Content-Security-Policy" content="${csp}" /><title>Proposed</title></head><body>${html}</body></html>`;
-}
-
 function sectionItem(label: string, kind: 'filesSection' | 'mcpSection', contextValue: string): ReviewItem {
   const item = new ReviewItem(label, vscode.TreeItemCollapsibleState.Expanded, kind);
   item.contextValue = contextValue;
@@ -230,22 +255,17 @@ function sectionItem(label: string, kind: 'filesSection' | 'mcpSection', context
 }
 
 function fileItem(file: ChangeFile): ReviewItem {
-  const item = new ReviewItem(file.path, vscode.TreeItemCollapsibleState.None, 'file', file);
-  item.id = `file:${file.path}`;
-  item.contextValue = 'proposedFile';
+  const chrome = proposedFileChrome(file);
+  const item = new ReviewItem(chrome.label, vscode.TreeItemCollapsibleState.None, 'file', file);
+  item.id = `file:${chrome.label}`;
+  item.contextValue = chrome.contextValue;
   item.command = {
-    command: 'botrider.review.openDiff',
+    command: chrome.command,
     title: 'Open Diff',
     arguments: [item],
   };
-  item.resourceUri = vscode.Uri.parse(`file:${file.path}`);
-  if (file.op === 'create') {
-    item.description = 'Added';
-  } else if (file.op === 'delete') {
-    item.description = 'Deleted';
-  } else {
-    item.description = 'Modified';
-  }
+  item.resourceUri = proposedUri(chrome.resourcePath);
+  item.description = chrome.description;
   return item;
 }
 

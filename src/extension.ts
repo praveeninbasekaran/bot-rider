@@ -122,6 +122,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     botsView,
     reviewView,
+    vscode.window.registerFileDecorationProvider(reviewTree.decorations),
     vscode.workspace.registerTextDocumentContentProvider(PROPOSED_SCHEME, proposed),
     vscode.window.registerWebviewViewProvider(
       'botrider.chat',
