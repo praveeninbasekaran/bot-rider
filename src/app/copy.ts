@@ -31,6 +31,12 @@ export const COPY = {
   mcpSkipMutating: (server: string) => `Writes through ${server} aren't available in Bot Rider.`,
   packOverflow:
     "Prompt doesn't fit Copilot\nThe minimum context for this turn is larger than Copilot's window.\nShorten the prompt or shrink the active editor. Required context was not dropped.",
+  /** HV-1 overlay after the stored persona block, in this turn's instruction only. */
+  voiceOverlay:
+    'Visible reply is conversational chat, not a document or heading template, even if the persona asks for a document.',
+  voiceKeepTight: 'Keep it tight.',
+  defaultNewBotPersona: 'A thoughtful teammate who talks like a person.',
+  defaultNewBotInstructions: 'Speak in short conversational paragraphs. Keep it tight.',
 };
 
 export function copilotStatusMessage(status: CopilotStatus): string | undefined {

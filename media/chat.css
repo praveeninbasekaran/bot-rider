@@ -486,10 +486,85 @@ body.vscode-reduce-motion .mcp-read-spinner {
   animation: none;
 }
 
-.body {
+.body,
+.article-body {
+  min-width: 0;
+  font-family: var(--vscode-font-family);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--vscode-foreground);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.article-p,
+.article-heading,
+.article-list {
+  margin: 0 0 8px;
+  padding: 0;
+  text-indent: 0;
+  font-family: var(--vscode-font-family);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--vscode-foreground);
+}
+
+.article-heading {
+  font-weight: 600;
+  margin-top: 0;
+}
+
+.article-p:last-child,
+.article-heading:last-child,
+.article-list:last-child,
+.article-fence:last-child {
+  margin-bottom: 0;
+}
+
+.article-stream {
+  white-space: pre-wrap;
+}
+
+.article-list {
+  padding-left: 1.15em;
+  list-style: disc;
+}
+
+.article-list ul,
+.article-list ol {
+  display: none;
+}
+
+.article-list li {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.article-fence {
+  margin: 0 0 8px;
+  padding: 8px;
+  overflow: auto;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  line-height: 1.45;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground, var(--vscode-foreground));
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.45;
+}
+
+.article-inline {
+  font-family: var(--vscode-editor-font-family);
+  font-size: inherit;
+  color: var(--vscode-textPreformat-foreground);
+}
+
+.split-positions .article-body {
+  display: block;
+  margin-top: 4px;
 }
 
 .notice {

@@ -18,6 +18,11 @@ export function isBoardEmpty(board: RunBoardDto): boolean {
 
 const TODO_LINE = /^\s*[-*]\s*\[([ xX>])\]\s+(.+)$/;
 
+export function isParseableTodoLine(line: string): boolean {
+  const match = line.match(TODO_LINE);
+  return !!match && !!(match[2] ?? '').trim();
+}
+
 export function parseTodoLines(text: string): { text: string; status: TodoStatus }[] {
   const out: { text: string; status: TodoStatus }[] = [];
   let fence = false;

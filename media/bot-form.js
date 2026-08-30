@@ -126,6 +126,13 @@
         instructions.value = bot.instructions;
         active.checked = !!bot.active;
         deleteBtn.hidden = false;
+      } else if (msg.defaults) {
+        if (!persona.value.trim()) {
+          persona.value = msg.defaults.persona || '';
+        }
+        if (!instructions.value.trim()) {
+          instructions.value = msg.defaults.instructions || '';
+        }
       }
     } else if (msg.type === 'form/error') {
       err.textContent = msg.message || '';
