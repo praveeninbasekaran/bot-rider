@@ -53,13 +53,7 @@ export class BotFormPanel {
         msg: UiToHost | { type: 'form/ready' } | { type: 'form/cancel' },
       ) => {
         if (msg.type === 'form/ready') {
-          void panel.webview.postMessage({
-            type: 'form/load',
-            bot,
-            bots: this.app.registry.list(),
-            suggestedHandle: bot?.handle ?? deriveHandle(''),
-            defaults: newDraftDefaults(bot),
-          });
+          postFormLoad(panel, bot, this.app.registry.list(), deriveHandle(''));
           return;
         }
         if (msg.type === 'form/cancel') {
@@ -116,13 +110,7 @@ export class BotFormPanel {
       },
     );
     panel.onDidDispose(() => sub.dispose());
-    void panel.webview.postMessage({
-      type: 'form/load',
-      bot,
-      bots: this.app.registry.list(),
-      suggestedHandle: bot?.handle ?? '',
-      defaults: newDraftDefaults(bot),
-    });
+    postFormLoad(panel, bot, this.app.registry.list(), bot?.handle ?? '');
   }
 
   private async attachPick(
@@ -178,9 +166,30 @@ function newFormSession(bot?: BotRecord): FormAttachSession {
     fields: {
       name: bot?.name ?? '',
       handle: bot?.handle ?? '',
-      persona: bot?.persona ?? COPY.defaultNewBotPersona,
+      persona: bot?.persona ?? '',
     },
   };
+}
+
+function postFormLoad(
+  panel: vscode.WebviewPanel,
+  bot: BotRecord | undefined,
+  bots: BotRecord[],
+  suggestedHandle: string,
+): void {
+  const folderFsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const workspaceEmpty = !folderFsPath;
+  void panel.webview.postMessage({
+    type: 'form/load',
+    bot,
+    bots,
+    suggestedHandle,
+    defaults: newDraftDefaults(bot),
+    workspaceEmpty,
+  });
+  if (workspaceEmpty) {
+    void panel.webview.postMessage({ type: 'workspace-empty' });
+  }
 }
 
 function newDraftDefaults(bot?: BotRecord): { persona: string; instructions: string } | undefined {
