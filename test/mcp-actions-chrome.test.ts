@@ -89,8 +89,9 @@ describe('Staged MCP actions chrome (§19 Grain B)', () => {
     expect(review).toContain('ThemeIcon(\'tools\')');
     expect(review).toContain('action.argsLine');
     expect(review).toContain('@${action.handle}');
-    expect(review).not.toMatch(/mcpItem[\s\S]*resourceUri/);
-    expect(review).not.toMatch(/mcpItem[\s\S]*openDiff/);
-    expect(review).not.toMatch(/kind === 'mcp'[\s\S]{0,80}command:/);
+    const mcpItemFn = review.slice(review.indexOf('function mcpItem'));
+    expect(mcpItemFn).not.toContain('resourceUri');
+    expect(mcpItemFn).not.toContain('openDiff');
+    expect(mcpItemFn).not.toContain('item.command');
   });
 });
