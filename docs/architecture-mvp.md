@@ -8,6 +8,8 @@ Companion: [UI/UX Specification](./ui-ux-spec.md). OpenSpec index: [openspec/spe
 
 Addendum 2026-08-30: Human voice is additive — architecture-human-voice.md + UI §18. Do not treat as a pack/TokenGovernor change. BR-1–6 frozen.
 
+Addendum 2026-08-30: Staged MCP actions are additive — architecture-mcp-actions.md + UI §19 Grain B. Two independent Approve gates. Do not treat as a BR-6 combined Approve. BR-1–6 / QC / HV frozen.
+
 ## Product
 
 VS Code extension: `publisher: botrider`, `name: bot-rider`, `displayName: Bot Rider`, `engines.vscode: ^1.99.0`, `activationEvents: []`.
@@ -58,6 +60,8 @@ Commands live in category **Bot Rider**. Split Stop is `botrider.chat.stop` only
 | `botrider.changeset.approve` | Approve |
 | `botrider.changeset.reject` | Reject |
 | `botrider.changeset.retry` | Retry |
+| `botrider.mcp.approve` | Approve MCP actions |
+| `botrider.mcp.reject` | Reject MCP actions |
 | `botrider.review.openDiff` | Open Diff |
 | `botrider.split.continue` | Continue |
 | `botrider.split.pick` | Pick a Bot to Decide |
@@ -124,17 +128,19 @@ interface RunStateDto {
 
 ### Host → UI
 
-`bots/snapshot`, `copilot/status`, `run/state`, `chat/turn-start`, `chat/token`, `chat/turn-end`, `chat/split`, `chat/mcp-read-start`, `chat/mcp-read-end`, `chat/mcp-skip`, `chat/board`, `changeset/preview`, `changeset/apply-failed`, `changeset/cleared`, `error`
+`bots/snapshot`, `copilot/status`, `run/state`, `chat/turn-start`, `chat/token`, `chat/turn-end`, `chat/split`, `chat/mcp-read-start`, `chat/mcp-read-end`, `chat/mcp-skip`, `chat/board`, `changeset/preview`, `changeset/apply-failed`, `changeset/cleared`, `mcp/actions-preview`, `mcp/actions-cleared`, `mcp/actions-failed`, `error`
 
-Additive MCP HostToUi only (no UiToHost MCP). Read-only `vscode.lm` MCP tools on propose, critique, and @-direct. Vote and implementer send with `tools: 'none'`.
+Additive MCP HostToUi: read-only `vscode.lm` MCP tools on propose, critique, and @-direct. Vote and implementer send with `tools: 'none'`. WM-1–3 unchanged. WM-4 never-invoke-write is superseded by [architecture-mcp-actions.md](./architecture-mcp-actions.md) staging + MCP-gate Approve; reads unchanged.
 
 Additive token-save: [architecture-token-save.md](./architecture-token-save.md). HostToUi `chat/board` only (no UiToHost for board edits). Chrome: [ui-ux-run-board.md](./ui-ux-run-board.md) §17. BR-1–BR-6 protocol frozen.
 
 Additive human voice: [architecture-human-voice.md](./architecture-human-voice.md). No new HostToUi / UiToHost. Chrome: [ui-ux-chat-prose.md](./ui-ux-chat-prose.md) §18. Not a pack/TokenGovernor change. WM unchanged. BR-1–BR-6 protocol frozen.
 
+Additive staged MCP actions (Grain B): [architecture-mcp-actions.md](./architecture-mcp-actions.md). HostToUi `mcp/actions-preview` / `mcp/actions-cleared` / `mcp/actions-failed`. UiToHost `mcp/actions-approve` / `mcp/actions-reject`. Two independent Approve gates. Chrome: [ui-ux-mcp-actions.md](./ui-ux-mcp-actions.md) §19. No pack/TokenGovernor change. No HV change. BR-1–BR-6 protocol frozen.
+
 ### UI → host
 
-`bots/create`, `bots/update`, `bots/toggle`, `bots/delete`, `chat/send`, `chat/stop`, `split/continue`, `split/pick`, `changeset/approve`, `changeset/retry`, `changeset/reject`, `review/open-diff`, `copilot/recheck`
+`bots/create`, `bots/update`, `bots/toggle`, `bots/delete`, `chat/send`, `chat/stop`, `split/continue`, `split/pick`, `changeset/approve`, `changeset/retry`, `changeset/reject`, `mcp/actions-approve`, `mcp/actions-reject`, `review/open-diff`, `copilot/recheck`
 
 Card Stop posts `chat/stop`.
 
