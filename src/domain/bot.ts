@@ -1,3 +1,9 @@
+export interface BotAttachment {
+  path: string;
+  name: string;
+  snapshot: string;
+}
+
 export interface BotRecord {
   id: string;
   handle: string;
@@ -9,6 +15,7 @@ export interface BotRecord {
   colorIndex: number;
   createdAt: string;
   updatedAt: string;
+  attachments?: BotAttachment[];
 }
 
 export interface BotDraft {
@@ -18,6 +25,26 @@ export interface BotDraft {
   role: string;
   instructions: string;
   active?: boolean;
+  attachments?: BotAttachment[];
+}
+
+export const ATTACH_MAX_BYTES = 262144;
+export const ATTACH_BINARY_PROBE_BYTES = 8192;
+export const CLEARLY_AGENT_NAMES = ['agents.md', 'skill.md', 'agent.md'] as const;
+
+export function attachmentsOf(bot?: { attachments?: BotAttachment[] } | null): BotAttachment[] {
+  if (!bot || !Array.isArray(bot.attachments)) {
+    return [];
+  }
+  return bot.attachments.map((item) => ({
+    path: item.path,
+    name: item.name,
+    snapshot: item.snapshot,
+  }));
+}
+
+export function copyBotRecord(bot: BotRecord): BotRecord {
+  return { ...bot, attachments: attachmentsOf(bot) };
 }
 
 export const HANDLE_PATTERN = /^[a-z0-9][a-z0-9_-]{0,31}$/;

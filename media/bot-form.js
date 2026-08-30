@@ -136,6 +136,17 @@
       }
     } else if (msg.type === 'form/error') {
       err.textContent = msg.message || '';
+    } else if (msg.type === 'bots/attach-mapped') {
+      if (msg.name && !name.value.trim()) {
+        name.value = msg.name;
+      }
+      if (msg.handle && !handle.value.trim()) {
+        handle.value = msg.handle;
+        handleTouched = true;
+      }
+      if (msg.persona && !persona.value.trim()) {
+        persona.value = msg.persona;
+      }
     }
   });
 

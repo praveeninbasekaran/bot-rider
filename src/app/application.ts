@@ -179,6 +179,7 @@ export class Application {
           role: msg.draft.role,
           instructions: msg.draft.instructions,
           active: msg.draft.active,
+          attachments: msg.draft.attachments,
         });
         break;
       case 'bots/update': {
@@ -194,6 +195,7 @@ export class Application {
           role: patch.role ?? msg.role ?? existing.role,
           instructions: patch.instructions ?? msg.instructions ?? existing.instructions,
           active: msg.active ?? existing.active,
+          attachments: patch.attachments ?? existing.attachments,
         });
         break;
       }
@@ -234,6 +236,8 @@ export class Application {
         await this.recheck();
         break;
       case 'review/open-diff':
+      case 'bots/attach-pick':
+      case 'bots/attach-remove':
         break;
     }
   }
