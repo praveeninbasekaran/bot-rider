@@ -3,6 +3,12 @@ import type { HostToUi, UiToHost } from '../protocol/messages';
 import { TOKEN_FLUSH_MS } from '../app/copy';
 import { webviewHtml } from './webview-html';
 
+type ChatUiMsg =
+  | UiToHost
+  | { type: 'ui/pick' }
+  | { type: 'ui/focus-expanded' }
+  | { type: 'ui/focus-review-mcp' };
+
 export class ChatHub {
   private readonly views = new Set<vscode.Webview>();
   private tokenBuf = '';
@@ -15,13 +21,13 @@ export class ChatHub {
   private lastBoard: HostToUi | undefined;
   private lastMcp: HostToUi | undefined;
 
-  constructor(private readonly onUi: (msg: UiToHost | { type: 'ui/pick' } | { type: 'ui/focus-expanded' }) => Promise<void>) {}
+  constructor(private readonly onUi: (msg: ChatUiMsg) => Promise<void>) {}
 
   attach(webview: vscode.Webview): vscode.Disposable {
     this.views.add(webview);
     this.replayTo(webview);
     const sub = webview.onDidReceiveMessage(
-      (msg: UiToHost | { type: 'ui/pick' } | { type: 'ui/focus-expanded' } | { type: 'ui/ready' }) => {
+      (msg: ChatUiMsg | { type: 'ui/ready' }) => {
         if (msg && msg.type === 'ui/ready') {
           this.replayTo(webview);
           return;
@@ -56,11 +62,7 @@ export class ChatHub {
     if (msg.type === 'chat/board') {
       this.lastBoard = msg;
     }
-    if (
-      msg.type === 'mcp/actions-preview' ||
-      msg.type === 'mcp/actions-cleared' ||
-      msg.type === 'mcp/actions-failed'
-    ) {
+    if (msg.type === 'mcp/actions-preview' || msg.type === 'mcp/actions-cleared') {
       this.lastMcp = msg;
     }
     if (msg.type === 'chat/turn-start') {
