@@ -6,6 +6,8 @@ Companion: [UI/UX Specification](./ui-ux-spec.md). OpenSpec index: [openspec/spe
 
 **Id mapping:** design notes that used `botRider.*` map 1:1 to contribution ids `botrider.*` (lowercase). Example: `botRider.bots` → `botrider.bots`, `botRider.chat.stop` → `botrider.chat.stop`.
 
+Addendum 2026-08-30: Human voice is additive — architecture-human-voice.md + UI §18. Do not treat as a pack/TokenGovernor change. BR-1–6 frozen.
+
 ## Product
 
 VS Code extension: `publisher: botrider`, `name: bot-rider`, `displayName: Bot Rider`, `engines.vscode: ^1.99.0`, `activationEvents: []`.
@@ -127,6 +129,8 @@ interface RunStateDto {
 Additive MCP HostToUi only (no UiToHost MCP). Read-only `vscode.lm` MCP tools on propose, critique, and @-direct. Vote and implementer send with `tools: 'none'`.
 
 Additive token-save: [architecture-token-save.md](./architecture-token-save.md). HostToUi `chat/board` only (no UiToHost for board edits). Chrome: [ui-ux-run-board.md](./ui-ux-run-board.md) §17. BR-1–BR-6 protocol frozen.
+
+Additive human voice: [architecture-human-voice.md](./architecture-human-voice.md). No new HostToUi / UiToHost. Chrome: [ui-ux-chat-prose.md](./ui-ux-chat-prose.md) §18. Not a pack/TokenGovernor change. WM unchanged. BR-1–BR-6 protocol frozen.
 
 ### UI → host
 
