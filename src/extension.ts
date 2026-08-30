@@ -51,7 +51,10 @@ export function activate(context: vscode.ExtensionContext): void {
     if (
       msg.type === 'changeset/preview' ||
       msg.type === 'changeset/cleared' ||
-      msg.type === 'changeset/apply-failed'
+      msg.type === 'changeset/apply-failed' ||
+      msg.type === 'mcp/actions-preview' ||
+      msg.type === 'mcp/actions-cleared' ||
+      msg.type === 'mcp/actions-failed'
     ) {
       reviewTree?.refresh();
     }
@@ -147,6 +150,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('botrider.changeset.approve', () => approveChanges()),
     vscode.commands.registerCommand('botrider.changeset.reject', () => app.reject()),
     vscode.commands.registerCommand('botrider.changeset.retry', () => approveChanges('retry')),
+    vscode.commands.registerCommand('botrider.mcp.approve', () => app.approveMcp()),
+    vscode.commands.registerCommand('botrider.mcp.reject', () => app.rejectMcp()),
     vscode.commands.registerCommand(
       'botrider.review.openDiff',
       async (item?: { file?: { path: string; op: 'create' | 'update' | 'delete' } }) => {
@@ -215,6 +220,7 @@ export function activate(context: vscode.ExtensionContext): void {
       hasBots: bots.length > 0,
       hasActiveBots: bots.some((b) => b.active),
       hasPendingChanges: current.changesets.hasPending(),
+      hasPendingMcp: current.mcp.actions.hasPending(),
       debateRunning: run.debateRunning,
       splitOpen: run.splitOpen,
       copilotReady: gatewayStatus === 'ready',
@@ -228,5 +234,5 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  // Session-only transcript and pending changeset die with the host.
+  // Session-only transcript, pending changeset, and pending MCP batch die with the host.
 }

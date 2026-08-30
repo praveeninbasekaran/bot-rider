@@ -108,6 +108,22 @@
         "category": "Bot Rider",
         "icon": "$(refresh)",
         "enablement": "botrider.applyFailed"
+      },
+      {
+        "command": "botrider.mcp.approve",
+        "title": "Approve MCP actions",
+        "tooltip": "Approve and invoke staged MCP actions",
+        "category": "Bot Rider",
+        "icon": "$(check)",
+        "enablement": "botrider.hasPendingMcp"
+      },
+      {
+        "command": "botrider.mcp.reject",
+        "title": "Reject MCP actions",
+        "tooltip": "Reject and discard staged MCP actions",
+        "category": "Bot Rider",
+        "icon": "$(discard)",
+        "enablement": "botrider.hasPendingMcp"
       }
     ],
     "menus": {
@@ -143,6 +159,14 @@
         {
           "command": "botrider.changeset.retry",
           "when": "botrider.applyFailed"
+        },
+        {
+          "command": "botrider.mcp.approve",
+          "when": "botrider.hasPendingMcp"
+        },
+        {
+          "command": "botrider.mcp.reject",
+          "when": "botrider.hasPendingMcp"
         }
       ],
       "view/title": [

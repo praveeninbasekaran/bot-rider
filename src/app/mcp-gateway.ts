@@ -2,6 +2,7 @@ import { COPY } from './copy';
 import type { CancelToken } from './ports';
 import type { LmChatTool } from './ports';
 import type { HostToUi, McpSkipReason } from '../protocol/messages';
+import { argsLineFrom, McpActionStore } from './mcp-action-store';
 
 export const WRITE_ISH_RE = /\b(comment|transition|edit|post|create|update|delete|write|patch|merge|assign)\b/i;
 export const MCP_SETTLE_MS = 400;
@@ -105,12 +106,30 @@ export function passesNameGate(tool: McpToolInfo): boolean {
 }
 
 export function listReadOnlyTools(tools: readonly McpToolInfo[]): LmChatTool[] {
-  return tools.filter(isReadOnlyMcp).map((tool) => ({
+  return tools.filter(isReadOnlyMcp).map(toLmChatTool);
+}
+
+/** mcp-tagged and not readOnlyHint. Advertised on debate turns for staging. */
+export function isStageableMcp(tool: McpToolInfo): boolean {
+  return isMcpTagged(tool) && tool.annotations?.readOnlyHint !== true;
+}
+
+export function listStageableTools(tools: readonly McpToolInfo[]): LmChatTool[] {
+  return tools.filter(isStageableMcp).map(toLmChatTool);
+}
+
+function toLmChatTool(tool: McpToolInfo): LmChatTool {
+  return {
     name: tool.name,
     description: tool.description ?? '',
     inputSchema: tool.inputSchema,
-  }));
+  };
 }
+
+export type McpDecideResult =
+  | { action: 'invoke'; server: string; tool: string }
+  | { action: 'stage'; server: string; tool: string }
+  | { action: 'skip'; reason: McpSkipReason; message: string; server: string; tool: string };
 
 export function serverAndTool(info: McpToolInfo | undefined, callName: string): { server: string; tool: string } {
   const source = info?.source;
@@ -181,13 +200,15 @@ export class McpGateway {
   private hadConfig = false;
   private readonly notes: string[] = [];
   private readonly settleMs: number;
+  readonly actions: McpActionStore;
 
   constructor(
     private readonly port: McpPort,
     private readonly emit: (msg: HostToUi) => void,
-    options: { settleMs?: number } = {},
+    options: { settleMs?: number; actions?: McpActionStore } = {},
   ) {
     this.settleMs = options.settleMs ?? 0;
+    this.actions = options.actions ?? new McpActionStore(emit);
   }
 
   get didStart(): boolean {
@@ -200,6 +221,74 @@ export class McpGateway {
 
   listReadOnly(): LmChatTool[] {
     return listReadOnlyTools(this.port.listTools());
+  }
+
+  listStageable(): LmChatTool[] {
+    return listStageableTools(this.port.listTools());
+  }
+
+  decide(call: { name: string }): McpDecideResult {
+    const tools = this.port.listTools();
+    const match = tools.find((tool) => tool.name === call.name);
+    const ids = serverAndTool(match, call.name);
+    if (match && isReadOnlyMcp(match) && passesNameGate(match)) {
+      return { action: 'invoke', ...ids };
+    }
+    if (match && isStageableMcp(match)) {
+      return { action: 'stage', ...ids };
+    }
+    const writeKnown = !!(match && isMcpTagged(match) && !isReadOnlyMcp(match));
+    const nameBlocked =
+      looksWriteIsh(call.name, match ? toolTitle(match) : '') || (match ? !passesNameGate(match) : false);
+    if (writeKnown || nameBlocked) {
+      return {
+        action: 'skip',
+        reason: 'mutating-blocked',
+        message: COPY.mcpSkipMutating(ids.server),
+        ...ids,
+      };
+    }
+    return { action: 'skip', reason: 'tool-missing', message: COPY.mcpSkipToolMissing, ...ids };
+  }
+
+  announceSkip(
+    botId: string,
+    handle: string,
+    decision: { reason: McpSkipReason; message: string; server: string; tool: string },
+  ): void {
+    this.emitSkip(botId, handle, decision);
+  }
+
+  stage(
+    call: McpToolCall,
+    botId: string,
+    handle: string,
+    ids: { server: string; tool: string },
+  ): { text: string } {
+    this.actions.append({
+      name: call.name,
+      server: ids.server,
+      tool: ids.tool,
+      args: call.input,
+      argsLine: argsLineFrom(call.input),
+      botId,
+      handle,
+    });
+    return { text: COPY.mcpStagedResult };
+  }
+
+  async approveStaged(): Promise<boolean> {
+    const token: CancelToken = {
+      isCancellationRequested: false,
+      onCancellationRequested: () => ({ dispose() {} }),
+    };
+    return this.actions.approve(async (action) => {
+      await this.port.invokeTool(action.name, action.args, token);
+    });
+  }
+
+  rejectStaged(): void {
+    this.actions.clear();
   }
 
   contextLines(): string[] {

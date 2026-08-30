@@ -149,6 +149,21 @@ export class Application {
     }
   }
 
+  /** Grain B: invoke staged MCP only. Does not applyEdit or set applyFailed. Allowed while Split is open. */
+  async approveMcp(): Promise<boolean> {
+    return this.mcp.approveStaged();
+  }
+
+  /** Grain B: drop the MCP batch only. File changeset untouched. */
+  rejectMcp(): void {
+    this.mcp.rejectStaged();
+  }
+
+  /** Session reload of pending MCP. Files stay. */
+  reloadMcpActions(): void {
+    this.mcp.rejectStaged();
+  }
+
   async recheck(): Promise<void> {
     const status = await this.gateway.ensureAvailable();
     this.emit({ type: 'copilot/status', status, message: copilotStatusMessage(status) });
@@ -208,6 +223,12 @@ export class Application {
         break;
       case 'changeset/reject':
         await this.reject();
+        break;
+      case 'mcp/actions-approve':
+        await this.approveMcp();
+        break;
+      case 'mcp/actions-reject':
+        this.rejectMcp();
         break;
       case 'copilot/recheck':
         await this.recheck();

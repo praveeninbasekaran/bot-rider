@@ -13,6 +13,7 @@ export class ChatHub {
   private lastSnapshot: HostToUi | undefined;
   private lastExpanded: HostToUi | undefined;
   private lastBoard: HostToUi | undefined;
+  private lastMcp: HostToUi | undefined;
 
   constructor(private readonly onUi: (msg: UiToHost | { type: 'ui/pick' } | { type: 'ui/focus-expanded' }) => Promise<void>) {}
 
@@ -55,6 +56,13 @@ export class ChatHub {
     if (msg.type === 'chat/board') {
       this.lastBoard = msg;
     }
+    if (
+      msg.type === 'mcp/actions-preview' ||
+      msg.type === 'mcp/actions-cleared' ||
+      msg.type === 'mcp/actions-failed'
+    ) {
+      this.lastMcp = msg;
+    }
     if (msg.type === 'chat/turn-start') {
       this.flushTokens();
       this.broadcast(msg);
@@ -83,7 +91,10 @@ export class ChatHub {
     if (
       msg.type === 'chat/mcp-read-start' ||
       msg.type === 'chat/mcp-read-end' ||
-      msg.type === 'chat/mcp-skip'
+      msg.type === 'chat/mcp-skip' ||
+      msg.type === 'mcp/actions-preview' ||
+      msg.type === 'mcp/actions-cleared' ||
+      msg.type === 'mcp/actions-failed'
     ) {
       this.flushTokens();
     }
@@ -120,6 +131,9 @@ export class ChatHub {
     }
     if (this.lastBoard) {
       void webview.postMessage(this.lastBoard);
+    }
+    if (this.lastMcp) {
+      void webview.postMessage(this.lastMcp);
     }
   }
 

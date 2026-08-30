@@ -7,10 +7,7 @@ import type { CopilotStatus } from '../src/protocol/messages';
 import type { TurnKind } from '../src/domain/run-state';
 import type { McpPort, McpToolInfo } from '../src/app/mcp-gateway';
 import { McpGateway } from '../src/app/mcp-gateway';
-import type { McpPort, McpToolInfo } from '../src/app/mcp-gateway';
-import { McpGateway } from '../src/app/mcp-gateway';
-import type { HostToUi } from '../src/protocol/messages';
-import type { CancelToken } from '../src/app/ports';
+import type { LanguageModelPort, LmModel, LmSendOptions } from '../src/app/ports';
 
 export class MemoryStore implements StateStore {
   private readonly data = new Map<string, unknown>();
@@ -164,6 +161,8 @@ export class FakeMcpPort implements McpPort {
   invokeCalls: { name: string; input: unknown }[] = [];
   startCalls = 0;
   nextResult: unknown = { content: [{ value: '{"items":[{"title":"Alpha"}]}' }] };
+  failNames = new Set<string>();
+  failError: Error = new Error('MCP invoke failed');
 
   listTools(): McpToolInfo[] {
     return this.tools;
@@ -179,6 +178,9 @@ export class FakeMcpPort implements McpPort {
 
   async invokeTool(name: string, input: unknown, _token: CancelToken): Promise<unknown> {
     this.invokeCalls.push({ name, input });
+    if (this.failNames.has(name)) {
+      throw this.failError;
+    }
     return this.nextResult;
   }
 }
@@ -192,6 +194,60 @@ export function readOnlyMcpTool(overrides: Partial<McpToolInfo> = {}): McpToolIn
     source: { name: 'github' },
     ...overrides,
   };
+}
+
+export function stageableMcpTool(overrides: Partial<McpToolInfo> = {}): McpToolInfo {
+  return {
+    name: 'create_issue',
+    description: 'Create an issue',
+    tags: ['mcp'],
+    annotations: {},
+    source: { name: 'github' },
+    ...overrides,
+  };
+}
+
+export class FakeLm implements LanguageModelPort {
+  selectCalls = 0;
+  models: LmModel[] = [];
+  can: boolean | undefined = true;
+  lastOptions: LmSendOptions | undefined;
+  private readonly modelLs = new Set<() => void>();
+  private readonly accessLs = new Set<() => void>();
+
+  async selectChatModels(selector: { vendor: 'copilot' }): Promise<LmModel[]> {
+    this.selectCalls += 1;
+    if (selector.vendor !== 'copilot') {
+      return [];
+    }
+    return this.models.filter((m) => m.vendor === 'copilot');
+  }
+
+  canSendRequest(_model: LmModel): boolean | undefined {
+    return this.can;
+  }
+
+  onDidChangeChatModels(listener: () => void) {
+    this.modelLs.add(listener);
+    return { dispose: () => this.modelLs.delete(listener) };
+  }
+
+  onDidChangeAccess(listener: () => void) {
+    this.accessLs.add(listener);
+    return { dispose: () => this.accessLs.delete(listener) };
+  }
+
+  fireModels(): void {
+    for (const listener of this.modelLs) {
+      listener();
+    }
+  }
+
+  fireAccess(): void {
+    for (const listener of this.accessLs) {
+      listener();
+    }
+  }
 }
 
 export function configuredMcp(emit: (msg: HostToUi) => void, tools?: McpToolInfo[]): { port: FakeMcpPort; mcp: McpGateway } {

@@ -71,7 +71,15 @@ describe('contribution points', () => {
         'botrider.split.continue',
         'botrider.split.pick',
         'botrider.copilot.recheck',
+        'botrider.mcp.approve',
+        'botrider.mcp.reject',
       ]),
+    );
+    expect(pkg.contributes.commands.find((c) => c.command === 'botrider.mcp.approve')?.enablement).toBe(
+      'botrider.hasPendingMcp',
+    );
+    expect(pkg.contributes.commands.find((c) => c.command === 'botrider.mcp.reject')?.enablement).toBe(
+      'botrider.hasPendingMcp',
     );
     expect(commands).not.toContain('botrider.split.stop');
     expect(pkg.contributes.commands.every((c) => c.category === 'Bot Rider')).toBe(true);

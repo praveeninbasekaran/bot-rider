@@ -4,6 +4,7 @@ export const CONTEXT_KEYS = [
   'botrider.hasBots',
   'botrider.hasActiveBots',
   'botrider.hasPendingChanges',
+  'botrider.hasPendingMcp',
   'botrider.debateRunning',
   'botrider.splitOpen',
   'botrider.copilotReady',
@@ -28,6 +29,7 @@ export class ContextKeys {
     hasBots: boolean;
     hasActiveBots: boolean;
     hasPendingChanges: boolean;
+    hasPendingMcp?: boolean;
     debateRunning: boolean;
     splitOpen: boolean;
     copilotReady: boolean;
@@ -37,6 +39,7 @@ export class ContextKeys {
     await this.set('botrider.hasBots', state.hasBots);
     await this.set('botrider.hasActiveBots', state.hasActiveBots);
     await this.set('botrider.hasPendingChanges', state.hasPendingChanges);
+    await this.set('botrider.hasPendingMcp', state.hasPendingMcp ?? false);
     await this.set('botrider.debateRunning', state.debateRunning);
     await this.set('botrider.splitOpen', state.splitOpen);
     await this.set('botrider.copilotReady', state.copilotReady);
