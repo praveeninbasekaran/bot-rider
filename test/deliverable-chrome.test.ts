@@ -153,12 +153,36 @@ describe('§21 standard-deliverables Proposed Changes chrome', () => {
     expect(review).not.toMatch(/report\s*→\s*html|report.*\.html/);
     expect(review).not.toContain('lockComposer');
     expect(chatJs).not.toMatch(/Which format should I write/);
-    expect(chatJs).toContain('const deliverableAsk = !!(state.run && state.run.deliverableAsk)');
-    expect(chatJs).toContain('!!state.splitOpen || (!!state.debateRunning && !deliverableAsk)');
     expect(pkg.contributes.commands.some((c) => /pick.*format|format.*pick/i.test(c.command))).toBe(false);
   });
 
-  it('infers preview kind from the extension when kind is omitted', () => {
+  it('keeps composer enabled on deliverableAsk; Split lock still wins', () => {
+    expect(chatJs).toContain('const deliverableAsk = !!(state.run && state.run.deliverableAsk)');
+    expect(chatJs).toContain('!!state.splitOpen || (!!state.debateRunning && !deliverableAsk)');
+    const composerLocked = (s: {
+      ready?: boolean;
+      splitOpen?: boolean;
+      debateRunning?: boolean;
+      deliverableAsk?: boolean;
+    }) => {
+      const ready = s.ready !== false;
+      const deliverableAsk = !!s.deliverableAsk;
+      return !ready || !!s.splitOpen || (!!s.debateRunning && !deliverableAsk);
+    };
+    expect(composerLocked({ deliverableAsk: true })).toBe(false);
+    expect(composerLocked({ deliverableAsk: true, debateRunning: true })).toBe(false);
+    expect(composerLocked({ deliverableAsk: true, splitOpen: true })).toBe(true);
+    expect(composerLocked({ splitOpen: true })).toBe(true);
+    expect(composerLocked({ debateRunning: true })).toBe(true);
+  });
+
+  it('consumes optional changeset/preview kind and infers from the extension when omitted', () => {
+    expect(inferChangeKind({ path: 'notes.txt', kind: 'html-preview' })).toBe('html-preview');
+    expect(inferChangeKind({ path: 'notes.txt', kind: 'office-binary' })).toBe('office-binary');
+    expect(resolveProposedOpen({ path: 'notes.txt', op: 'create', kind: 'html-preview', content: '<p>x</p>' }).mode).toBe(
+      'html-preview',
+    );
+    expect(resolveProposedOpen({ path: 'mystery.bin', op: 'create', kind: 'office-binary' }).mode).toBe('office-inspect');
     expect(inferChangeKind({ path: 'overview.html' })).toBe('html-preview');
     expect(inferChangeKind({ path: 'Q3-plan.docx' })).toBe('office-binary');
     expect(inferChangeKind({ path: 'budget.xlsx' })).toBe('office-binary');
@@ -175,5 +199,7 @@ describe('§21 standard-deliverables Proposed Changes chrome', () => {
       'src/app.ts:text',
     ]);
     expect(preview.every((f) => /\.\w+$/.test(f.path))).toBe(true);
+    expect(review).toContain("kind: 'kind' in file ? file.kind : undefined");
+    expect(extension).toContain('kind?: ChangePreviewKind');
   });
 });

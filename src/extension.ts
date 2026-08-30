@@ -16,6 +16,7 @@ import { VsCodeMcpPort } from './adapters/vscode-mcp';
 import { VsCodeWorkspacePort } from './adapters/vscode-workspace';
 import { VsCodeLspSlicePort } from './adapters/vscode-lsp';
 import type { HostToUi, UiToHost } from './protocol/messages';
+import type { ChangePreviewKind, FileOp } from './domain/changeset';
 import { COPY, copilotStatusMessage } from './app/copy';
 import { MCP_SETTLE_MS, McpGateway } from './app/mcp-gateway';
 
@@ -170,7 +171,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('botrider.review.focusMcp', () => reviewTree.revealMcp()),
     vscode.commands.registerCommand(
       'botrider.review.openDiff',
-      async (item?: { file?: { path: string; op: 'create' | 'update' | 'delete' } }) => {
+      async (item?: { file?: { path: string; op: FileOp; kind?: ChangePreviewKind } }) => {
         if (item?.file) {
           await openProposedDiff(item.file, proposed);
         }
