@@ -286,7 +286,7 @@ describe('snapshot ingest', () => {
   it('parses H1 when frontmatter is absent', () => {
     expect(parseClearlyAgent('# Mapper\nRemaining body\n')).toEqual({
       name: 'Mapper',
-      persona: 'Remaining body\n',
+      persona: 'Remaining body',
     });
   });
 });
@@ -482,20 +482,19 @@ describe('TokenGovernor attachment extras', () => {
       expect(joined(vote.messages)).not.toContain('SNAP-KEEP');
     }
 
-    const withoutTail = await gov.pack({
+    const keepHead = await gov.pack({
       bot: { ...attached, attachments: attached.attachments?.slice(0, 1) },
       kind: 'debate',
       instruction: turnInstruction('propose', 1, 'go'),
       board,
       workspace: defaultWorkspace,
       counter: lenCounter(),
-      mcpContext: ['MCP-NOTE'],
     });
-    expect(withoutTail.ok).toBe(true);
-    if (!withoutTail.ok) {
+    expect(keepHead.ok).toBe(true);
+    if (!keepHead.ok) {
       return;
     }
-    const dropTail = lenCounter(await lenCounter().countTokens(withoutTail.messages));
+    const dropTail = lenCounter(await lenCounter().countTokens(keepHead.messages));
     const trimmed = await gov.pack({
       bot: attached,
       kind: 'debate',
@@ -503,7 +502,7 @@ describe('TokenGovernor attachment extras', () => {
       board,
       workspace: defaultWorkspace,
       counter: dropTail,
-      mcpContext: ['MCP-NOTE'],
+      mcpContext: ['MCP-NOTE-' + 'Z'.repeat(80)],
     });
     expect(trimmed.ok).toBe(true);
     if (trimmed.ok) {
