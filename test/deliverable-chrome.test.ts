@@ -151,8 +151,10 @@ describe('§21 standard-deliverables Proposed Changes chrome', () => {
     expect(openFn).toContain("executeCommand('vscode.diff'");
     expect(review).not.toMatch(/showQuickPick|ui\/pick|format picker|formatPicker/i);
     expect(review).not.toMatch(/report\s*→\s*html|report.*\.html/);
+    expect(review).not.toContain('lockComposer');
     expect(chatJs).not.toMatch(/Which format should I write/);
-    expect(chatJs).toContain('deliverableAsk');
+    expect(chatJs).toContain('const deliverableAsk = !!(state.run && state.run.deliverableAsk)');
+    expect(chatJs).toContain('!!state.splitOpen || (!!state.debateRunning && !deliverableAsk)');
     expect(pkg.contributes.commands.some((c) => /pick.*format|format.*pick/i.test(c.command))).toBe(false);
   });
 

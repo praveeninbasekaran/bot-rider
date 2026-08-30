@@ -158,13 +158,15 @@ describe('contribution points', () => {
 
   it('Proposed Changes keeps a localeCompare file list and adds an MCP section', () => {
     const src = readFileSync(join(root, 'src/adapters/review-tree.ts'), 'utf8');
+    const chrome = readFileSync(join(root, 'src/adapters/review-chrome.ts'), 'utf8');
     expect(src).toContain('localeCompare');
     expect(src).not.toMatch(/kind: 'group'/);
     expect(src).not.toMatch(/proposedGroup/);
     expect(src).not.toMatch(/function group\(/);
-    expect(src).toMatch(/description = 'Added'/);
-    expect(src).toMatch(/description = 'Deleted'/);
-    expect(src).toMatch(/description = 'Modified'/);
+    expect(chrome).toContain("file.op === 'create' ? 'Added'");
+    expect(chrome).toContain("file.op === 'delete' ? 'Deleted'");
+    expect(chrome).toContain("'Modified'");
+    expect(src).toContain('item.description = chrome.description');
     expect(src).toContain('files · pending review');
     expect(src).toContain('1 file · pending review');
     expect(src).toContain("kind: 'filesSection' | 'mcpSection'");
