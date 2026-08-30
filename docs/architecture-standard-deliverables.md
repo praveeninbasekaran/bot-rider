@@ -4,7 +4,7 @@ Status: **ready for implementation.** Design only until a developer lands it. No
 Stories: **SD-1–4 is the full story set.** **SD-1** Swarm ask when format or outline is missing, **SD-2** one primary real file (keyword inference only when a format is named), **SD-3** host-built Office/HTML from board + MCP + decisions, **SD-4** Proposed Changes open (HTML preview / Office inspect).
 UI chrome contract: `ui-ux-spec.md` §21 (addendum `ui-ux-deliverables.md`). Chrome pointer remains §21.
 Date: 2026-08-30.
-Parent: `architecture-mvp.md`. Files still BR-6. MCP still Grain B (`architecture-mcp-actions.md`). IE snapshots (`architecture-bot-attachments.md`) are template **only** if that bot already has one. HV voice unchanged.
+Parent: `architecture-mvp.md`. Files still BR-6. MCP still Grain B (`architecture-mcp-actions.md`). IE-attached Office/HTML (`architecture-bot-attachments.md`) may be used as template **only** if that bot already has one. HV voice unchanged.
 Additive. **Copilot stays `vscode.lm`.** No extra keys. No second runtime.
 
 Split (when PO allocates): **Developer 1** host (format detect, Swarm ask, `DeliverableBuilder`, changeset bytes, inspect/preview emit). **Developer 2** §21 Proposed Changes consume (HTML preview, Office inspect line). QA after both.
@@ -13,18 +13,21 @@ Split (when PO allocates): **Developer 1** host (format detect, Swarm ask, `Deli
 
 ## 0. Non-negotiables (PO + SD-1–4 + §21)
 
-- **Generic**, not a PMO bot. No Bot Rider stock template pack. No gallery.
+- **Generic**, not a PMO bot. **No stock template pack.** No gallery. No template picker/pack. **No email.**
 - Real **`.docx` / `.xlsx` / `.pptx` / `.html`** in the workspace **after BR-6 Approve**. Not markdown renamed. Not `.md` with a fake extension. **No macros.**
 - **Curate** from Run board + **current-turn MCP** + host **decisions**. **Not** the Swarm transcript.
-- **Infer format from keywords only when they named a format** (Word / Excel / PowerPoint / HTML, or `.docx` `.xlsx` `.pptx` `.html`). Bare **“report” does NOT default to html.**
-- **SD-1:** if **format** or **required content / outline** is missing → a bot **asks in Swarm** (HV paragraphs). **SD ask only after Continue, or when there is no Split.** Split composer lock still wins. Composer **stays enabled** for the ask itself. Skip that ask if the task already named **both**. No picker, no modal, no wizard.
+- **Keyword inference only when they named a format:** `deck` → `pptx`; `spreadsheet` → `xlsx`; `word doc` / `word document` → `docx`; `html` → `html`. Bare **“report”** still asks. Bare **“document”** without Word still asks. **Never** map `report` → html.
+- **Missing format OR only “report”:** Swarm HV question naming Word / Excel / PowerPoint / HTML. Composer enabled. **Not during Split;** Split still locks send if open. **SD ask only after Continue, or when there is no Split.** Split composer lock still wins. Composer **stays enabled** for the ask itself.
+- **Missing outline:** ask what must be in the document; **do not invent sections.** Format + outline questions **MAY share one turn.**
+- **Format AND content already named:** no questions; create in existing Files section (BR-6) with real extension. **Do NOT auto-open** Word / Excel / PowerPoint / browser after Approve.
 - Until format is known: **do not stage** any deliverable create (not html, not Office).
-- **One primary file** unless this Send asked for several formats.
+- **One primary file** unless this Send asked for more formats.
 - **Same create path** as other files: Files section, BR-6 Approve / Reject. **No new gate.** MCP stays Grain B and separate.
-- **No email.** No fourth view. No token chrome. No pre-Send gate.
-- IE snapshot as template **only** if that implementer bot **already** has an attached snapshot that matches the chosen format (HTML text snapshot). **Generic valid file when no IE template. No stock template pack.**
-- After Approve, the real file is on disk; OS / VS Code default open applies.
+- No fourth view. No token chrome. No pre-Send gate.
+- **No stock template pack. Generic valid file if no IE template.** IE-attached Office/HTML may be used as template when that bot already has one.
+- After Approve, the real file is on disk. **Do NOT auto-open** Word / Excel / PowerPoint / browser.
 - Additive. **BR / QC / HV / MA / IE frozen.** Leftovers 002/003/009/014 out. Graphify out.
+- **Implementer** still runs after consensus or Pick, and only once format+outline are known.
 
 ---
 
@@ -47,6 +50,7 @@ Send (goal text + board)
 html Open  → proposed HTML preview ({filename} (Proposed))
 Office Open → inspect line; NEVER vscode.diff on zip/XML
 Approve     → applyEdit createFile (binary or UTF-8)  [existing BR-6]
+            → do NOT auto-open Word / Excel / PowerPoint / browser
 ```
 
 ---
@@ -55,34 +59,48 @@ Approve     → applyEdit createFile (binary or UTF-8)  [existing BR-6]
 
 Host-owned. **No Copilot call** just to guess the format.
 
-**Named format** (any one is enough):
+**Keyword inference only when they named a format:**
 
 | User said | Format |
 | --- | --- |
+| `deck` | `pptx` |
+| `spreadsheet` | `xlsx` |
+| `word doc` / `word document` | `docx` |
+| `html` | `html` |
 | `docx`, `word`, `.docx` | `docx` |
-| `xlsx`, `excel`, `spreadsheet`, `.xlsx` | `xlsx` |
+| `xlsx`, `excel`, `.xlsx` | `xlsx` |
 | `pptx`, `powerpoint`, `ppt`, `.pptx` | `pptx` |
-| `html`, `webpage`, `.html` | `html` |
+| `webpage`, `.html` | `html` |
 
-**Not a format:** `report`, `document`, `deck`, `slides`, `plan`, `summary` alone. Those stay **missing format** → Swarm ask. **Never** map `report` → html.
+**Not a format:** bare **“report”** still asks. Bare **“document”** without Word still asks. `slides`, `plan`, `summary` alone stay **missing format** → Swarm ask. **Never** map `report` → html.
 
-**Outline / required content** is present when the Send (or the user’s Swarm answer) names what belongs in the file (sections, sheet, slides, or an explicit “include X”). A bare “make a Word file” is format **without** outline → still ask.
+**Outline / required content** is present when the Send (or the user’s Swarm answer) names what belongs in the file (sections, sheet, slides, or an explicit “include X”). A bare “make a Word file” is format **without** outline → still ask. **Do not invent sections.**
 
-**Ask copy** is HV conversational, host-instructed, not a picker:
+**Ask copy** is HV conversational, host-instructed, not a picker. Format + outline questions **MAY share one turn.**
+
+Missing format OR only “report”:
+
+> Which format should I write — Word, Excel, PowerPoint, or HTML?
+
+Missing outline: ask what must be in the document; do not invent sections. Shared-turn example when both are missing:
 
 > Which format should I write — Word, Excel, PowerPoint, or HTML — and what has to be in it?
 
-Skip the ask when **both** format and outline are already in the task. Keyword inference runs **only** after a format is named (in the original Send **or** in the answer).
+**Format AND content already named:** no questions; create in existing Files section (BR-6) with real extension. Keyword inference runs **only** after a format is named (in the original Send **or** in the answer).
 
-**One primary:** unless this Send asked for several formats, the host keeps **one** deliverable create (the named format). Extra Office/HTML creates in the same implementer JSON are dropped. If this Send asked for more than one format, one create per named format.
+**One primary:** unless this Send asked for more formats, the host keeps **one** deliverable create (the named format). Extra Office/HTML creates in the same implementer JSON are dropped. If this Send asked for more than one format, one create per named format.
 
 ---
 
 ## 3. Swarm ask (no new protocol type)
 
-Not a modal. Not `ui/pick`. **SD ask only after Continue, or when there is no Split.** Split composer lock still wins. Composer **stays enabled** for the ask itself. `deliverableAsk` does **not** override Split lock. Do **not** unlock composer during Split to ask format/outline.
+Not a modal. Not `ui/pick`. **SD ask only after Continue, or when there is no Split.** Split composer lock still wins. Composer **stays enabled** for the ask itself. `deliverableAsk` does **not** override Split lock. Do **not** unlock composer during Split to ask format/outline. **Split still locks send if open.**
 
-**During Split:** do not ask format/outline and do not implement a deliverable.
+**During Split:** do not ask format/outline and do not implement a deliverable. Split still locks send if open.
+
+**Missing format OR only “report”:** Swarm HV question naming Word / Excel / PowerPoint / HTML. Composer enabled. Not during Split.
+
+**Missing outline:** ask what must be in the document; do not invent sections. Format + outline questions **MAY share one turn.**
 
 **After Continue, or when there is no Split:** if format or outline is missing, then ask. Composer stays enabled for that ask.
 
@@ -124,9 +142,9 @@ Host **curates** `facts` from `RunBoard` (goal, todos, decisions) + current-turn
 | `html` | UTF-8 HTML5 | `op: 'create'`, `content` text |
 | `docx` / `xlsx` / `pptx` | valid OOXML zip, **no** `vbaProject.bin`, **no** macros | `op: 'create'`, binary payload (see §5) |
 
-**Generic valid file when no IE template.** Minimal well-formed Office package the OS will open. **No stock template pack.** No Bot Rider letterhead/stock deck.
+**No stock template pack. Generic valid file if no IE template.** Minimal well-formed Office package the OS will open. No Bot Rider letterhead/stock deck.
 
-**IE template:** if the implementer bot already has an attachment whose `path`/`name` is `.html` (or snapshot looks like HTML) **and** format is `html`, use that snapshot as the starting document and merge outline/facts. Office formats: **ignore** text snapshots as zip templates (IE skipped binaries). Do not fetch a file from disk at Send.
+**IE template:** IE-attached Office/HTML may be used as template when that bot already has one that matches the chosen format. Merge outline/facts. Do not fetch a file from disk at Send. Curate from board + current-turn MCP + decisions, not transcript.
 
 **Not markdown renamed:** a `.docx` path whose payload is `# heading` markdown is a **FAIL**. Builder output must parse as OOXML / HTML.
 
@@ -166,7 +184,7 @@ MCP Approve is still independent (Grain B). Deliverable files are **not** MCP ac
 | `office-binary` | **Never** `vscode.diff`. Show inspect: `{filename} · new {Word\|Excel\|PowerPoint} file`. |
 | `text` | Today’s `vscode.diff`. |
 
-After Approve, do not keep the inspect/preview as the file view; disk file uses the normal editor / OS open.
+After Approve, do not keep the inspect/preview as the file view; the real file is on disk. **Do NOT auto-open** Word / Excel / PowerPoint / browser after Approve.
 
 ---
 
@@ -191,7 +209,9 @@ No new UiToHost for format pick. Swarm `chat/send` is the ask answer.
 
 | Situation | Copy |
 | --- | --- |
-| Swarm ask | HV question naming Word, Excel, PowerPoint, or HTML **and** required content |
+| Missing format OR only “report” | HV question naming Word, Excel, PowerPoint, or HTML |
+| Missing outline | ask what must be in the document; do not invent sections |
+| Format + outline both missing | MAY share one turn (format names + what must be in it) |
 | Office inspect | `{filename} · new Word file` / `new Excel file` / `new PowerPoint file` |
 | HTML preview title | `{filename} (Proposed)` |
 | Missing format after two asks | no create; no silent html |
@@ -200,21 +220,24 @@ No new UiToHost for format pick. Swarm `chat/send` is the ask answer.
 
 ## 9. Out of this slice
 
-Silent `report`→html, stock template pack, PMO gallery, format picker/modal, email, fourth view, second Approve, `vscode.diff` on Office zip/XML, macros, markdown-as-Office, Graphify, leftovers 002/003/009/014, pack/HV/MA/IE product changes.
+Silent `report`→html, inventing sections, stock template pack, template picker/pack, PMO gallery, format picker/modal, email, fourth view, second Approve, auto-open Word/Excel/PowerPoint/browser after Approve, `vscode.diff` on Office zip/XML, macros, markdown-as-Office, Graphify, leftovers 002/003/009/014, pack/HV/MA/IE product changes.
 
 ---
 
 ## 10. Tests (merge bar after PO allocates)
 
-- Bare “write a report”: Swarm ask, **no** `.html` (or Office) create, composer enabled.
-- “Word file of the Q3 plan with three sections”: no ask; one `*.docx` create; payload is OOXML zip, not markdown.
-- “Excel and PowerPoint of the same plan”: two creates, real extensions; not a third html.
+- Bare “write a report” (or only “report”): Swarm HV question naming Word / Excel / PowerPoint / HTML, **no** `.html` (or Office) create, composer enabled. Not during Split.
+- Bare “document” without Word: still asks (missing format).
+- Missing outline: ask what must be in the document; do not invent sections. Format + outline questions MAY share one turn.
+- “Word file of the Q3 plan with three sections”: format AND content already named → no questions; one `*.docx` create in Files (BR-6); payload is OOXML zip, not markdown; **do not auto-open** Word after Approve.
+- `deck` → `pptx`; `spreadsheet` → `xlsx`; `word doc` / `word document` → `docx`; `html` → `html`.
+- “Excel and PowerPoint of the same plan”: two creates, real extensions; not a third html. One primary unless this Send asked for more formats.
 - Named HTML: `.html` create; Open is preview titled `{filename} (Proposed)`.
 - Office Open does not call `vscode.diff`.
-- `changeset/approve` writes bytes to disk; Reject drops the create; no extra MCP invoke.
+- `changeset/approve` writes bytes to disk; Reject drops the create; no extra MCP invoke. **Do NOT auto-open** Word / Excel / PowerPoint / browser after Approve.
 - Implementer JSON has no zip bytes; builder is host-side; no `vbaProject.bin`.
-- IE html snapshot used only when that bot already attached html and format is html.
+- Generic valid file if no IE template. IE-attached Office/HTML may be used as template when that bot already has one.
 - Detect has no `sendRequest`.
-- Split-open → no deliverable ask, composer stays locked. After Continue (or when there is no Split) and format still missing → Swarm ask with composer enabled.
+- Split-open → no deliverable ask, composer stays locked (Split still locks send if open). After Continue (or when there is no Split) and format still missing → Swarm ask with composer enabled.
 - Implementer after consensus or Pick only once format+outline are known.
 - WM / QC / HV / MA / IE tests still pass.
