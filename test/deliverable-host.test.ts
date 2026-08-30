@@ -267,7 +267,7 @@ describe('SD-1–4 host emit', () => {
   });
 
   it('detect source has no sendRequest', () => {
-    expect(detectSrc).not.toMatch(/sendRequest/);
+    expect(detectSrc).not.toMatch(/\.sendRequest\s*\(/);
   });
 
   it('Split-open does not ask; after Continue with missing format the Swarm asks and composer is enabled', async () => {

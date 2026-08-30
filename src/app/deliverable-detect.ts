@@ -1,7 +1,7 @@
 import type { RunBoardDto } from '../protocol/messages';
 import type { DeliverableFormat, FormatSpec } from '../domain/deliverable';
 
-/** Host string-match only. Never calls Copilot / sendRequest. */
+/** Host string-match only. Never calls Copilot just to guess format. */
 const FORMAT_RULES: { re: RegExp; format: DeliverableFormat }[] = [
   { re: /\bword\s+documents?\b/gi, format: 'docx' },
   { re: /\bword\s+docs?\b/gi, format: 'docx' },
@@ -90,7 +90,10 @@ export function hasDeliverableIntent(text: string): boolean {
   if (/\bsummar(?:y|ies)\b/.test(src)) {
     return true;
   }
-  if (/\bplans?\b/.test(src)) {
+  if (/\b(write|create|make|draft|prepare|generate)\b[\s\S]{0,48}\bplans?\b/.test(src)) {
+    return true;
+  }
+  if (/^\s*(?:a|the)?\s*plans?\s*[.?!]?\s*$/.test(src)) {
     return true;
   }
   return collectFormats(text).length > 0;

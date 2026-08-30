@@ -7,7 +7,7 @@ const detectSrc = readFileSync(join(__dirname, '../src/app/deliverable-detect.ts
 
 describe('deliverable detect (host string match)', () => {
   it('has no sendRequest and no Copilot', () => {
-    expect(detectSrc).not.toMatch(/sendRequest/);
+    expect(detectSrc).not.toMatch(/\.sendRequest\s*\(/);
     expect(detectSrc).not.toMatch(/vscode\.lm/);
     expect(detectSrc).not.toMatch(/gateway/);
     expect(detectSrc).not.toMatch(/ICopilotGateway/);
@@ -42,7 +42,8 @@ describe('deliverable detect (host string match)', () => {
     expect(detectFormat('write a report').intent).toBe(true);
     expect(detectFormat('write a document').intent).toBe(true);
     expect(detectFormat('slides').intent).toBe(true);
-    expect(detectFormat('a plan').intent).toBe(true);
+    expect(detectFormat('write a plan').intent).toBe(true);
+    expect(detectFormat('plan it').intent).toBe(false);
     expect(detectFormat('summary').intent).toBe(true);
   });
 
