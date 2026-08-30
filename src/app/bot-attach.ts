@@ -89,18 +89,26 @@ export function canMapClearlyAgent(relPath: string): boolean {
   return isClearlyAgentName(base);
 }
 
+export function isUnfilledAttachField(field: keyof AttachFormFields, value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return true;
+  }
+  return field === 'persona' && trimmed === COPY.defaultNewBotPersona;
+}
+
 export function applyEmptyOnly(
   current: AttachFormFields,
   incoming: { name?: string; handle?: string; persona?: string },
 ): { name?: string; handle?: string; persona?: string } {
   const out: { name?: string; handle?: string; persona?: string } = {};
-  if (incoming.name && !current.name.trim()) {
+  if (incoming.name && isUnfilledAttachField('name', current.name)) {
     out.name = incoming.name;
   }
-  if (incoming.handle && !current.handle.trim()) {
+  if (incoming.handle && isUnfilledAttachField('handle', current.handle)) {
     out.handle = incoming.handle;
   }
-  if (incoming.persona && !current.persona.trim()) {
+  if (incoming.persona && isUnfilledAttachField('persona', current.persona)) {
     out.persona = incoming.persona;
   }
   return out;

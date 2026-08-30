@@ -174,6 +174,45 @@ describe('snapshot ingest', () => {
     })).toEqual({});
   });
 
+  it('create default persona is empty so the first clearly-agent maps persona', async () => {
+    const io = new MemoryAttachIo();
+    io.put(
+      `${WS}/AGENTS.md`,
+      '---\nname: Docs Agent\nhandle: DocsAgent\npersona: Calm guide\n---\n',
+    );
+    const result = await ingestPickedFiles({
+      folderFsPath: WS,
+      picked: [{ absPath: `${WS}/AGENTS.md` }],
+      existing: [],
+      fields: { name: '', handle: '', persona: COPY.defaultNewBotPersona },
+      io,
+    });
+    expect(result.mapped).toEqual({
+      name: 'Docs Agent',
+      handle: 'docsagent',
+      persona: 'Calm guide',
+    });
+    expect(
+      applyEmptyOnly(
+        { name: '', handle: '', persona: COPY.defaultNewBotPersona },
+        { name: 'Docs Agent', handle: 'docsagent', persona: 'Calm guide' },
+      ),
+    ).toEqual({
+      name: 'Docs Agent',
+      handle: 'docsagent',
+      persona: 'Calm guide',
+    });
+    expect(
+      applyEmptyOnly(
+        { name: '', handle: '', persona: 'I wrote this persona' },
+        { name: 'Docs Agent', handle: 'docsagent', persona: 'Calm guide' },
+      ),
+    ).toEqual({
+      name: 'Docs Agent',
+      handle: 'docsagent',
+    });
+  });
+
   it('attaches scripts and hooks without mapping or executing', async () => {
     const io = new MemoryAttachIo();
     io.put(`${WS}/scripts/setup.sh`, 'echo hello\n');

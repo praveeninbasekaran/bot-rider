@@ -144,7 +144,7 @@
         handle.value = msg.handle;
         handleTouched = true;
       }
-      if (msg.persona && !persona.value.trim()) {
+      if (msg.persona && (!persona.value.trim() || persona.value.trim() === 'A thoughtful teammate who talks like a person.')) {
         persona.value = msg.persona;
       }
     }
