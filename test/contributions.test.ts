@@ -71,7 +71,15 @@ describe('contribution points', () => {
         'botrider.split.continue',
         'botrider.split.pick',
         'botrider.copilot.recheck',
+        'botrider.mcp.approve',
+        'botrider.mcp.reject',
       ]),
+    );
+    expect(pkg.contributes.commands.find((c) => c.command === 'botrider.mcp.approve')?.enablement).toBe(
+      'botrider.hasPendingMcp',
+    );
+    expect(pkg.contributes.commands.find((c) => c.command === 'botrider.mcp.reject')?.enablement).toBe(
+      'botrider.hasPendingMcp',
     );
     expect(commands).not.toContain('botrider.split.stop');
     expect(pkg.contributes.commands.every((c) => c.category === 'Bot Rider')).toBe(true);
@@ -109,16 +117,46 @@ describe('contribution points', () => {
     const reject = pkg.contributes.commands.find((c) => c.command === 'botrider.changeset.reject');
     expect(approve?.title).toBe('Approve');
     expect(reject?.title).toBe('Reject');
-    expect(approve?.tooltip).toBe('Approve and apply all proposed edits');
+    expect(approve?.tooltip).toBe('Apply file changes');
     expect(reject?.tooltip).toBe('Reject and discard all proposed edits');
+    const mcpApprove = pkg.contributes.commands.find((c) => c.command === 'botrider.mcp.approve');
+    const mcpReject = pkg.contributes.commands.find((c) => c.command === 'botrider.mcp.reject');
+    expect(mcpApprove?.title).toBe('Approve');
+    expect(mcpReject?.title).toBe('Reject');
+    expect(mcpApprove?.tooltip).toBe('Run MCP actions');
+
+    expect(titles.find((m) => m.command === 'botrider.changeset.approve')?.when).toBe(
+      'view == botrider.review && botrider.hasPendingChanges && !botrider.hasPendingMcp',
+    );
+    expect(titles.find((m) => m.command === 'botrider.changeset.reject')?.when).toBe(
+      'view == botrider.review && botrider.hasPendingChanges && !botrider.hasPendingMcp',
+    );
+    expect(titles.find((m) => m.command === 'botrider.mcp.approve')?.when).toBe(
+      'view == botrider.review && botrider.hasPendingMcp && !botrider.hasPendingChanges && !botrider.mcpFailed',
+    );
+    expect(titles.find((m) => m.command === 'botrider.mcp.reject')?.when).toBe(
+      'view == botrider.review && botrider.hasPendingMcp && !botrider.hasPendingChanges && !botrider.mcpFailed',
+    );
+    expect(titles.some((m) => m.command === 'botrider.mcp.approve' && m.when?.includes('hasPendingChanges') && !m.when.includes('!botrider.hasPendingChanges'))).toBe(
+      false,
+    );
 
     const itemCtx = pkg.contributes.menus['view/item/context'];
+    const fileHeaderApprove = itemCtx.find(
+      (m) => m.command === 'botrider.changeset.approve' && m.when?.includes('reviewFilesSection'),
+    );
+    const mcpHeaderApprove = itemCtx.find(
+      (m) => m.command === 'botrider.mcp.approve' && m.when?.includes('reviewMcpSection'),
+    );
+    expect(fileHeaderApprove?.group).toBe('inline@1');
+    expect(mcpHeaderApprove?.group).toBe('inline@1');
+    expect(mcpHeaderApprove?.when).toContain('!botrider.mcpFailed');
     expect(itemCtx.find((m) => m.command === 'botrider.bots.edit')?.group).toBe('inline@1');
     expect(itemCtx.find((m) => m.command === 'botrider.bots.delete')?.group).toBe('1_modification');
     expect(itemCtx.find((m) => m.command === 'botrider.bots.delete')?.group).not.toMatch(/^inline/);
   });
 
-  it('Proposed Changes is a flat localeCompare file list', () => {
+  it('Proposed Changes keeps a localeCompare file list and adds an MCP section', () => {
     const src = readFileSync(join(root, 'src/adapters/review-tree.ts'), 'utf8');
     expect(src).toContain('localeCompare');
     expect(src).not.toMatch(/kind: 'group'/);
@@ -129,6 +167,11 @@ describe('contribution points', () => {
     expect(src).toMatch(/description = 'Modified'/);
     expect(src).toContain('files · pending review');
     expect(src).toContain('1 file · pending review');
+    expect(src).toContain("kind: 'filesSection' | 'mcpSection'");
+    expect(src).toContain('reviewFilesSection');
+    expect(src).toContain('reviewMcpSection');
+    expect(src).toContain('ThemeIcon(\'tools\')');
+    expect(src).not.toContain('resourceUri = vscode.Uri.parse(`file:${action');
   });
 
   it('Bots tree a11y label and Inactive description suffix', () => {
@@ -146,7 +189,7 @@ describe('contribution points', () => {
     expect(bots?.when).toBe('!botrider.hasBots');
     expect(bots?.contents).toContain('No bots yet. Create a bot with a name, persona, and role');
     expect(bots?.contents).toContain('command:botrider.bots.create');
-    expect(review?.when).toBe('!botrider.hasPendingChanges');
+    expect(review?.when).toBe('!botrider.hasPendingChanges && !botrider.hasPendingMcp');
     expect(review?.contents).toContain('Approve applies the whole batch. Reject discards it.');
   });
 

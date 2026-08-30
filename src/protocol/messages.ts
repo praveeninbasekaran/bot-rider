@@ -49,6 +49,15 @@ export interface PromptMessage {
 
 export type McpSkipReason = 'missing' | 'unauthenticated' | 'mutating-blocked' | 'tool-missing' | 'error';
 
+export interface McpActionDto {
+  id: string;
+  server: string;
+  tool: string;
+  argsLine: string;
+  botId: string;
+  handle: string;
+}
+
 export type HostToUi =
   | { type: 'bots/snapshot'; bots: BotRecord[] }
   | { type: 'copilot/status'; status: CopilotStatus; message?: string }
@@ -103,6 +112,9 @@ export type HostToUi =
       message: string;
     }
   | { type: 'changeset/cleared' }
+  | { type: 'mcp/actions-preview'; actions: McpActionDto[] }
+  | { type: 'mcp/actions-cleared' }
+  | { type: 'mcp/actions-failed'; message: string; leftoverIds: string[] }
   | { type: 'error'; code: ErrorCode; message: string };
 
 export type UiToHost =
@@ -128,7 +140,9 @@ export type UiToHost =
   | { type: 'changeset/retry' }
   | { type: 'changeset/reject' }
   | { type: 'review/open-diff'; path: string; op?: FileOp }
-  | { type: 'copilot/recheck' };
+  | { type: 'copilot/recheck' }
+  | { type: 'mcp/actions-approve' }
+  | { type: 'mcp/actions-reject' };
 
 export interface WorkspaceContext {
   folderFsPath?: string;

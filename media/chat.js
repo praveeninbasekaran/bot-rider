@@ -1084,6 +1084,37 @@
     thread.scrollTop = thread.scrollHeight;
   }
 
+  function hideMcpActions() {
+    const existing = document.getElementById('mcp-actions-banner');
+    if (existing) {
+      existing.remove();
+    }
+  }
+
+  function showMcpActions(actions) {
+    hideMcpActions();
+    const list = actions || [];
+    if (!list.length) {
+      return;
+    }
+    const wrap = document.createElement('div');
+    wrap.id = 'mcp-actions-banner';
+    wrap.className = 'files-banner mcp-actions-banner';
+    const label = document.createElement('span');
+    label.textContent = 'MCP actions · ' + list.length;
+    const link = document.createElement('button');
+    link.type = 'button';
+    link.className = 'review-link';
+    link.textContent = 'Review';
+    link.addEventListener('click', function () {
+      vscode.postMessage({ type: 'ui/focus-review-mcp' });
+    });
+    wrap.appendChild(label);
+    wrap.appendChild(link);
+    thread.appendChild(wrap);
+    thread.scrollTop = thread.scrollHeight;
+  }
+
   window.addEventListener('message', function (event) {
     const msg = event.data || {};
     if (msg.type === 'bots/snapshot') {
@@ -1224,6 +1255,12 @@
       thread.appendChild(el);
     } else if (msg.type === 'changeset/preview') {
       showFiles(msg.files || []);
+    } else if (msg.type === 'mcp/actions-preview') {
+      showMcpActions(msg.actions || []);
+    } else if (msg.type === 'mcp/actions-cleared') {
+      hideMcpActions();
+    } else if (msg.type === 'mcp/actions-failed') {
+      return;
     }
   });
 

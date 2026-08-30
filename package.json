@@ -70,7 +70,7 @@
       {
         "command": "botrider.changeset.approve",
         "title": "Approve",
-        "tooltip": "Approve and apply all proposed edits",
+        "tooltip": "Apply file changes",
         "category": "Bot Rider",
         "icon": "$(check)"
       },
@@ -108,6 +108,22 @@
         "category": "Bot Rider",
         "icon": "$(refresh)",
         "enablement": "botrider.applyFailed"
+      },
+      {
+        "command": "botrider.mcp.approve",
+        "title": "Approve",
+        "tooltip": "Run MCP actions",
+        "category": "Bot Rider",
+        "icon": "$(check)",
+        "enablement": "botrider.hasPendingMcp"
+      },
+      {
+        "command": "botrider.mcp.reject",
+        "title": "Reject",
+        "tooltip": "Reject and discard staged MCP actions",
+        "category": "Bot Rider",
+        "icon": "$(discard)",
+        "enablement": "botrider.hasPendingMcp"
       }
     ],
     "menus": {
@@ -143,6 +159,14 @@
         {
           "command": "botrider.changeset.retry",
           "when": "botrider.applyFailed"
+        },
+        {
+          "command": "botrider.mcp.approve",
+          "when": "botrider.hasPendingMcp"
+        },
+        {
+          "command": "botrider.mcp.reject",
+          "when": "botrider.hasPendingMcp"
         }
       ],
       "view/title": [
@@ -163,12 +187,22 @@
         },
         {
           "command": "botrider.changeset.approve",
-          "when": "view == botrider.review && botrider.hasPendingChanges",
+          "when": "view == botrider.review && botrider.hasPendingChanges && !botrider.hasPendingMcp",
           "group": "navigation@1"
         },
         {
           "command": "botrider.changeset.reject",
-          "when": "view == botrider.review && botrider.hasPendingChanges",
+          "when": "view == botrider.review && botrider.hasPendingChanges && !botrider.hasPendingMcp",
+          "group": "navigation@2"
+        },
+        {
+          "command": "botrider.mcp.approve",
+          "when": "view == botrider.review && botrider.hasPendingMcp && !botrider.hasPendingChanges && !botrider.mcpFailed",
+          "group": "navigation@1"
+        },
+        {
+          "command": "botrider.mcp.reject",
+          "when": "view == botrider.review && botrider.hasPendingMcp && !botrider.hasPendingChanges && !botrider.mcpFailed",
           "group": "navigation@2"
         },
         {
@@ -187,6 +221,26 @@
           "command": "botrider.bots.delete",
           "when": "view == botrider.bots && viewItem == bot",
           "group": "1_modification"
+        },
+        {
+          "command": "botrider.changeset.approve",
+          "when": "view == botrider.review && viewItem == reviewFilesSection",
+          "group": "inline@1"
+        },
+        {
+          "command": "botrider.changeset.reject",
+          "when": "view == botrider.review && viewItem == reviewFilesSection",
+          "group": "inline@2"
+        },
+        {
+          "command": "botrider.mcp.approve",
+          "when": "view == botrider.review && viewItem == reviewMcpSection && !botrider.mcpFailed",
+          "group": "inline@1"
+        },
+        {
+          "command": "botrider.mcp.reject",
+          "when": "view == botrider.review && viewItem == reviewMcpSection && !botrider.mcpFailed",
+          "group": "inline@2"
         },
         {
           "command": "botrider.review.openDiff",
@@ -231,7 +285,7 @@
       {
         "view": "botrider.review",
         "contents": "No proposed edits. After the swarm agrees, proposed WorkspaceEdits appear here for review.\nApprove applies the whole batch. Reject discards it.",
-        "when": "!botrider.hasPendingChanges"
+        "when": "!botrider.hasPendingChanges && !botrider.hasPendingMcp"
       }
     ]
   }

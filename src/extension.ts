@@ -38,6 +38,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let botsTree: BotsTreeProvider;
   let reviewTree: ReviewTreeProvider;
   let gatewayStatus: string = 'settling';
+  let mcpFailed = false;
 
   const hub = new ChatHub(async (msg) => {
     await handleUi(msg);
@@ -48,10 +49,21 @@ export function activate(context: vscode.ExtensionContext): void {
     if (msg.type === 'bots/snapshot') {
       botsTree?.refresh();
     }
+    if (msg.type === 'mcp/actions-failed') {
+      mcpFailed = true;
+      reviewTree?.noteMcpFailed(true);
+    }
+    if (msg.type === 'mcp/actions-preview' || msg.type === 'mcp/actions-cleared') {
+      mcpFailed = false;
+      reviewTree?.noteMcpFailed(false);
+    }
     if (
       msg.type === 'changeset/preview' ||
       msg.type === 'changeset/cleared' ||
-      msg.type === 'changeset/apply-failed'
+      msg.type === 'changeset/apply-failed' ||
+      msg.type === 'mcp/actions-preview' ||
+      msg.type === 'mcp/actions-cleared' ||
+      msg.type === 'mcp/actions-failed'
     ) {
       reviewTree?.refresh();
     }
@@ -147,6 +159,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('botrider.changeset.approve', () => approveChanges()),
     vscode.commands.registerCommand('botrider.changeset.reject', () => app.reject()),
     vscode.commands.registerCommand('botrider.changeset.retry', () => approveChanges('retry')),
+    vscode.commands.registerCommand('botrider.mcp.approve', () => app.approveMcp()),
+    vscode.commands.registerCommand('botrider.mcp.reject', () => app.rejectMcp()),
+    vscode.commands.registerCommand('botrider.review.focusMcp', () => reviewTree.revealMcp()),
     vscode.commands.registerCommand(
       'botrider.review.openDiff',
       async (item?: { file?: { path: string; op: 'create' | 'update' | 'delete' } }) => {
@@ -183,7 +198,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   async function handleUi(
-    msg: UiToHost | { type: 'ui/pick' } | { type: 'ui/focus-expanded' },
+    msg: UiToHost | { type: 'ui/pick' } | { type: 'ui/focus-expanded' } | { type: 'ui/focus-review-mcp' },
   ): Promise<void> {
     try {
       if (msg.type === 'ui/pick') {
@@ -192,6 +207,10 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (msg.type === 'ui/focus-expanded') {
         expand.reveal();
+        return;
+      }
+      if (msg.type === 'ui/focus-review-mcp') {
+        await reviewTree.revealMcp();
         return;
       }
       if (msg.type === 'review/open-diff') {
@@ -215,6 +234,8 @@ export function activate(context: vscode.ExtensionContext): void {
       hasBots: bots.length > 0,
       hasActiveBots: bots.some((b) => b.active),
       hasPendingChanges: current.changesets.hasPending(),
+      hasPendingMcp: current.mcp.actions.hasPending(),
+      mcpFailed,
       debateRunning: run.debateRunning,
       splitOpen: run.splitOpen,
       copilotReady: gatewayStatus === 'ready',
@@ -228,5 +249,5 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  // Session-only transcript and pending changeset die with the host.
+  // Session-only transcript, pending changeset, and pending MCP batch die with the host.
 }

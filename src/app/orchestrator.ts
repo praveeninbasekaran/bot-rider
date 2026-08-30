@@ -480,9 +480,9 @@ export class Orchestrator {
     return { ok: true, text: turn === 'implement' ? full : visible, trailer, vote };
   }
 
-  private toolsFor(turn: TurnKind): 'mcp-readonly' | 'none' {
+  private toolsFor(turn: TurnKind): 'mcp-debate' | 'none' {
     if (turn === 'propose' || turn === 'critique' || turn === 'direct') {
-      return this.mcp.noneConfigured() ? 'none' : 'mcp-readonly';
+      return this.mcp.noneConfigured() ? 'none' : 'mcp-debate';
     }
     return 'none';
   }

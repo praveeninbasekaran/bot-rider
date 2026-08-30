@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { COPY } from '../src/app/copy';
 import {
   listReadOnlyTools,
+  listStageableTools,
   McpGateway,
   looksWriteIsh,
 } from '../src/app/mcp-gateway';
 import type { HostToUi } from '../src/protocol/messages';
-import { FakeMcpPort, readOnlyMcpTool } from './fakes';
+import { FakeMcpPort, readOnlyMcpTool, stageableMcpTool } from './fakes';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const token = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) };
 
@@ -73,6 +76,44 @@ describe('McpGateway allow/invoke', () => {
       message: COPY.mcpSkipMutating('github'),
     });
     expect(COPY.mcpSkipMutating('github')).toBe("Writes through github aren't available in Bot Rider.");
+  });
+
+  it('listStageable is mcp-tagged without readOnlyHint; decide stages those and blocks cannot-stage writes', async () => {
+    const port = new FakeMcpPort();
+    port.config = true;
+    port.tools = [
+      readOnlyMcpTool({ name: 'list_issues' }),
+      stageableMcpTool({ name: 'create_issue', source: { name: 'github' } }),
+      {
+        name: 'workspace_search',
+        description: 'not mcp',
+        tags: ['other'],
+      },
+    ];
+    const gw = new McpGateway(port, () => undefined, { settleMs: 0 });
+    expect(listStageableTools(port.tools).map((t) => t.name)).toEqual(['create_issue']);
+    expect(gw.listStageable().map((t) => t.name)).toEqual(['create_issue']);
+    expect(gw.decide({ name: 'list_issues' }).action).toBe('invoke');
+    expect(gw.decide({ name: 'create_issue' })).toMatchObject({
+      action: 'stage',
+      server: 'github',
+      tool: 'create_issue',
+    });
+    expect(gw.decide({ name: 'delete_file' })).toMatchObject({
+      action: 'skip',
+      reason: 'mutating-blocked',
+      message: COPY.mcpSkipMutating('MCP'),
+    });
+  });
+
+  it('McpGateway source has no Figma/Azure vendor match except fail copy living in COPY', () => {
+    const src = readFileSync(join(__dirname, '../src/app/mcp-gateway.ts'), 'utf8');
+    expect(src).not.toMatch(/Figma/);
+    expect(src).not.toMatch(/Azure/);
+    expect(COPY.mcpActionsFailed).toContain('Figma');
+    expect(COPY.mcpActionsFailed).toContain('Azure Boards');
+    expect(COPY.mcpActionsFailed.split('\n')).toHaveLength(2);
+    expect(COPY.mcpActionsFailed).not.toContain('\n\n');
   });
 
   it('unused servers and failed starts emit nothing until a tool is called this turn', async () => {

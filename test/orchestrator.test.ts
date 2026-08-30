@@ -443,7 +443,7 @@ describe('Orchestrator MCP turn flags', () => {
     expect(port.invokeCalls).toEqual([]);
   });
 
-  it('implementer and consensus send with tools none; propose/direct can pass mcp-readonly', async () => {
+  it('implementer and consensus send with tools none; propose/direct can pass mcp-debate', async () => {
     const msgs: HostToUi[] = [];
     const { mcp } = configuredMcp((m) => msgs.push(m));
     const { app, gw } = harness(mcp);
@@ -460,20 +460,47 @@ describe('Orchestrator MCP turn flags', () => {
     };
     await app.send('debate then ship');
     const paired = gw.turns.map((turn, i) => ({ turn, tools: gw.lastSendOpts[i]?.tools }));
-    expect(paired.filter((p) => p.turn === 'propose').every((p) => p.tools === 'mcp-readonly')).toBe(true);
-    expect(paired.filter((p) => p.turn === 'critique').every((p) => p.tools === 'mcp-readonly')).toBe(true);
+    expect(paired.filter((p) => p.turn === 'propose').every((p) => p.tools === 'mcp-debate')).toBe(true);
+    expect(paired.filter((p) => p.turn === 'critique').every((p) => p.tools === 'mcp-debate')).toBe(true);
     expect(paired.filter((p) => p.turn === 'consensus').every((p) => p.tools === 'none')).toBe(true);
     expect(paired.filter((p) => p.turn === 'implement').every((p) => p.tools === 'none')).toBe(true);
   });
 
-  it('direct @ turns can pass mcp-readonly when MCP is configured', async () => {
+  it('direct @ turns can pass mcp-debate when MCP is configured', async () => {
     const { mcp } = configuredMcp(() => undefined);
     const { app, gw } = harness(mcp);
     await twoBots(app);
     gw.script = ({ turn }) => (turn === 'direct' ? 'ok\nNO_EDIT' : 'x');
     await app.send('@alpha ping');
     expect(gw.turns[0]).toBe('direct');
-    expect(gw.lastSendOpts[0]?.tools).toBe('mcp-readonly');
+    expect(gw.lastSendOpts[0]?.tools).toBe('mcp-debate');
+  });
+
+  it('Continue extra debate rounds use mcp-debate; vote/implementer stay none', async () => {
+    const { mcp } = configuredMcp(() => undefined);
+    const { app, gw } = harness(mcp);
+    await twoBots(app);
+    gw.script = ({ turn, instruction }) => {
+      const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
+      if (turn === 'consensus') {
+        return round >= 3 ? 'AGREE' : 'DISSENT';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'c.ts', op: 'create', content: 'c' }]);
+      }
+      return 'talk';
+    };
+    await app.send('debate this');
+    expect(app.orchestrator.getRunState().splitOpen).toBe(true);
+    const before = gw.lastSendOpts.length;
+    await app.continueDebate();
+    const extra = gw.turns
+      .map((turn, i) => ({ turn, tools: gw.lastSendOpts[i]?.tools }))
+      .slice(before);
+    expect(extra.filter((p) => p.turn === 'propose').every((p) => p.tools === 'mcp-debate')).toBe(true);
+    expect(extra.filter((p) => p.turn === 'critique').every((p) => p.tools === 'mcp-debate')).toBe(true);
+    expect(extra.filter((p) => p.turn === 'consensus').every((p) => p.tools === 'none')).toBe(true);
+    expect(extra.filter((p) => p.turn === 'implement').every((p) => p.tools === 'none')).toBe(true);
   });
 
   it('does not raise MAX_MCP_TOOL_ROUNDS', () => {

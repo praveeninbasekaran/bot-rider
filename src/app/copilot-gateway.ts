@@ -16,7 +16,7 @@ import type { McpGateway } from './mcp-gateway';
 export const MAX_MCP_TOOL_ROUNDS = 8;
 
 export interface CopilotSendOpts {
-  tools?: 'mcp-readonly' | 'none';
+  tools?: 'mcp-debate' | 'none';
   botId?: string;
   handle?: string;
 }
@@ -215,11 +215,24 @@ export class CopilotGateway implements ICopilotGateway {
           return 'ok';
         }
         const results: Array<{ callId: string; content: string }> = [];
+        const botId = opts.botId ?? '';
+        const handle = opts.handle ?? '';
         for (const call of consumed.toolCalls) {
           if (token.isCancellationRequested) {
             return 'cancelled';
           }
-          const invoked = await this.mcp.invoke(call, token, opts.botId ?? '', opts.handle ?? '');
+          const decision = this.mcp.decide(call);
+          if (decision.action === 'stage') {
+            const staged = this.mcp.stage(call, botId, handle, decision);
+            results.push({ callId: call.callId, content: staged.text });
+            continue;
+          }
+          if (decision.action === 'skip') {
+            this.mcp.announceSkip(botId, handle, decision);
+            results.push({ callId: call.callId, content: decision.message || 'Skipped.' });
+            continue;
+          }
+          const invoked = await this.mcp.invoke(call, token, botId, handle);
           if (invoked.cancelled || token.isCancellationRequested) {
             return 'cancelled';
           }
@@ -249,10 +262,18 @@ export class CopilotGateway implements ICopilotGateway {
   }
 
   private toolsFor(mode: CopilotSendOpts['tools']): LmChatTool[] | undefined {
-    if (mode !== 'mcp-readonly' || !this.mcp || this.mcp.noneConfigured()) {
+    if (mode !== 'mcp-debate' || !this.mcp || this.mcp.noneConfigured()) {
       return undefined;
     }
-    const tools = this.mcp.listReadOnly();
+    const seen = new Set<string>();
+    const tools: LmChatTool[] = [];
+    for (const tool of [...this.mcp.listReadOnly(), ...this.mcp.listStageable()]) {
+      if (seen.has(tool.name)) {
+        continue;
+      }
+      seen.add(tool.name);
+      tools.push(tool);
+    }
     return tools.length ? tools : undefined;
   }
 

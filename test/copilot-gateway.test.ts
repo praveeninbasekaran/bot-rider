@@ -1,51 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CopilotGateway, mapCopilotError } from '../src/app/copilot-gateway';
-import type { LanguageModelPort, LmModel, CancelToken, LmSendOptions } from '../src/app/ports';
+import type { LmModel, CancelToken, LmSendOptions } from '../src/app/ports';
 import type { PromptMessage } from '../src/protocol/messages';
 import { COPILOT_JUSTIFICATION, COPY } from '../src/app/copy';
 import { McpGateway } from '../src/app/mcp-gateway';
-import { FakeMcpPort, readOnlyMcpTool } from './fakes';
-
-class FakeLm implements LanguageModelPort {
-  selectCalls = 0;
-  models: LmModel[] = [];
-  can: boolean | undefined = true;
-  private readonly modelLs = new Set<() => void>();
-  private readonly accessLs = new Set<() => void>();
-  lastOptions: LmSendOptions | undefined;
-
-  async selectChatModels(selector: { vendor: 'copilot' }): Promise<LmModel[]> {
-    this.selectCalls += 1;
-    expect(selector).toEqual({ vendor: 'copilot' });
-    return this.models.filter((m) => m.vendor === 'copilot');
-  }
-
-  canSendRequest(_model: LmModel): boolean | undefined {
-    return this.can;
-  }
-
-  onDidChangeChatModels(listener: () => void) {
-    this.modelLs.add(listener);
-    return { dispose: () => this.modelLs.delete(listener) };
-  }
-
-  onDidChangeAccess(listener: () => void) {
-    this.accessLs.add(listener);
-    return { dispose: () => this.accessLs.delete(listener) };
-  }
-
-  fireModels(): void {
-    for (const l of this.modelLs) {
-      l();
-    }
-  }
-
-  fireAccess(): void {
-    for (const l of this.accessLs) {
-      l();
-    }
-  }
-}
+import { FakeLm, FakeMcpPort, readOnlyMcpTool, stageableMcpTool } from './fakes';
 
 function model(overrides: Partial<LmModel> = {}): LmModel {
   return {
@@ -119,10 +78,13 @@ describe('CopilotGateway status', () => {
 describe('CopilotGateway MCP tools', () => {
   const idle = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) };
 
-  it('propose/direct can pass the mcp-readonly tool list on sendRequest', async () => {
+  it('propose/direct can pass the mcp-debate tool list on sendRequest', async () => {
     const port = new FakeMcpPort();
     port.config = true;
-    port.tools = [readOnlyMcpTool({ name: 'list_issues', description: 'List issues' })];
+    port.tools = [
+      readOnlyMcpTool({ name: 'list_issues', description: 'List issues' }),
+      stageableMcpTool({ name: 'create_issue', description: 'Create' }),
+    ];
     const mcp = new McpGateway(port, () => undefined, { settleMs: 0 });
     await mcp.ensureStartedFromSend();
     const captured: LmSendOptions[] = [];
@@ -138,13 +100,11 @@ describe('CopilotGateway MCP tools', () => {
     const gw = new CopilotGateway(lm, () => undefined, 60_000, mcp);
     await gw.ensureAvailable();
     await gw.send([{ role: 'user', content: 'hi' }], idle, () => undefined, {
-      tools: 'mcp-readonly',
+      tools: 'mcp-debate',
       botId: 'b1',
       handle: 'alpha',
     });
-    expect(captured[0]?.tools).toEqual([
-      { name: 'list_issues', description: 'List issues', inputSchema: undefined },
-    ]);
+    expect(captured[0]?.tools?.map((t) => t.name)).toEqual(['list_issues', 'create_issue']);
   });
 
   it('mutating-blocked skip copy is exact and invokeTool is not called from the tool loop', async () => {
@@ -189,7 +149,7 @@ describe('CopilotGateway MCP tools', () => {
     await gw.ensureAvailable();
     const chunks: string[] = [];
     await gw.send([{ role: 'user', content: 'hi' }], idle, (c) => chunks.push(c), {
-      tools: 'mcp-readonly',
+      tools: 'mcp-debate',
       botId: 'b1',
       handle: 'alpha',
     });
@@ -218,7 +178,7 @@ describe('CopilotGateway MCP tools', () => {
     const gw = new CopilotGateway(lm, () => undefined, 60_000, mcp);
     await gw.ensureAvailable();
     await gw.send([{ role: 'user', content: 'hi' }], idle, () => undefined, {
-      tools: 'mcp-readonly',
+      tools: 'mcp-debate',
       botId: 'b1',
       handle: 'alpha',
     });
