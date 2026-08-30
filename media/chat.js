@@ -163,6 +163,111 @@
     });
   }
 
+  function appendInline(el, text) {
+    const parts = String(text).split('`');
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 1 && i < parts.length - 1) {
+        const code = document.createElement('code');
+        code.className = 'article-inline';
+        code.textContent = parts[i];
+        el.appendChild(code);
+      } else if (parts[i]) {
+        el.appendChild(document.createTextNode(parts[i]));
+      }
+    }
+  }
+
+  function splitArticleBlocks(text) {
+    const lines = String(text).replace(/\r\n/g, '\n').split('\n');
+    const blocks = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (/^\s*```/.test(line)) {
+        const inner = [];
+        i += 1;
+        while (i < lines.length && !/^\s*```/.test(lines[i])) {
+          inner.push(lines[i]);
+          i += 1;
+        }
+        if (i < lines.length) {
+          i += 1;
+        }
+        blocks.push({ kind: 'fence', body: inner.join('\n') });
+        continue;
+      }
+      const trimmed = line.trim();
+      if (!trimmed) {
+        i += 1;
+        continue;
+      }
+      const heading = trimmed.match(/^#{1,3}(?!#)\s*(.*)$/);
+      if (heading) {
+        const sentence = (heading[1] || '').trim();
+        if (sentence) {
+          blocks.push({ kind: 'heading', text: sentence });
+        }
+        i += 1;
+        continue;
+      }
+      if (/^\s*(?:[-*+]|\d+[.)])\s+/.test(line)) {
+        const items = [];
+        while (i < lines.length) {
+          const item = lines[i].match(/^\s*(?:[-*+]|\d+[.)])\s+(.*)$/);
+          if (!item) {
+            break;
+          }
+          items.push((item[1] || '').trim());
+          i += 1;
+        }
+        if (items.length) {
+          blocks.push({ kind: 'list', items: items });
+        }
+        continue;
+      }
+      blocks.push({ kind: 'para', text: trimmed });
+      i += 1;
+    }
+    return blocks;
+  }
+
+  function paintArticle(host, text) {
+    host.replaceChildren();
+    const blocks = splitArticleBlocks(text);
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      if (block.kind === 'fence') {
+        const pre = document.createElement('pre');
+        pre.className = 'article-fence';
+        pre.textContent = block.body;
+        host.appendChild(pre);
+        continue;
+      }
+      if (block.kind === 'heading') {
+        const p = document.createElement('p');
+        p.className = 'article-heading';
+        appendInline(p, block.text);
+        host.appendChild(p);
+        continue;
+      }
+      if (block.kind === 'list') {
+        const ul = document.createElement('ul');
+        ul.className = 'article-list';
+        for (let j = 0; j < block.items.length; j++) {
+          const li = document.createElement('li');
+          appendInline(li, block.items[j]);
+          ul.appendChild(li);
+        }
+        host.appendChild(ul);
+        continue;
+      }
+      const p = document.createElement('p');
+      p.className = 'article-p';
+      appendInline(p, block.text);
+      host.appendChild(p);
+    }
+  }
+
   function avatarSvg(name, colorIndex) {
     const colors = ['#4fc1ff', '#c586c0', '#4ec9b0', '#dcdcaa', '#ce9178', '#9cdcfe', '#d7ba7d', '#f14c4c'];
     const color = colors[(((colorIndex % 8) + 8) % 8)];
@@ -497,9 +602,8 @@
 
   function insertMcpRow(article, row) {
     const bubble = article.querySelector('.bubble') || article;
-    const pre = bubble.querySelector('pre.body') || bubble.querySelector('pre');
-    const before = pre && pre.parentNode && pre.parentNode !== bubble && pre.parentNode.classList.contains('body') ? pre.parentNode : pre;
-    bubble.insertBefore(row, before || null);
+    const body = bubble.querySelector('.article-body') || bubble.querySelector('.body');
+    bubble.insertBefore(row, body || null);
   }
 
   function canPaintNewMcpRow(article) {
@@ -644,7 +748,17 @@
   function appendUser(text) {
     const el = document.createElement('div');
     el.className = 'msg user';
-    el.innerHTML = '<div class="bubble"><div class="meta">You</div><div class="body">' + esc(text) + '</div></div>';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = 'You';
+    const body = document.createElement('div');
+    body.className = 'body article-body';
+    paintArticle(body, text);
+    bubble.appendChild(meta);
+    bubble.appendChild(body);
+    el.appendChild(bubble);
     thread.appendChild(el);
     thread.scrollTop = thread.scrollHeight;
   }
@@ -661,7 +775,7 @@
     if (!state.current) {
       return;
     }
-    const host = state.current.el || (state.current.pre && state.current.pre.closest('.msg'));
+    const host = state.current.el || (state.current.stream && state.current.stream.closest('.msg'));
     if (!host || host.querySelector('.interrupted')) {
       return;
     }
@@ -895,25 +1009,30 @@
       msg.reason ||
       (paused ? 'Debate paused. Positions so far:' : 'The swarm did not agree after two rounds.');
     const positions = msg.positions || [];
-    const positionHtml =
-      '<ul class="split-positions">' +
-      positions
-        .map(function (p) {
-          return '<li><strong>@' + esc(p.handle) + '</strong> ' + esc(p.text || '') + '</li>';
-        })
-        .join('') +
-      '</ul>';
     card.innerHTML =
       '<h3>' +
       esc(title) +
       '</h3><p>' +
       esc(body) +
       '</p>' +
-      positionHtml +
+      '<ul class="split-positions"></ul>' +
       '<div class="split-actions">' +
       '<button type="button" id="split-continue">Continue</button>' +
       '<button type="button" id="split-pick">Pick a bot to decide</button>' +
       '<button type="button" class="secondary" id="split-stop">Stop</button></div>';
+    const list = card.querySelector('.split-positions');
+    positions.forEach(function (p) {
+      const li = document.createElement('li');
+      const handle = document.createElement('strong');
+      handle.textContent = '@' + (p.handle || '');
+      const article = document.createElement('div');
+      article.className = 'article-body';
+      paintArticle(article, p.text || '');
+      li.appendChild(handle);
+      li.appendChild(document.createTextNode(' '));
+      li.appendChild(article);
+      list.appendChild(li);
+    });
     const continueBtn = card.querySelector('#split-continue');
     continueBtn.addEventListener('click', function () {
       vscode.postMessage({ type: 'split/continue' });
@@ -1022,14 +1141,15 @@
         chips +
         '</div>' +
         (msg.inactiveNotice ? '<div class="notice">' + esc(msg.inactiveNotice) + '</div>' : '') +
-        '<div class="body"><pre class="body"></pre></div></div>';
+        '<div class="body article-body"><p class="article-p article-stream"></p></div></div>';
       state.current = {
         botId: msg.botId,
         name: msg.name,
         handle: msg.handle,
         turn: msg.turn,
         el: el,
-        pre: el.querySelector('pre'),
+        body: el.querySelector('.article-body'),
+        stream: el.querySelector('.article-stream'),
         think: el.querySelector('.think'),
         speak: el.querySelector('.speak'),
       };
@@ -1038,8 +1158,8 @@
       empty.hidden = true;
       thread.scrollTop = thread.scrollHeight;
     } else if (msg.type === 'chat/token') {
-      if (state.current && state.current.pre && (!msg.botId || msg.botId === state.current.botId)) {
-        state.current.pre.appendChild(document.createTextNode(msg.delta || ''));
+      if (state.current && state.current.stream && (!msg.botId || msg.botId === state.current.botId)) {
+        state.current.stream.appendChild(document.createTextNode(msg.delta || ''));
         if (state.current.think) state.current.think.style.display = 'none';
         if (state.current.speak) state.current.speak.style.display = 'inline';
         announce((state.current.name || 'Bot') + ' is speaking');
@@ -1060,8 +1180,8 @@
     } else if (msg.type === 'chat/turn-end') {
       if (state.current && state.current.speak) state.current.speak.style.display = 'none';
       if (state.current && state.current.think) state.current.think.style.display = 'none';
-      if (msg.text !== undefined && state.current && state.current.pre) {
-        state.current.pre.textContent = msg.text;
+      if (msg.text !== undefined && state.current && state.current.body) {
+        paintArticle(state.current.body, msg.text);
       }
       announce((state.current && state.current.name ? state.current.name : 'Bot') + ' finished');
       state.current = null;
