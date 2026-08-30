@@ -13,6 +13,7 @@ import { PatchParser } from './patch-parser';
 import type { ChangesetStore } from './changeset-store';
 import type { ThreadStore } from './thread-store';
 import { oneLine, parseMentions, parseVote, stripNeedEditTrailer } from './mentions';
+import { removeParseableTodoLines, stripArticleChrome, stripLeadingVoteToken } from './article-strip';
 import type { WorkspaceContextPort, FileSystemPort } from './ports';
 import { EmptyLspSlicePort, withSelectionFallback, type LspSlicePort, type LspSliceSnapshot } from './lsp-slice';
 import { RunBoardStore } from './run-board';
@@ -265,7 +266,7 @@ export class Orchestrator {
         if (!isTurnOk(result)) {
           return;
         }
-        votes.set(bot.id, parseVote(result.text));
+        votes.set(bot.id, result.vote ?? parseVote(result.text));
       }
       const allAgree = this.freeze.every((b) => votes.get(b.id) === 'AGREE');
       if (allAgree) {
@@ -450,22 +451,28 @@ export class Orchestrator {
       const stripped = stripNeedEditTrailer(visible);
       visible = stripped.body;
       trailer = stripped.token;
+      visible = visible.replace(/\s*(NEED_EDIT|NO_EDIT)\.?$/i, '').replace(/\s+$/g, '');
     }
     if (turn === 'consensus') {
       vote = parseVote(visible);
+      visible = stripLeadingVoteToken(visible);
+    }
+    if (turn === 'propose' || turn === 'critique' || turn === 'direct') {
+      this.board.mergeParseableTodos(visible);
+      this.emitBoard();
+      visible = removeParseableTodoLines(visible);
+    }
+    if (turn !== 'implement') {
+      visible = stripArticleChrome(visible, this.userText);
     }
 
     this.history.push({ handle: bot.handle, text: visible });
     this.thread.append({ role: 'assistant', text: visible, handle: bot.handle, botId: bot.id });
-    if (turn === 'propose' || turn === 'critique' || turn === 'direct') {
-      this.board.mergeParseableTodos(visible);
-      this.emitBoard();
-    }
     this.emit({
       type: 'chat/turn-end',
       botId: bot.id,
       turn,
-      text: visibleBody(visible, vote, trailer),
+      text: visible,
       handle: bot.handle,
       vote,
       trailer,
@@ -648,19 +655,4 @@ type TurnResult =
 
 function isTurnOk(result: TurnResult): result is { ok: true; text: string; trailer?: 'NEED_EDIT' | 'NO_EDIT'; vote?: 'AGREE' | 'DISSENT' } {
   return typeof result === 'object' && result.ok === true;
-}
-
-function visibleBody(
-  text: string,
-  vote?: 'AGREE' | 'DISSENT',
-  trailer?: 'NEED_EDIT' | 'NO_EDIT',
-): string {
-  let out = text;
-  if (trailer) {
-    out = out.replace(/\s*(NEED_EDIT|NO_EDIT)\.?$/i, '').replace(/\s+$/g, '');
-  }
-  if (vote) {
-    out = out.replace(/^\s*(AGREE|DISSENT)\b[^\n]*/i, '').trimStart();
-  }
-  return out;
 }

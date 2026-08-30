@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { Application } from '../app/application';
+import { COPY } from '../app/copy';
 import type { BotRecord } from '../domain/bot';
 import { deriveHandle } from '../domain/bot';
 import { webviewHtml } from './webview-html';
@@ -42,6 +43,7 @@ export class BotFormPanel {
             bot,
             bots: this.app.registry.list(),
             suggestedHandle: bot?.handle ?? deriveHandle(''),
+            defaults: newDraftDefaults(bot),
           });
           return;
         }
@@ -80,6 +82,17 @@ export class BotFormPanel {
       bot,
       bots: this.app.registry.list(),
       suggestedHandle: bot?.handle ?? '',
+      defaults: newDraftDefaults(bot),
     });
   }
+}
+
+function newDraftDefaults(bot?: BotRecord): { persona: string; instructions: string } | undefined {
+  if (bot) {
+    return undefined;
+  }
+  return {
+    persona: COPY.defaultNewBotPersona,
+    instructions: COPY.defaultNewBotInstructions,
+  };
 }
