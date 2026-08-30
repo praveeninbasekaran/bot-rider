@@ -21,13 +21,14 @@ export class MemoryStore implements StateStore {
 
 export class MemoryFs implements ApplyEditPort, FileSystemPort {
   files = new Map<string, string>();
+  binaries = new Map<string, Uint8Array>();
   applyResult: boolean | (() => boolean) = true;
   lastOps: FileEditOp[] = [];
   applyCalls = 0;
   readTextCalls: string[] = [];
 
   async exists(relativePath: string): Promise<boolean> {
-    return this.files.has(relativePath);
+    return this.files.has(relativePath) || this.binaries.has(relativePath);
   }
 
   async readText(relativePath: string): Promise<string | undefined> {
@@ -44,17 +45,25 @@ export class MemoryFs implements ApplyEditPort, FileSystemPort {
     }
     for (const op of ops) {
       if (op.type === 'create') {
-        if (this.files.has(op.relativePath) && !op.overwrite) {
+        if ((this.files.has(op.relativePath) || this.binaries.has(op.relativePath)) && !op.overwrite) {
           return false;
         }
-        this.files.set(op.relativePath, op.content);
+        if (op.binary) {
+          this.binaries.set(op.relativePath, new Uint8Array(op.binary));
+          this.files.delete(op.relativePath);
+        } else {
+          this.files.set(op.relativePath, op.content);
+          this.binaries.delete(op.relativePath);
+        }
       } else if (op.type === 'replace') {
         this.files.set(op.relativePath, op.content);
+        this.binaries.delete(op.relativePath);
       } else if (op.type === 'delete') {
-        if (!this.files.has(op.relativePath) && !op.ignoreIfNotExists) {
+        if (!this.files.has(op.relativePath) && !this.binaries.has(op.relativePath) && !op.ignoreIfNotExists) {
           return false;
         }
         this.files.delete(op.relativePath);
+        this.binaries.delete(op.relativePath);
       }
     }
     return true;

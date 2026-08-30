@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as nodePath from 'node:path';
 import type { Application } from '../app/application';
 import type { ChangeFile, FileOp } from '../domain/changeset';
+import { resolveProposedOpen } from '../app/deliverable-open';
 import type { McpActionDto } from '../protocol/messages';
 import { ProposedContentProvider } from './proposed-content-provider';
 import { mcpFailedViewMessage, reviewChromeMode } from './review-chrome';
@@ -139,10 +140,28 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   }
 }
 
+const htmlPreviewPanels: vscode.WebviewPanel[] = [];
+
 export async function openProposedDiff(
-  file: { path: string; op: FileOp },
+  file: ChangeFile | { path: string; op: FileOp; content?: string; kind?: ChangeFile['kind'] },
   proposed: ProposedContentProvider,
 ): Promise<void> {
+  const plan = resolveProposedOpen({
+    path: file.path,
+    op: file.op,
+    content: file.content,
+    kind: 'kind' in file ? file.kind : undefined,
+    binary: 'binary' in file ? file.binary : undefined,
+  });
+  if (plan.mode === 'office-inspect') {
+    await vscode.window.showInformationMessage(plan.message);
+    return;
+  }
+  if (plan.mode === 'html-preview') {
+    await openHtmlPreview(plan.title, plan.html);
+    return;
+  }
+
   const folder = vscode.workspace.workspaceFolders?.[0];
   const basename = nodePath.posix.basename(file.path);
   const right = proposed.uriFor(file.path);
@@ -163,6 +182,41 @@ export async function openProposedDiff(
   }
   const title = `${basename} (Workspace ↔ Proposed)`;
   await vscode.commands.executeCommand('vscode.diff', left, right, title, preview);
+}
+
+export async function openHtmlPreview(title: string, html: string): Promise<void> {
+  const panel = vscode.window.createWebviewPanel(
+    'botrider.deliverablePreview',
+    title,
+    { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
+    { enableScripts: false, retainContextWhenHidden: true },
+  );
+  panel.webview.html = htmlPreviewDocument(html);
+  htmlPreviewPanels.push(panel);
+  panel.onDidDispose(() => {
+    const index = htmlPreviewPanels.indexOf(panel);
+    if (index >= 0) {
+      htmlPreviewPanels.splice(index, 1);
+    }
+  });
+}
+
+export async function closeDeliverablePreviews(): Promise<void> {
+  for (const panel of [...htmlPreviewPanels]) {
+    panel.dispose();
+  }
+  htmlPreviewPanels.length = 0;
+}
+
+function htmlPreviewDocument(html: string): string {
+  const csp = `default-src 'none'; img-src data:; style-src 'unsafe-inline'`;
+  if (/<html[\s>]/i.test(html)) {
+    if (/<head[\s>]/i.test(html)) {
+      return html.replace(/<head([^>]*)>/i, `<head$1><meta http-equiv="Content-Security-Policy" content="${csp}" />`);
+    }
+    return html.replace(/<html([^>]*)>/i, `<html$1><head><meta http-equiv="Content-Security-Policy" content="${csp}" /></head>`);
+  }
+  return `<!DOCTYPE html><html><head><meta charset="utf-8" /><meta http-equiv="Content-Security-Policy" content="${csp}" /><title>Proposed</title></head><body>${html}</body></html>`;
 }
 
 function sectionItem(label: string, kind: 'filesSection' | 'mcpSection', contextValue: string): ReviewItem {

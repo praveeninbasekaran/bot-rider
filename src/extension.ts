@@ -10,7 +10,7 @@ import {
   closeProposedDiffs,
   PROPOSED_SCHEME,
 } from './adapters/proposed-content-provider';
-import { openProposedDiff, ReviewTreeProvider } from './adapters/review-tree';
+import { closeDeliverablePreviews, openProposedDiff, ReviewTreeProvider } from './adapters/review-tree';
 import { createCopilotGateway } from './adapters/vscode-lm-gateway';
 import { VsCodeMcpPort } from './adapters/vscode-mcp';
 import { VsCodeWorkspacePort } from './adapters/vscode-workspace';
@@ -88,7 +88,12 @@ export function activate(context: vscode.ExtensionContext): void {
     workspace,
     emit,
     proposed,
-    { closeProposedDiffs },
+    {
+      closeProposedDiffs: async () => {
+        await closeProposedDiffs();
+        await closeDeliverablePreviews();
+      },
+    },
     mcp,
     lsp,
   );
@@ -214,7 +219,8 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
       if (msg.type === 'review/open-diff') {
-        await openProposedDiff({ path: msg.path, op: msg.op ?? 'update' }, proposed);
+        const pending = app.changesets.files?.find((f) => f.path === msg.path);
+        await openProposedDiff(pending ?? { path: msg.path, op: msg.op ?? 'update' }, proposed);
         return;
       }
       await app.handleUi(msg);

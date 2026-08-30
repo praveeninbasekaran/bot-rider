@@ -18,6 +18,8 @@ export interface RunStateDto {
   frozenBotIds: string[];
   currentBotId?: string;
   turn?: TurnKind;
+  /** Composer stays enabled for the SD ask. Does not override Split lock. */
+  deliverableAsk?: boolean;
 }
 
 export function idleRunState(): RunStateDto {

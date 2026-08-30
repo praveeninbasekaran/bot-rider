@@ -1,5 +1,5 @@
 import type { BotRecord } from '../domain/bot';
-import type { ChangeFile, FileOp, ProposedFileDto } from '../domain/changeset';
+import { inferChangeKind, type ChangeFile, type FileOp, type ProposedFileDto } from '../domain/changeset';
 import type { RunStateDto, TurnKind } from '../domain/run-state';
 
 export type CopilotStatus =
@@ -160,5 +160,5 @@ export interface WorkspaceContext {
 }
 
 export function filesToPreview(files: ChangeFile[]): ProposedFileDto[] {
-  return files.map((f) => ({ path: f.path, op: f.op }));
+  return files.map((f) => ({ path: f.path, op: f.op, kind: inferChangeKind(f) }));
 }
