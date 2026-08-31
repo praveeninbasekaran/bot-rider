@@ -205,7 +205,7 @@ type UiToHost = /* existing */
   | { type: 'bots/attach-remove'; slot: AttachmentKind; path: string };
 ```
 
-`bots/create` `draft` and `bots/update` `patch` attachments: `BotAttachment[]` with `kind`. **Agent kind length 0 or 1, never required.**
+`bots/create` `draft` and `bots/update` `patch` attachments: `BotAttachment[]` with `kind`. **Agent kind length 0 or 1, never required.** Chrome persist shape `[{ slot, path, snapshot }]` is the same six id values as `kind`.
 
 `slot` / `kind` enum: `'agent' | 'skills' | 'scripts' | 'instructions' | 'prompts' | 'hooks'`.
 Ports use `slot`. Persisted field is `kind` and **equals** the slot the user picked.

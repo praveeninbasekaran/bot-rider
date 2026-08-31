@@ -73,7 +73,7 @@ Do **not** show a skip banner if TokenGovernor later trims attachment snapshots.
 
 - UI to host: `bots/attach-pick { slot }` ; `bots/attach-remove { slot, path }`
 - Host to UI: `bots/attach-added { slot, files: [{ path, name }] }` ; `bots/attach-skipped { slot, name, reason }` ; `bots/attach-mapped { name?, handle?, persona? }` applied only if that field is empty
-- create/update attachments: `[{ kind, path, snapshot, name }]` — path is the original-path label; snapshot text lives on the BR-3 bot record; **Agent kind length 0 or 1, never required**
+- create/update attachments: `[{ kind, path, snapshot, name }]` — path is the original-path label; snapshot text lives on the BR-3 bot record; **Agent kind length 0 or 1, never required**. Chrome persist shape `[{ slot, path, snapshot }]` is the same six id values as `kind`.
 
 `slot` / `kind` enum: `'agent' | 'skills' | 'scripts' | 'instructions' | 'prompts' | 'hooks'`.
 Ports use `slot`. Persisted field is `kind` and **equals** the slot the user picked.
