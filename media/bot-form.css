@@ -107,10 +107,21 @@ button.secondary:hover {
 
 .attach-block {
   display: grid;
+  gap: 12px;
+}
+
+.attach-slot {
+  display: grid;
   gap: 6px;
 }
 
 .attach-label {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.attach-filter {
+  margin: 0;
   font-size: 12px;
   color: var(--vscode-descriptionForeground);
 }
@@ -160,7 +171,7 @@ button.icon-close:hover {
   color: var(--vscode-errorForeground);
 }
 
-#attach-btn:disabled {
+button.attach-pick:disabled {
   opacity: 0.5;
   cursor: default;
 }

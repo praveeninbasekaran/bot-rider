@@ -8,6 +8,9 @@
   let attachments = [];
   let placeholders = { name: '', handle: '', persona: '' };
   const DEFAULT_NEW_BOT_PERSONA = 'A thoughtful teammate who talks like a person.';
+  const SLOT_IDS = ['agent', 'skills', 'scripts', 'instructions', 'prompts', 'hooks'];
+  const MARKDOWN_TEXT_FILTER = 'Markdown / text';
+  const SCRIPT_HOOK_FILTER = 'Markdown / text plus .py .js .ts .sh .bash .zsh .ps1';
 
   form.innerHTML =
     '<label>Name <input id="name" required /></label>' +
@@ -16,10 +19,44 @@
     '<label>Role <input id="role" required /></label>' +
     '<label>System instructions <textarea id="instructions"></textarea></label>' +
     '<div class="attach-block">' +
-    '<div class="attach-label">Attached files</div>' +
-    '<button type="button" id="attach-btn">Attach...</button>' +
+    '<div class="attach-slot" data-slot="agent">' +
+    '<div class="attach-label">Agent</div>' +
+    '<p class="attach-filter">' + MARKDOWN_TEXT_FILTER + '</p>' +
+    '<button type="button" class="attach-pick" id="attach-agent-btn">Attach...</button>' +
+    '<ul id="attach-agent-list" class="attach-list"></ul>' +
+    '</div>' +
+    '<div class="attach-slot" data-slot="skills">' +
+    '<div class="attach-label">Skills</div>' +
+    '<p class="attach-filter">' + MARKDOWN_TEXT_FILTER + '</p>' +
+    '<button type="button" class="attach-pick" id="attach-skills-btn">Attach...</button>' +
+    '<ul id="attach-skills-list" class="attach-list"></ul>' +
+    '</div>' +
+    '<div class="attach-slot" data-slot="scripts">' +
+    '<div class="attach-label">Scripts</div>' +
+    '<p class="attach-filter">' + SCRIPT_HOOK_FILTER + '</p>' +
+    '<button type="button" class="attach-pick" id="attach-scripts-btn">Attach...</button>' +
+    '<ul id="attach-scripts-list" class="attach-list"></ul>' +
+    '</div>' +
+    '<div class="attach-slot" data-slot="instructions">' +
+    '<div class="attach-label">Instructions</div>' +
+    '<p class="attach-filter">' + MARKDOWN_TEXT_FILTER + '</p>' +
+    '<button type="button" class="attach-pick" id="attach-instructions-btn">Attach...</button>' +
+    '<ul id="attach-instructions-list" class="attach-list"></ul>' +
+    '</div>' +
+    '<div class="attach-slot" data-slot="prompts">' +
+    '<div class="attach-label">Prompts</div>' +
+    '<p class="attach-filter">' + MARKDOWN_TEXT_FILTER + '</p>' +
+    '<button type="button" class="attach-pick" id="attach-prompts-btn">Attach...</button>' +
+    '<ul id="attach-prompts-list" class="attach-list"></ul>' +
+    '</div>' +
+    '<div class="attach-slot" data-slot="hooks">' +
+    '<div class="attach-label">Hooks</div>' +
+    '<p class="attach-filter">' + SCRIPT_HOOK_FILTER + '</p>' +
+    '<button type="button" class="attach-pick" id="attach-hooks-btn">Attach...</button>' +
+    '<ul id="attach-hooks-list" class="attach-list"></ul>' +
+    '</div>' +
+    '<ul id="attach-untyped-list" class="attach-list"></ul>' +
     '<p id="attach-hint" class="attach-hint" hidden>Open a folder to attach files.</p>' +
-    '<ul id="attach-list" class="attach-list"></ul>' +
     '<ul id="attach-skips" class="attach-skips"></ul>' +
     '</div>' +
     '<label class="row"><input id="active" type="checkbox" checked /> Active in swarm</label>' +
@@ -34,10 +71,9 @@
   const active = document.getElementById('active');
   const err = document.getElementById('err');
   const deleteBtn = document.getElementById('delete-btn');
-  const attachBtn = document.getElementById('attach-btn');
   const attachHint = document.getElementById('attach-hint');
-  const attachList = document.getElementById('attach-list');
   const attachSkips = document.getElementById('attach-skips');
+  const attachUntypedList = document.getElementById('attach-untyped-list');
 
   handle.addEventListener('input', function () {
     handleTouched = true;
@@ -53,8 +89,10 @@
   deleteBtn.addEventListener('click', function () {
     vscode.postMessage({ type: 'bots/delete', id: editingId });
   });
-  attachBtn.addEventListener('click', function () {
-    vscode.postMessage({ type: 'bots/attach-pick' });
+  SLOT_IDS.forEach(function (slot) {
+    document.getElementById('attach-' + slot + '-btn').addEventListener('click', function () {
+      vscode.postMessage({ type: 'bots/attach-pick', slot: slot });
+    });
   });
 
   function derive(n) {
@@ -89,7 +127,9 @@
   }
 
   function setNoFolder(on) {
-    attachBtn.disabled = !!on;
+    SLOT_IDS.forEach(function (slot) {
+      document.getElementById('attach-' + slot + '-btn').disabled = !!on;
+    });
     attachHint.hidden = !on;
   }
 
@@ -105,46 +145,101 @@
   function formAttachments() {
     return attachments.map(function (file) {
       var item = { path: file.path, name: file.name };
+      if (file.slot) {
+        item.slot = file.slot;
+        item.kind = file.slot;
+      }
       if (file.snapshot) item.snapshot = file.snapshot;
       return item;
     });
   }
 
-  function addFiles(files) {
+  function addFiles(slot, files) {
+    if (slot === 'agent') {
+      attachments = attachments.filter(function (held) {
+        return held.slot !== 'agent';
+      });
+    }
     (files || []).forEach(function (file) {
       if (!file || !file.path) return;
-      if (attachments.some(function (held) { return held.path === file.path; })) return;
-      attachments.push({
-        path: file.path,
-        name: file.name || file.path,
-        snapshot: file.snapshot,
-      });
+      var s = slot || file.slot || file.kind;
+      if (s === 'agent') {
+        attachments = attachments.filter(function (held) {
+          return held.slot !== 'agent';
+        });
+      }
+      if (s) {
+        if (attachments.some(function (held) { return held.slot === s && held.path === file.path; })) return;
+        var slotted = { path: file.path, name: file.name || file.path, slot: s };
+        if (file.snapshot) slotted.snapshot = file.snapshot;
+        attachments.push(slotted);
+        return;
+      }
+      if (attachments.some(function (held) { return !held.slot && held.path === file.path; })) return;
+      var untyped = { path: file.path, name: file.name || file.path };
+      if (file.snapshot) untyped.snapshot = file.snapshot;
+      attachments.push(untyped);
     });
     paintAttachments();
   }
 
-  function paintAttachments() {
-    attachList.textContent = '';
-    attachments.forEach(function (file) {
-      var li = document.createElement('li');
-      li.className = 'attach-row';
-      var label = document.createElement('span');
-      label.className = 'attach-row-label';
-      label.textContent = file.name + ' · ' + file.path;
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'icon-close';
-      btn.setAttribute('aria-label', 'Remove');
-      btn.textContent = '\u00d7';
-      btn.addEventListener('click', function () {
-        vscode.postMessage({ type: 'bots/attach-remove', path: file.path });
-        attachments = attachments.filter(function (held) { return held.path !== file.path; });
-        paintAttachments();
-      });
-      li.appendChild(label);
-      li.appendChild(btn);
-      attachList.appendChild(li);
+  function paintSlotList(slot, files) {
+    var list = document.getElementById('attach-' + slot + '-list');
+    list.textContent = '';
+    files.forEach(function (file) {
+      list.appendChild(rowFor(file, slot));
     });
+    if (slot === 'agent') {
+      document.getElementById('attach-agent-btn').textContent = files.length ? 'Replace...' : 'Attach...';
+    }
+  }
+
+  function rowFor(file, slot) {
+    var li = document.createElement('li');
+    li.className = 'attach-row';
+    var label = document.createElement('span');
+    label.className = 'attach-row-label';
+    label.textContent = file.name + ' · ' + file.path;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'icon-close';
+    btn.setAttribute('aria-label', 'Remove');
+    btn.textContent = '\u00d7';
+    btn.addEventListener('click', function () {
+      if (slot) {
+        vscode.postMessage({ type: 'bots/attach-remove', slot: slot, path: file.path });
+        attachments = attachments.filter(function (held) {
+          return !(held.slot === slot && held.path === file.path);
+        });
+      } else {
+        attachments = attachments.filter(function (held) {
+          return held.slot || held.path !== file.path;
+        });
+      }
+      paintAttachments();
+    });
+    li.appendChild(label);
+    li.appendChild(btn);
+    return li;
+  }
+
+  function paintAttachments() {
+    SLOT_IDS.forEach(function (slot) {
+      paintSlotList(
+        slot,
+        attachments.filter(function (file) {
+          return file.slot === slot;
+        }),
+      );
+    });
+    attachUntypedList.textContent = '';
+    attachments
+      .filter(function (file) {
+        return !file.slot;
+      })
+      .forEach(function (file) {
+        attachUntypedList.appendChild(rowFor(file, null));
+      });
   }
 
   function addSkip(msg) {
@@ -246,7 +341,7 @@
         instructions.value = bot.instructions;
         active.checked = !!bot.active;
         deleteBtn.hidden = false;
-        addFiles(bot.attachments);
+        addFiles(undefined, bot.attachments);
       } else {
         editingId = null;
         placeholders = {
@@ -274,7 +369,7 @@
     } else if (msg.type === 'form/error') {
       err.textContent = msg.message || '';
     } else if (msg.type === 'bots/attach-added') {
-      addFiles(msg.files);
+      addFiles(msg.slot, msg.files);
     } else if (msg.type === 'bots/attach-skipped') {
       addSkip(msg);
     } else if (msg.type === 'bots/attach-mapped') {

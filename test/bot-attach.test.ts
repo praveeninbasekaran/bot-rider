@@ -675,6 +675,11 @@ describe('bot record persist', () => {
         { path: 'c.md', name: 'c.md', snapshot: 'FROM-SESSION', kind: 'prompts' },
       ]),
     ).toEqual([{ path: 'c.md', name: 'c.md', snapshot: 'FROM-SESSION', kind: 'prompts' }]);
+    expect(
+      resolveFormAttachments([{ path: 'c.md', name: 'c.md', snapshot: '', slot: 'prompts' }], [
+        { path: 'c.md', name: 'c.md', snapshot: 'FROM-SESSION', kind: 'prompts' },
+      ]),
+    ).toEqual([{ path: 'c.md', name: 'c.md', snapshot: 'FROM-SESSION', kind: 'prompts' }]);
   });
 });
 

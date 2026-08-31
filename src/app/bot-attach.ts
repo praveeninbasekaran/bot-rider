@@ -137,8 +137,20 @@ export function parseAgentSnapshot(snapshot: string): { name?: string; handle?: 
   return {};
 }
 
+type FormAttachmentItem = BotAttachment & { slot?: unknown };
+
+function kindOfFormItem(item: FormAttachmentItem): AttachmentKind | undefined {
+  if (isAttachmentKind(item.kind)) {
+    return item.kind;
+  }
+  if (isAttachmentKind(item.slot)) {
+    return item.slot;
+  }
+  return undefined;
+}
+
 export function resolveFormAttachments(
-  fromForm: BotAttachment[] | undefined,
+  fromForm: FormAttachmentItem[] | undefined,
   session: BotAttachment[],
 ): BotAttachment[] {
   if (!fromForm) {
@@ -151,11 +163,7 @@ export function resolveFormAttachments(
       name: item.name || held?.name || path.basename(item.path),
       snapshot: item.snapshot || held?.snapshot || '',
     };
-    const kind = isAttachmentKind(item.kind)
-      ? item.kind
-      : held && isAttachmentKind(held.kind)
-        ? held.kind
-        : undefined;
+    const kind = kindOfFormItem(item) ?? (held && isAttachmentKind(held.kind) ? held.kind : undefined);
     if (kind) {
       next.kind = kind;
     }
@@ -287,10 +295,11 @@ export async function ingestPickedFiles(args: {
   return { added, skipped, attachments, mapped };
 }
 
-function findHeldAttachment(session: BotAttachment[], item: BotAttachment): BotAttachment | undefined {
-  if (isAttachmentKind(item.kind)) {
+function findHeldAttachment(session: BotAttachment[], item: FormAttachmentItem): BotAttachment | undefined {
+  const kind = kindOfFormItem(item);
+  if (kind) {
     return (
-      session.find((held) => held.path === item.path && held.kind === item.kind) ??
+      session.find((held) => held.path === item.path && held.kind === kind) ??
       session.find((held) => held.path === item.path && !held.kind)
     );
   }
