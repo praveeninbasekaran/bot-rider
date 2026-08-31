@@ -42,6 +42,8 @@ Additive human voice: [architecture-human-voice.md](./architecture-human-voice.m
 
 Additive staged MCP actions (Grain B): [architecture-mcp-actions.md](./architecture-mcp-actions.md). HostToUi `mcp/actions-preview` / `mcp/actions-cleared` / `mcp/actions-failed`. UiToHost `mcp/actions-approve` / `mcp/actions-reject`. Two independent Approve gates. Chrome: [ui-ux-mcp-actions.md](./ui-ux-mcp-actions.md) §19. No pack/TokenGovernor change. No HV change. BR-1–BR-6 protocol frozen.
 
+Additive typed bot attachments (replaces untyped IE Attach on §20): [architecture-bot-attachments.md](./architecture-bot-attachments.md). HostToUi / UiToHost attach ports now pass `slot`. `BotAttachment.kind` equals the slot the user picked. Chrome: [ui-ux-bot-attachments.md](./ui-ux-bot-attachments.md) §20. BR-1–BR-6 protocol frozen.
+
 ### UI → host
 
 `bots/create`, `bots/update`, `bots/toggle`, `bots/delete`, `chat/send`, `chat/stop`, `split/continue`, `split/pick`, `changeset/approve`, `changeset/retry`, `changeset/reject`, `mcp/actions-approve`, `mcp/actions-reject`, `review/open-diff`, `copilot/recheck`
