@@ -10,6 +10,8 @@ Addendum 2026-08-30: Human voice is additive — architecture-human-voice.md + U
 
 Addendum 2026-08-30: Staged MCP actions are additive — architecture-mcp-actions.md + UI §19 Grain B. Two independent Approve gates. Do not treat as a BR-6 combined Approve. BR-1–6 / QC / HV frozen.
 
+Addendum 2026-08-31: Typed attachments revise IE — architecture-bot-attachments.md + UI §20. HostToUi/UiToHost attach ports pass `slot`. `BotAttachment.kind` equals the slot (`agent | skills | scripts | instructions | prompts | hooks`). BR / QC / HV / MA / SD frozen.
+
 ## Product
 
 VS Code extension: `publisher: botrider`, `name: bot-rider`, `displayName: Bot Rider`, `engines.vscode: ^1.99.0`, `activationEvents: []`.
@@ -137,6 +139,8 @@ Additive token-save: [architecture-token-save.md](./architecture-token-save.md).
 Additive human voice: [architecture-human-voice.md](./architecture-human-voice.md). No new HostToUi / UiToHost. Chrome: [ui-ux-chat-prose.md](./ui-ux-chat-prose.md) §18. Not a pack/TokenGovernor change. WM unchanged. BR-1–BR-6 protocol frozen.
 
 Additive staged MCP actions (Grain B): [architecture-mcp-actions.md](./architecture-mcp-actions.md). HostToUi `mcp/actions-preview` / `mcp/actions-cleared` / `mcp/actions-failed`. UiToHost `mcp/actions-approve` / `mcp/actions-reject`. Two independent Approve gates. Chrome: [ui-ux-mcp-actions.md](./ui-ux-mcp-actions.md) §19. No pack/TokenGovernor change. No HV change. BR-1–BR-6 protocol frozen.
+
+Additive typed bot attachments (revises IE): [architecture-bot-attachments.md](./architecture-bot-attachments.md). HostToUi / UiToHost attach ports pass `slot`. `BotAttachment.kind` equals the slot. Chrome: [ui-ux-bot-attachments.md](./ui-ux-bot-attachments.md) §20. BR / QC / HV / MA / SD frozen.
 
 ### UI → host
 

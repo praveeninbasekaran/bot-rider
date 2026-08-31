@@ -1,7 +1,15 @@
 # Bot Rider — Bot form import (typed attachments)
 
 Status: **ready for implementation.** Design only until a developer lands typed slots. Not a host rewrite of BR-1–BR-6, QC, HV, MA, or SD. Replaces the shipped untyped Attach on Import Existing (IE / §20). **Not a new §22.**
-Stories: **IE-1** snapshot persist, **IE-2** TokenGovernor extras, **IE-3** empty-only map + attach/detach on edit, **IE-4** skip huge/unreadable/binary, never execute. Overlay: **TA-1** Agent slot at most one and not required (empty Agent save allowed; empty row valid; all six slots may be empty), **TA-2** Skills / Scripts / Instructions / Prompts / Hooks are 0..n (user picks the slot, then the file; host does not infer kind from filename), **TA-3** picker filters by slot (kind is the slot; a `.md` under Scripts stays a Script; Scripts/Hooks accept markdown/text and `.py .js .ts .sh .bash .zsh .ps1`; never execute), **TA-4** snapshot + kind on BotRecord (TokenGovernor extras for that bot only; pack label includes kind; ports pass slot; no hooks-runner).
+Stories: **TA-1–4.**
+- Six slots on New/Edit Bot. No undifferentiated Attach.
+- Agent: 0 or 1, not required. Empty Agent save allowed. Map empty name/handle/persona only when an Agent file is present (default persona counts as empty).
+- Skills/Scripts/Instructions/Prompts/Hooks: 0..n. User picks the slot then the file. Kind is the slot, not the extension.
+- Filters: Agent/Skills/Instructions/Prompts markdown/text. Scripts/Hooks markdown/text plus `.py .js .ts .sh .bash .zsh .ps1`.
+- Never execute. 256 KiB skip. Snapshot text + path + kind. TokenGovernor extras that bot only, pack label includes kind.
+- BR/QC/HV/MA/SD frozen. Leftovers 002/003/009/014 out.
+
+IE-1–4 still hold: snapshot UTF-8 text, path is a label, empty-only map, 256 KiB skip `too large`, never execute, one bot per form save, no global skill install.
 UI chrome contract: `ui-ux-spec.md` §20 (addendum `ui-ux-bot-attachments.md`).
 Date: 2026-08-31.
 Parent: `architecture-mvp.md`. Pack: `architecture-token-save.md` (QC extras only; minimum pack **unchanged**). HV / MA / WM / SD **untouched**.
@@ -106,7 +114,7 @@ Form draft (unsaved) lives in host memory for that panel only. Reload of VS Code
 - Only `kind: 'agent'` maps name/handle/persona.
 - `AGENTS.md` / `SKILL.md` / `AGENT.md` in Skills (or any other slot) **never** maps.
 - If Agent slot is empty, no map. Create still auto-derives handle from Name on Save when handle is empty, same as today.
-- Persona on New Bot starts empty (`defaultNewBotPersona`) so a map can fill it.
+- Default New Bot persona is the placeholder `A thoughtful teammate who talks like a person.` That placeholder **counts as empty** for map (`isUnfilledAttachField`). Do **not** require wiping the field to `''`. User-edited persona is filled and must not be overwritten. Mapping only runs when an Agent file is present.
 - A `.md` attached under Scripts has `kind: 'scripts'` and does **not** map.
 
 Host parse, **no `sendRequest`**:
@@ -239,6 +247,7 @@ Merge bar after PO allocates, on a **new product PR**:
 - `.md` attached under Scripts has `kind: 'scripts'` and does **not** map name/handle/persona.
 - `AGENTS.md` under Skills does **not** map.
 - Agent slot maps empty name/handle/persona only; filled fields stay; replace remaps empty only.
+- Default persona placeholder (`A thoughtful teammate who talks like a person.`) counts as empty for map; do not require wiping to `''`; user-edited persona is not overwritten.
 - Ports always carry `slot`.
 - Filters: Agent picker does not list `.py`; Scripts picker lists `.md` and `.py`.
 - File of 262145 bytes: skip message ends with `too large`; other files in the same pick still attach; no Copilot.

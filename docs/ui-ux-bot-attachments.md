@@ -46,7 +46,7 @@ Skip copy **unchanged** (§20.4). No hooks-runner chrome. No fourth view.
 
 Fill **empty** fields only. **Never silently overwrite** filled fields. Replace Agent remaps **empty** fields only from the new file.
 
-Default New Bot **persona starts empty** so an Agent-slot map can fill it (already shipped as `defaultNewBotPersona`).
+Default New Bot persona is the placeholder `A thoughtful teammate who talks like a person.` It already **counts as empty** for map (`isUnfilledAttachField`). Do **not** require wiping the field to `''`. User-edited persona is filled and must not be overwritten. Mapping only runs when an Agent file is present.
 
 Handle still follows BR-2 (unique, pattern). Collision or invalid handle is a **form validation error** (`@{handle} is already taken.` / pattern copy). **No Copilot call.**
 
