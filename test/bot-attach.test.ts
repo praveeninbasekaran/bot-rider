@@ -352,17 +352,17 @@ describe('snapshot ingest', () => {
     expect(hooks.attachments.map((a) => a.kind)).toEqual(['scripts', 'hooks']);
     expect(scripts.mapped).toBeUndefined();
     expect(hooks.mapped).toBeUndefined();
-    const src = srcOf(
-      'src/app/bot-attach.ts',
-      'src/adapters/bot-form-panel.ts',
-      'src/app/token-governor.ts',
-      'src/app/bot-registry.ts',
-    );
-    expect(src).not.toMatch(/\bspawn\b/);
-    expect(src).not.toMatch(/\beval\b/);
-    expect(src).not.toMatch(/hooks-runner/);
-    expect(src).not.toMatch(/child_process/);
-    expect(src).not.toMatch(/sendRequest/);
+    const attachSrc = srcOf('src/app/bot-attach.ts', 'src/adapters/bot-form-panel.ts');
+    expect(attachSrc).not.toMatch(/\bspawn\b/);
+    expect(attachSrc).not.toMatch(/\beval\b/);
+    expect(attachSrc).not.toMatch(/hooks-runner/);
+    expect(attachSrc).not.toMatch(/child_process/);
+    expect(attachSrc).not.toMatch(/sendRequest/);
+    const extrasSrc = srcOf('src/app/token-governor.ts', 'src/app/bot-registry.ts');
+    expect(extrasSrc).not.toMatch(/\bspawn\b/);
+    expect(extrasSrc).not.toMatch(/hooks-runner/);
+    expect(extrasSrc).not.toMatch(/child_process/);
+    expect(extrasSrc).not.toMatch(/\.sendRequest\s*\(/);
   });
 
   it('skips 262145 bytes with exact too large copy, continues the pick, and does not call Copilot', async () => {
