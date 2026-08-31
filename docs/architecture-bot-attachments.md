@@ -1,11 +1,11 @@
 # Bot Rider — Bot form import (typed attachments)
 
 Status: **ready for implementation.** Design only until a developer lands typed slots. Not a host rewrite of BR-1–BR-6, QC, HV, MA, or SD. Replaces the shipped untyped Attach on Import Existing (IE / §20). **Not a new §22.**
-Stories: **TA-1–4.**
+Stories TA-1–4.
 - Six slots on New/Edit Bot. No undifferentiated Attach.
 - Agent: 0 or 1, not required. Empty Agent save allowed. Map empty name/handle/persona only when an Agent file is present (default persona counts as empty).
 - Skills/Scripts/Instructions/Prompts/Hooks: 0..n. User picks the slot then the file. Kind is the slot, not the extension.
-- Filters: Agent/Skills/Instructions/Prompts markdown/text. Scripts/Hooks markdown/text plus `.py .js .ts .sh .bash .zsh .ps1`.
+- Filters: Agent/Skills/Instructions/Prompts markdown/text. Scripts/Hooks markdown/text plus .py .js .ts .sh .bash .zsh .ps1.
 - Never execute. 256 KiB skip. Snapshot text + path + kind. TokenGovernor extras that bot only, pack label includes kind.
 - BR/QC/HV/MA/SD frozen. Leftovers 002/003/009/014 out.
 
