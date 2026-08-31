@@ -273,3 +273,22 @@ Staged mutations do not use that copy. Missing MCP: visible skip. Unauth: visibl
 
 ### 19.7 Session-only
 Pending MCP batch is session-only (reload clears, like changeset/board). File pending store unchanged. Reject / reload emit `mcp/actions-cleared`; files untouched.
+
+## 20. Bot form attachments (typed slots, locked)
+
+**Status:** Replaces the single untyped Attach on Import Existing (IE). Not a new §22. Not a fourth view. Create / Edit bot form only.
+
+Canonical addendum: [ui-ux-bot-attachments.md](./ui-ux-bot-attachments.md). Architecture: [architecture-bot-attachments.md](./architecture-bot-attachments.md).
+
+**IE-1–4 + TA-1–4 locked.** Six labeled slots on New Bot / Edit Bot, after System instructions, before Active. Kind **is** the slot. Ports pass `slot`. Agent is optional **0 or 1** (not required). Skills / Scripts / Instructions / Prompts / Hooks are **0..n**. All six may be empty. Empty Agent save is valid. No single **Attach...** for the whole form.
+
+| Slot | Cardinality |
+| --- | --- |
+| **Agent** | Optional, 0 or 1 (not required) |
+| **Skills** | 0..n |
+| **Scripts** | 0..n |
+| **Instructions** | 0..n |
+| **Prompts** | 0..n |
+| **Hooks** | 0..n |
+
+**Out:** single undifferentiated Attach · fourth view · remote/catalog/GitHub import · bulk swarm wizard · hooks execute/run / hooks-runner · global skill install copy · token/install MCP chrome · skip banner for TokenGovernor trims · overwriting filled name/handle/persona · treating path as a live file · inferring kind from filename · requiring an Agent file · a second runtime · any model other than `vscode.lm`.

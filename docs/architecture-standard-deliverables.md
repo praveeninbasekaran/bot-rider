@@ -4,7 +4,7 @@ Status: **ready for implementation.** Design only until a developer lands it. No
 Stories: **SD-1–4 is the full story set.** **SD-1** Swarm ask when format or outline is missing, **SD-2** one primary real file (keyword inference only when a format is named), **SD-3** host-built Office/HTML from board + MCP + decisions, **SD-4** Proposed Changes open (HTML preview / Office inspect).
 UI chrome contract: `ui-ux-spec.md` §21 (addendum `ui-ux-deliverables.md`). Chrome pointer remains §21.
 Date: 2026-08-30.
-Parent: `architecture-mvp.md`. Files still BR-6. MCP still Grain B (`architecture-mcp-actions.md`). IE-attached Office/HTML (`architecture-bot-attachments.md`) may be used as template **only** if that bot already has one. HV voice unchanged.
+Parent: `architecture-mvp.md`. Files still BR-6. MCP still Grain B (`architecture-mcp-actions.md`). IE-attached Office/HTML (`architecture-bot-attachments.md`) may be used as template **only** if that bot already has one. kind = slot; see architecture-bot-attachments.md. Kind does not change this template path (already-attached snapshot as HTML template only). HV voice unchanged.
 Additive. **Copilot stays `vscode.lm`.** No extra keys. No second runtime.
 
 Split (when PO allocates): **Developer 1** host (format detect, Swarm ask, `DeliverableBuilder`, changeset bytes, inspect/preview emit). **Developer 2** §21 Proposed Changes consume (HTML preview, Office inspect line). QA after both.
