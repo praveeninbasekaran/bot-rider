@@ -224,11 +224,13 @@ describe('Bot form attachment chrome (§20)', () => {
     expect(formJs).toContain('addFiles(bot.attachments)');
     expect(formJs).toContain("msg.type === 'bots/attach-added'");
     expect(formJs).toContain("'@' + h + ' is already taken.'");
-    expect(proto).toContain("type: 'bots/attach-pick'");
-    expect(proto).toContain("type: 'bots/attach-remove'; path: string");
-    expect(proto).toContain("type: 'bots/attach-added'");
+    expect(proto).toContain("type: 'bots/attach-pick'; slot: AttachmentKind");
+    expect(proto).toContain("type: 'bots/attach-remove'; slot: AttachmentKind; path: string");
+    expect(proto).toContain("type: 'bots/attach-added'; slot: AttachmentKind;");
     expect(proto).toContain("type: 'bots/attach-skipped'");
+    expect(proto).toContain('slot: AttachmentKind');
     expect(proto).toContain("type: 'bots/attach-mapped'");
+    expect(proto).not.toMatch(/type: 'bots\/attach-pick' \}/);
   });
 
   it('applies mapped persona over the New Bot default and keeps typed fields', () => {

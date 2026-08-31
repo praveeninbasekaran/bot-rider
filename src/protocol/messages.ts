@@ -1,4 +1,4 @@
-import type { BotRecord } from '../domain/bot';
+import type { AttachmentKind, BotRecord } from '../domain/bot';
 import { inferChangeKind, type ChangeFile, type FileOp, type ProposedFileDto } from '../domain/changeset';
 import type { RunStateDto, TurnKind } from '../domain/run-state';
 
@@ -119,8 +119,14 @@ export type HostToUi =
   | { type: 'mcp/actions-preview'; actions: McpActionDto[] }
   | { type: 'mcp/actions-cleared' }
   | { type: 'mcp/actions-failed'; message: string; leftoverIds: string[] }
-  | { type: 'bots/attach-added'; files: { path: string; name: string }[] }
-  | { type: 'bots/attach-skipped'; name: string; reason: AttachSkipReason; message: string }
+  | { type: 'bots/attach-added'; slot: AttachmentKind; files: { path: string; name: string }[] }
+  | {
+      type: 'bots/attach-skipped';
+      slot: AttachmentKind;
+      name: string;
+      reason: AttachSkipReason;
+      message: string;
+    }
   | { type: 'bots/attach-mapped'; name?: string; handle?: string; persona?: string }
   | { type: 'error'; code: ErrorCode; message: string };
 
@@ -150,8 +156,8 @@ export type UiToHost =
   | { type: 'copilot/recheck' }
   | { type: 'mcp/actions-approve' }
   | { type: 'mcp/actions-reject' }
-  | { type: 'bots/attach-pick' }
-  | { type: 'bots/attach-remove'; path: string };
+  | { type: 'bots/attach-pick'; slot: AttachmentKind }
+  | { type: 'bots/attach-remove'; slot: AttachmentKind; path: string };
 
 export interface WorkspaceContext {
   folderFsPath?: string;
