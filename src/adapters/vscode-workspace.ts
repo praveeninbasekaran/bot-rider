@@ -13,7 +13,7 @@ export class VsCodeWorkspacePort implements ApplyEditPort, FileSystemPort, Works
     for (const op of ops) {
       const uri = vscode.Uri.joinPath(folder.uri, ...op.relativePath.split('/'));
       if (op.type === 'create') {
-        const contents = new TextEncoder().encode(op.content);
+        const contents = op.binary ?? new TextEncoder().encode(op.content);
         edit.createFile(uri, { overwrite: op.overwrite, contents });
       } else if (op.type === 'replace') {
         try {

@@ -1,7 +1,12 @@
 import * as vscode from 'vscode';
+import { proposedDocumentText, proposedFileLabel, proposedResourcePath } from './review-chrome';
 
 export const PROPOSED_SCHEME = 'botrider-proposed';
 export const EMPTY_PATH = '/__empty__';
+
+export function proposedUri(path: string): vscode.Uri {
+  return vscode.Uri.from({ scheme: PROPOSED_SCHEME, path: proposedResourcePath(path) });
+}
 
 export class ProposedContentProvider implements vscode.TextDocumentContentProvider {
   private readonly contents = new Map<string, string>();
@@ -9,7 +14,7 @@ export class ProposedContentProvider implements vscode.TextDocumentContentProvid
   readonly onDidChange = this._onDidChange.event;
 
   setProposed(path: string, content: string): void {
-    const key = normalize(path);
+    const key = proposedFileLabel(path);
     this.contents.set(key, content);
     this._onDidChange.fire(this.uriFor(path));
   }
@@ -23,14 +28,13 @@ export class ProposedContentProvider implements vscode.TextDocumentContentProvid
   }
 
   provideTextDocumentContent(uri: vscode.Uri): string {
-    if (uri.query.includes('empty=1') || uri.path === EMPTY_PATH) {
-      return '';
-    }
-    return this.contents.get(normalize(uri.path)) ?? '';
+    const empty = uri.query.includes('empty=1') || uri.path === EMPTY_PATH;
+    const key = proposedFileLabel(uri.path);
+    return proposedDocumentText(key, this.contents.get(key), { empty });
   }
 
   uriFor(path: string): vscode.Uri {
-    return vscode.Uri.from({ scheme: PROPOSED_SCHEME, path: '/' + normalize(path) });
+    return proposedUri(path);
   }
 
   emptyUri(): vscode.Uri {
@@ -60,10 +64,6 @@ export async function closeProposedDiffs(): Promise<void> {
   }
 }
 
-function normalize(path: string): string {
-  return path.replace(/^\/+/, '').replace(/\\/g, '/');
-}
-
 function uriFromKey(key: string): vscode.Uri {
-  return vscode.Uri.from({ scheme: PROPOSED_SCHEME, path: '/' + key });
+  return proposedUri(key);
 }

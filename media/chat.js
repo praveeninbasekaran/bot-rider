@@ -874,9 +874,10 @@
 
   function lockComposer() {
     const ready = state.copilotStatus === 'ready';
-    const locked = !ready || !!state.splitOpen || !!state.debateRunning;
+    const deliverableAsk = !!(state.run && state.run.deliverableAsk);
+    const locked = !ready || !!state.splitOpen || (!!state.debateRunning && !deliverableAsk);
     input.disabled = locked;
-    if (state.debateRunning) {
+    if (state.debateRunning && !deliverableAsk) {
       send.disabled = false;
       send.textContent = 'Stop';
       input.placeholder = 'Debate running…';

@@ -1,4 +1,6 @@
 import type { BotRecord } from '../domain/bot';
+import type { ChangeFile } from '../domain/changeset';
+import type { FormatSpec } from '../domain/deliverable';
 import type { RunStateDto, TurnKind } from '../domain/run-state';
 import { idleRunState } from '../domain/run-state';
 import type { ErrorCode, HostToUi, RunBoardDto, WorkspaceContext } from '../protocol/messages';
@@ -18,6 +20,10 @@ import type { WorkspaceContextPort, FileSystemPort } from './ports';
 import { EmptyLspSlicePort, withSelectionFallback, type LspSlicePort, type LspSliceSnapshot } from './lsp-slice';
 import { RunBoardStore } from './run-board';
 import { packKindFor } from './token-governor';
+import { detectFormat } from './deliverable-detect';
+import { DeliverableBuilder, templateForBot } from './deliverable-builder';
+import { curateFacts } from './deliverable-facts';
+import { extractDeliverableSpecs, selectPrimarySpecs } from './deliverable-parse';
 
 export class Orchestrator {
   private state: RunStateDto = idleRunState();
@@ -28,6 +34,8 @@ export class Orchestrator {
   private workspace: WorkspaceContext = { otherTabPaths: [] };
   private loopActive = false;
   private lspSlice: LspSliceSnapshot = { diagnostics: [], symbols: [] };
+  private deliverableAskCount = 0;
+  private deliverableAnswers: string[] = [];
 
   constructor(
     private readonly registry: BotRegistry,
@@ -82,6 +90,10 @@ export class Orchestrator {
     if (this.state.splitOpen) {
       return;
     }
+    if (this.state.deliverableAsk) {
+      await this.answerDeliverableAsk(text);
+      return;
+    }
     if (this.state.debateRunning || this.loopActive) {
       return;
     }
@@ -133,6 +145,8 @@ export class Orchestrator {
 
     this.userText = text;
     this.history = [];
+    this.deliverableAskCount = 0;
+    this.deliverableAnswers = [];
     this.cts = new CancelSource();
     this.loopActive = true;
     this.board.clear();
@@ -224,7 +238,7 @@ export class Orchestrator {
       phase: 'implement',
     };
     this.pushState();
-    await this.runImplementer(bot, COPY.pickDirection(bot.name));
+    await this.maybeStartImplementer(bot, COPY.pickDirection(bot.name));
     this.loopActive = false;
   }
 
@@ -275,7 +289,7 @@ export class Orchestrator {
         this.emitBoard();
         const implementer = this.freeze[0];
         if (implementer) {
-          await this.runImplementer(implementer);
+          await this.maybeStartImplementer(implementer);
         }
         return;
       }
@@ -299,26 +313,44 @@ export class Orchestrator {
     }
     const trailer = result.trailer ?? 'NO_EDIT';
     if (trailer === 'NEED_EDIT') {
-      await this.runImplementer(bot);
+      await this.maybeStartImplementer(bot);
       return;
     }
     this.exitToIdle();
   }
 
-  private async runImplementer(bot: BotRecord, notice?: string): Promise<void> {
+  private async maybeStartImplementer(bot: BotRecord, notice?: string): Promise<void> {
     if (this.cancelled()) {
       return;
     }
+    if (this.state.splitOpen) {
+      return;
+    }
+    const detected = detectFormat(this.detectCorpus(), this.board.snapshot());
+    if (detected.intent && (!detected.formats.length || !detected.hasOutline)) {
+      await this.askDeliverable(bot, detected);
+      return;
+    }
+    await this.runImplementer(bot, notice, detected.intent ? detected : undefined);
+  }
+
+  private async runImplementer(bot: BotRecord, notice?: string, detected?: FormatSpec): Promise<void> {
+    if (this.cancelled()) {
+      return;
+    }
+    const deliverable = !!(detected && detected.intent && detected.formats.length && detected.hasOutline);
     this.state.phase = 'implement';
     this.state.turn = 'implement';
     this.state.currentBotId = bot.id;
     this.state.debateRunning = true;
+    this.state.deliverableAsk = false;
     this.pushState();
+    const extra = deliverable ? COPY.deliverableImplementerExtra : undefined;
     const result = await this.runTurn(
       bot,
       'implement',
       this.state.round || 1,
-      turnInstruction('implement', this.state.round || 1, this.userText),
+      turnInstruction('implement', this.state.round || 1, this.detectCorpus(), extra),
       { inactiveNotice: notice },
     );
     if (!isTurnOk(result)) {
@@ -329,13 +361,34 @@ export class Orchestrator {
       this.fail('no-workspace', COPY.noWorkspace);
       return;
     }
+    if (deliverable && detected) {
+      this.finishDeliverable(bot, result.text, detected, root);
+      return;
+    }
     const parsed = this.parser.parseImplementer(result.text, root);
     if (!parsed.ok) {
       this.fail(parsed.code, parsed.code === 'parse-failed' ? COPY.parseFailed : COPY.validateFailed);
       return;
     }
-    this.changesets.setPending(parsed.files);
-    this.syncFiles(parsed.files.map((f) => f.path));
+    this.enterPendingReview(parsed.files);
+  }
+
+  private finishDeliverable(bot: BotRecord, implementerText: string, detected: FormatSpec, root: string): void {
+    const fromImpl = extractDeliverableSpecs(implementerText, root);
+    const specs = selectPrimarySpecs(detected.formats, fromImpl, detected);
+    const facts = curateFacts(this.board.snapshot(), this.mcp.contextLines());
+    const files: ChangeFile[] = specs.map((spec) =>
+      DeliverableBuilder.build(
+        { ...spec, facts: spec.facts?.length ? spec.facts : facts },
+        templateForBot(bot, spec.format),
+      ),
+    );
+    this.enterPendingReview(files);
+  }
+
+  private enterPendingReview(files: ChangeFile[]): void {
+    this.changesets.setPending(files);
+    this.syncFiles(files.map((f) => f.path));
     this.emitBoard();
     this.state = {
       phase: 'pendingReview',
@@ -346,6 +399,81 @@ export class Orchestrator {
       frozenBotIds: this.freeze.map((b) => b.id),
     };
     this.pushState();
+  }
+
+  private async askDeliverable(bot: BotRecord, detected: FormatSpec): Promise<void> {
+    if (this.state.splitOpen) {
+      return;
+    }
+    this.deliverableAskCount += 1;
+    const question = deliverableAskCopy(detected);
+    const turn: TurnKind = this.state.phase === 'direct' ? 'direct' : 'propose';
+    this.emit({
+      type: 'chat/turn-start',
+      botId: bot.id,
+      handle: bot.handle,
+      name: bot.name,
+      colorIndex: bot.colorIndex,
+      turn,
+      round: this.state.round || 1,
+    });
+    this.emit({ type: 'chat/token', botId: bot.id, delta: question });
+    this.history.push({ handle: bot.handle, text: question });
+    this.thread.append({ role: 'assistant', text: question, handle: bot.handle, botId: bot.id });
+    this.emit({
+      type: 'chat/turn-end',
+      botId: bot.id,
+      turn,
+      text: question,
+      handle: bot.handle,
+    });
+    this.state = {
+      ...this.state,
+      splitOpen: false,
+      debateRunning: false,
+      deliverableAsk: true,
+      currentBotId: bot.id,
+    };
+    this.pushState();
+  }
+
+  private async answerDeliverableAsk(text: string): Promise<void> {
+    if (this.state.splitOpen || this.loopActive || this.state.debateRunning) {
+      return;
+    }
+    const bot = this.freeze[0];
+    if (!bot) {
+      this.exitToIdle();
+      return;
+    }
+    this.deliverableAnswers.push(text);
+    this.board.setGoal(this.detectCorpus());
+    this.emitBoard();
+    const detected = detectFormat(this.detectCorpus(), this.board.snapshot());
+    if (detected.formats.length && detected.hasOutline) {
+      const copilot = await this.gateway.ensureAvailable();
+      if (copilot !== 'ready') {
+        this.emitCopilot(copilot);
+        return;
+      }
+      this.cts = new CancelSource();
+      this.loopActive = true;
+      this.state.deliverableAsk = false;
+      this.state.debateRunning = true;
+      this.pushState();
+      await this.runImplementer(bot, undefined, detected);
+      this.loopActive = false;
+      return;
+    }
+    if (this.deliverableAskCount >= 2) {
+      this.exitToIdle();
+      return;
+    }
+    await this.askDeliverable(bot, detected);
+  }
+
+  private detectCorpus(): string {
+    return [this.userText, ...this.deliverableAnswers].filter((part) => part && part.trim()).join('\n');
   }
 
   private async runTurn(
@@ -520,6 +648,8 @@ export class Orchestrator {
 
   private exitToIdle(): void {
     this.hideBoard();
+    this.deliverableAskCount = 0;
+    this.deliverableAnswers = [];
     this.state = {
       ...idleRunState(),
       applyFailed: this.changesets.applyFailed,
@@ -655,4 +785,14 @@ type TurnResult =
 
 function isTurnOk(result: TurnResult): result is { ok: true; text: string; trailer?: 'NEED_EDIT' | 'NO_EDIT'; vote?: 'AGREE' | 'DISSENT' } {
   return typeof result === 'object' && result.ok === true;
+}
+
+function deliverableAskCopy(detected: FormatSpec): string {
+  if (!detected.formats.length && !detected.hasOutline) {
+    return COPY.deliverableAskBoth;
+  }
+  if (!detected.formats.length) {
+    return COPY.deliverableAskFormat;
+  }
+  return COPY.deliverableAskOutline;
 }

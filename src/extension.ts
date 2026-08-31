@@ -10,12 +10,13 @@ import {
   closeProposedDiffs,
   PROPOSED_SCHEME,
 } from './adapters/proposed-content-provider';
-import { openProposedDiff, ReviewTreeProvider } from './adapters/review-tree';
+import { closeDeliverablePreviews, openProposedDiff, ReviewTreeProvider } from './adapters/review-tree';
 import { createCopilotGateway } from './adapters/vscode-lm-gateway';
 import { VsCodeMcpPort } from './adapters/vscode-mcp';
 import { VsCodeWorkspacePort } from './adapters/vscode-workspace';
 import { VsCodeLspSlicePort } from './adapters/vscode-lsp';
 import type { HostToUi, UiToHost } from './protocol/messages';
+import type { ChangePreviewKind, FileOp } from './domain/changeset';
 import { COPY, copilotStatusMessage } from './app/copy';
 import { MCP_SETTLE_MS, McpGateway } from './app/mcp-gateway';
 
@@ -88,7 +89,12 @@ export function activate(context: vscode.ExtensionContext): void {
     workspace,
     emit,
     proposed,
-    { closeProposedDiffs },
+    {
+      closeProposedDiffs: async () => {
+        await closeProposedDiffs();
+        await closeDeliverablePreviews();
+      },
+    },
     mcp,
     lsp,
   );
@@ -117,6 +123,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     botsView,
     reviewView,
+    vscode.window.registerFileDecorationProvider(reviewTree.decorations),
     vscode.workspace.registerTextDocumentContentProvider(PROPOSED_SCHEME, proposed),
     vscode.window.registerWebviewViewProvider(
       'botrider.chat',
@@ -164,7 +171,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('botrider.review.focusMcp', () => reviewTree.revealMcp()),
     vscode.commands.registerCommand(
       'botrider.review.openDiff',
-      async (item?: { file?: { path: string; op: 'create' | 'update' | 'delete' } }) => {
+      async (item?: { file?: { path: string; op: FileOp; kind?: ChangePreviewKind } }) => {
         if (item?.file) {
           await openProposedDiff(item.file, proposed);
         }
@@ -214,7 +221,8 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
       if (msg.type === 'review/open-diff') {
-        await openProposedDiff({ path: msg.path, op: msg.op ?? 'update' }, proposed);
+        const pending = app.changesets.files?.find((f) => f.path === msg.path);
+        await openProposedDiff(pending ?? { path: msg.path, op: msg.op ?? 'update' }, proposed);
         return;
       }
       await app.handleUi(msg);

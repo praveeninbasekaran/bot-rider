@@ -67,6 +67,20 @@ describe('ChangesetStore', () => {
     expect(store.hasPending()).toBe(false);
   });
 
+  it('office-binary create approve writes bytes and preview includes kind', async () => {
+    const fs = new MemoryFs();
+    const msgs: HostToUi[] = [];
+    const store = new ChangesetStore(fs, fs, (m) => msgs.push(m));
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]);
+    store.setPending([{ path: 'plan.docx', op: 'create', binary: bytes, kind: 'office-binary' }]);
+    const preview = msgs.find((m) => m.type === 'changeset/preview');
+    expect(preview && preview.type === 'changeset/preview' && preview.files[0]?.kind).toBe('office-binary');
+    const ok = await store.approve('initial');
+    expect(ok).toBe(true);
+    expect(fs.binaries.get('plan.docx')).toEqual(bytes);
+    expect(store.hasPending()).toBe(false);
+  });
+
   it('applyEdit false never claims success', async () => {
     const fs = new MemoryFs();
     const msgs: HostToUi[] = [];

@@ -46,6 +46,15 @@ export const COPY = {
   attachSkipTooLarge: (name: string) => `Skipped ${name} · too large`,
   attachSkipBinary: (name: string) => `Skipped ${name} · Binary file.`,
   attachSkipUnreadable: (name: string) => `Skipped ${name} · Can't read this file.`,
+  deliverableAskFormat: 'Which format should I write — Word, Excel, PowerPoint, or HTML?',
+  deliverableAskOutline: 'What has to be in it?',
+  deliverableAskBoth:
+    'Which format should I write — Word, Excel, PowerPoint, or HTML — and what has to be in it?',
+  officeInspect: (filename: string, kind: 'Word' | 'Excel' | 'PowerPoint') =>
+    `${filename} · new ${kind} file`,
+  htmlPreviewTitle: (filename: string) => `${filename} (Proposed)`,
+  deliverableImplementerExtra:
+    'This Send is a standard deliverable. Each files[] entry must include path with the real extension, op create, format (docx|xlsx|pptx|html), title, and outline (string[]). Optional facts are curated one-liners. Do not emit zip, XML, base64, or file bytes.',
 };
 
 export function copilotStatusMessage(status: CopilotStatus): string | undefined {

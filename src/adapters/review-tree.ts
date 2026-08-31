@@ -2,9 +2,16 @@ import * as vscode from 'vscode';
 import * as nodePath from 'node:path';
 import type { Application } from '../app/application';
 import type { ChangeFile, FileOp } from '../domain/changeset';
+import { resolveProposedOpen } from '../app/deliverable-open';
 import type { McpActionDto } from '../protocol/messages';
-import { ProposedContentProvider } from './proposed-content-provider';
-import { mcpFailedViewMessage, reviewChromeMode } from './review-chrome';
+import { ProposedContentProvider, PROPOSED_SCHEME, proposedUri } from './proposed-content-provider';
+import {
+  htmlPreviewDocument,
+  mcpFailedViewMessage,
+  proposedCreateDecoration,
+  proposedFileChrome,
+  reviewChromeMode,
+} from './review-chrome';
 
 export type { ReviewChromeMode } from './review-chrome';
 export { mcpFailedViewMessage, reviewChromeMode };
@@ -23,14 +30,43 @@ class ReviewItem extends vscode.TreeItem {
   }
 }
 
+export class ProposedFileDecorationProvider implements vscode.FileDecorationProvider {
+  private readonly _onDidChangeFileDecorations = new vscode.EventEmitter<
+    vscode.Uri | vscode.Uri[] | undefined
+  >();
+  readonly onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
+
+  constructor(private readonly app: Application) {}
+
+  refresh(): void {
+    this._onDidChangeFileDecorations.fire(undefined);
+  }
+
+  provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+    if (uri.scheme !== PROPOSED_SCHEME) {
+      return undefined;
+    }
+    const rel = uri.path.replace(/^\/+/, '').replace(/\\/g, '/');
+    const file = this.app.changesets.files?.find((f) => f.path.replace(/\\/g, '/') === rel);
+    if (file?.op !== 'create') {
+      return undefined;
+    }
+    const dec = proposedCreateDecoration();
+    return new vscode.FileDecoration(dec.badge, dec.tooltip);
+  }
+}
+
 export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  readonly decorations: ProposedFileDecorationProvider;
   private view: vscode.TreeView<ReviewItem> | undefined;
   private mcpFailed = false;
   private mcpFocus: ReviewItem | undefined;
 
-  constructor(private readonly app: Application) {}
+  constructor(private readonly app: Application) {
+    this.decorations = new ProposedFileDecorationProvider(app);
+  }
 
   attach(view: vscode.TreeView<ReviewItem>): void {
     this.view = view;
@@ -43,6 +79,7 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
+    this.decorations.refresh();
     this.syncChrome();
   }
 
@@ -139,10 +176,28 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   }
 }
 
+const htmlPreviewPanels: vscode.WebviewPanel[] = [];
+
 export async function openProposedDiff(
-  file: { path: string; op: FileOp },
+  file: ChangeFile | { path: string; op: FileOp; content?: string; kind?: ChangeFile['kind'] },
   proposed: ProposedContentProvider,
 ): Promise<void> {
+  const plan = resolveProposedOpen({
+    path: file.path,
+    op: file.op,
+    content: file.content,
+    kind: 'kind' in file ? file.kind : undefined,
+    binary: 'binary' in file ? file.binary : undefined,
+  });
+  if (plan.mode === 'office-inspect') {
+    await vscode.window.showInformationMessage(plan.message);
+    return;
+  }
+  if (plan.mode === 'html-preview') {
+    await openHtmlPreview(plan.title, plan.html);
+    return;
+  }
+
   const folder = vscode.workspace.workspaceFolders?.[0];
   const basename = nodePath.posix.basename(file.path);
   const right = proposed.uriFor(file.path);
@@ -165,6 +220,30 @@ export async function openProposedDiff(
   await vscode.commands.executeCommand('vscode.diff', left, right, title, preview);
 }
 
+export async function openHtmlPreview(title: string, html: string): Promise<void> {
+  const panel = vscode.window.createWebviewPanel(
+    'botrider.deliverablePreview',
+    title,
+    { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
+    { enableScripts: false, retainContextWhenHidden: false },
+  );
+  panel.webview.html = htmlPreviewDocument(html);
+  htmlPreviewPanels.push(panel);
+  panel.onDidDispose(() => {
+    const index = htmlPreviewPanels.indexOf(panel);
+    if (index >= 0) {
+      htmlPreviewPanels.splice(index, 1);
+    }
+  });
+}
+
+export async function closeDeliverablePreviews(): Promise<void> {
+  for (const panel of [...htmlPreviewPanels]) {
+    panel.dispose();
+  }
+  htmlPreviewPanels.length = 0;
+}
+
 function sectionItem(label: string, kind: 'filesSection' | 'mcpSection', contextValue: string): ReviewItem {
   const item = new ReviewItem(label, vscode.TreeItemCollapsibleState.Expanded, kind);
   item.contextValue = contextValue;
@@ -176,22 +255,17 @@ function sectionItem(label: string, kind: 'filesSection' | 'mcpSection', context
 }
 
 function fileItem(file: ChangeFile): ReviewItem {
-  const item = new ReviewItem(file.path, vscode.TreeItemCollapsibleState.None, 'file', file);
-  item.id = `file:${file.path}`;
-  item.contextValue = 'proposedFile';
+  const chrome = proposedFileChrome(file);
+  const item = new ReviewItem(chrome.label, vscode.TreeItemCollapsibleState.None, 'file', file);
+  item.id = `file:${chrome.label}`;
+  item.contextValue = chrome.contextValue;
   item.command = {
-    command: 'botrider.review.openDiff',
+    command: chrome.command,
     title: 'Open Diff',
     arguments: [item],
   };
-  item.resourceUri = vscode.Uri.parse(`file:${file.path}`);
-  if (file.op === 'create') {
-    item.description = 'Added';
-  } else if (file.op === 'delete') {
-    item.description = 'Deleted';
-  } else {
-    item.description = 'Modified';
-  }
+  item.resourceUri = proposedUri(chrome.resourcePath);
+  item.description = chrome.description;
   return item;
 }
 

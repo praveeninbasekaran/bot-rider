@@ -23,7 +23,12 @@ export class ChangesetStore {
   ) {}
 
   get files(): ChangeFile[] | undefined {
-    return this.pending ? this.pending.map((f) => ({ ...f })) : undefined;
+    return this.pending
+      ? this.pending.map((f) => ({
+          ...f,
+          binary: f.binary ? new Uint8Array(f.binary) : undefined,
+        }))
+      : undefined;
   }
 
   hasPending(): boolean {
@@ -31,13 +36,17 @@ export class ChangesetStore {
   }
 
   setPending(files: ChangeFile[]): void {
-    this.pending = files.map((f) => ({ ...f }));
+    this.pending = files.map((f) => ({
+      ...f,
+      binary: f.binary ? new Uint8Array(f.binary) : undefined,
+    }));
     this.applyFailed = false;
     this.leftoverCreates = [];
     this.leftoverDeletes = [];
     this.docs?.clearProposed();
     for (const f of this.pending) {
-      this.docs?.setProposed(f.path, f.op === 'delete' ? '' : (f.content ?? ''));
+      const proposed = f.op === 'delete' || f.binary ? '' : (f.content ?? '');
+      this.docs?.setProposed(f.path, proposed);
     }
     this.emit({ type: 'changeset/preview', files: filesToPreview(this.pending) });
   }
@@ -61,6 +70,7 @@ export class ChangesetStore {
           relativePath: file.path,
           content: file.content ?? '',
           overwrite: mode === 'retry',
+          ...(file.binary ? { binary: file.binary } : {}),
         });
       } else if (file.op === 'update') {
         ops.push({
