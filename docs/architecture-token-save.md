@@ -8,6 +8,8 @@ No Dev 1 / Dev 2 until this file is on the repo.
 
 Story map: **QC-1, QC-2, QC-3** (this file). No new stories.
 
+Addendum 2026-09-01: published isolation packets ([architecture-bot-isolation.md](./architecture-bot-isolation.md)) are **required** for the receiving bot’s pack (not silent-trim extras); if they miss with the rest of the minimum pack → pack-overflow. QC-1–QC-3 packs otherwise unchanged.
+
 ## 0. Non-negotiables (PO 2026-08-28 + §17 + BA + QC)
 
 - Swarm **full prose**. `chat/token {botId,delta}` unchanged.
