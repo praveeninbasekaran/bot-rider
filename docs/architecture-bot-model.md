@@ -1,7 +1,7 @@
 # Bot Rider — Per-bot Copilot model selection (additive slice)
 
 Status: **ready for implementation.** Design only until a developer lands it. Not a host rewrite of BR, QC, HV, MA, SD, or TA. **Not** F7 parallel / Event Bus.
-Stories: **MS-1–3 is the full story set.** **MS-1** discover `vscode.lm.selectChatModels({ vendor: 'copilot' })` on New/Edit; select key = `LanguageModelChat.id`; labels are display only. **MS-2** persist that id as `modelId` on `BotRecord`; empty / unset = host default (today’s path). **MS-3** that bot’s propose / critique / `@` / implementer uses the pick; missing id → host default that turn + visible copy; **do not** block the turn. No other vendor. No API keys.
+Stories: **MS-1–3 is the full story set.** **MS-1** discover `vscode.lm.selectChatModels({ vendor: 'copilot' })` on New/Edit; select key = `LanguageModelChat.id`; labels are display only. **MS-2** persist `LanguageModelChat.id` only as `modelId` on `BotRecord` (label never persisted); empty = host default (today’s path). **MS-3** that bot’s propose / critique / `@` / implementer uses the pick; missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only. No API keys.
 UI chrome contract: `ui-ux-spec.md` §22 (addendum `ui-ux-bot-model.md`).
 Date: 2026-09-01.
 Parent: `architecture-mvp.md`. Copilot stays `vscode.lm`. ₹0 extra keys. No second runtime.
@@ -12,14 +12,14 @@ Split (when PO allocates; **do not allocate in this docs PR**): **Developer 1** 
 
 ## 0. Non-negotiables (PO + MS-1–3 + §22)
 
-- Discover only `{ vendor: 'copilot' }` via existing LmPort / `selectChatModels`. Filter non-copilot if any leak.
-- Persist `modelId?: string | null` on `BotRecord`. Do **not** bump `BotStoreFile.version`. Missing `modelId` = host default.
+- Persist `LanguageModelChat.id` only (label never persisted). Stored as `modelId?: string | null` on `BotRecord`. Do **not** bump `BotStoreFile.version`.
+- Empty = host default. Empty / unset / omit / `null` `modelId` → today’s host default selection path (`CopilotGateway`: `selectChatModels({ vendor: 'copilot' })`, then `models[0]` after vendor filter).
+- Missing id = host default that turn + visible copy; do not block the turn. Saved `LanguageModelChat.id` not in current Copilot discovery → host default **that turn** + visible copy; **do not** block the turn.
+- Copilot vendor only. Discover only `{ vendor: 'copilot' }` via existing LmPort / `selectChatModels`. Filter non-copilot if any leak. No other vendor.
 - Settings Sync stays off for bot keys (`setKeysForSync` stays off).
 - Resolve model **per that bot** on propose / critique / direct (`@`) / implement turns only.
-- Empty `modelId` → today’s host default selection path (`CopilotGateway`: `selectChatModels({ vendor: 'copilot' })`, then `models[0]` after vendor filter).
-- Saved id not in current Copilot discovery → host default **that turn** + visible notice; **do not** fail the turn.
 - Mid-run Edit that changes `modelId`: **next turn / next run only** (do not hot-swap mid-stream).
-- UI never calls `vscode.lm`. Form open is enough user gesture for **discovery** (`selectChatModels` only; never `sendRequest` from CRUD / the form). No API keys. No non-copilot. No Swarm per-turn picker. No F7.
+- UI never calls `vscode.lm`. Form open is enough user gesture for **discovery** (`selectChatModels` only; never `sendRequest` from CRUD / the form). No API keys. No Swarm per-turn picker. No F7.
 - BR / QC / HV / MA / SD / TA frozen. §20 Attach unchanged. Leftovers 002/003/009/014 out. Graphify out.
 
 ---
@@ -34,14 +34,14 @@ New Bot / Edit Bot open
     while form open: onDidChangeChatModels → refresh emit
 
 Save  bots/create | bots/update
-    modelId: LanguageModelChat.id | null     // label never persisted
+    persist LanguageModelChat.id only as modelId | null     // label never persisted
 
 Send (this bot, propose | critique | direct | implement)
-    1. modelId empty → today’s CopilotGateway default pick
-    2. else find copilot model where id === bot.modelId
-    3. if not found → default pick this turn
-         + visible notice once
-         + continue the turn (do not fail)
+    1. empty modelId → host default (today’s CopilotGateway pick)
+    2. else find copilot model where id === bot.modelId   // Copilot vendor only
+    3. missing id (not in current discovery) → host default this turn
+         + visible copy once
+         + do not block the turn
 
 Vote / Split / Stop: no per-bot model resolve (not in MS-3 turn list)
 Mid-run Edit modelId: next turn / next run only; do not hot-swap mid-stream
@@ -52,33 +52,33 @@ UI never calls vscode.lm. No sendRequest from the form.
 
 ## 2. BotRecord (additive)
 
-Do **not** bump `BotStoreFile.version`. Missing `modelId` still reads as host default (same as `null` / empty).
+Do **not** bump `BotStoreFile.version`. Persist `LanguageModelChat.id` only (label never persisted). Empty / unset / omit / `null` `modelId` = host default.
 
 ```ts
 interface BotRecord {
   // existing fields unchanged
-  /** LanguageModelChat.id for vendor copilot. Omit/null = host default. */
+  /** LanguageModelChat.id for vendor copilot. Omit/null = host default. Label never persisted. */
   modelId?: string | null;
 }
 ```
 
-- Label is **never** the persisted value. Persist **id only**.
-- Empty string, omit, and `null` are the same: host default for that bot’s turns.
+- Persist `LanguageModelChat.id` only. Label is **never** persisted.
+- Empty = host default. Empty string, omit, and `null` are the same: host default for that bot’s turns.
 - CRUD still `await globalState.update`. Last write wins across windows.
 - Delete bot drops `modelId` with the record.
-- `bots/create` `draft` and `bots/update` `patch` gain optional `modelId?: string | null`. Host stores the id key only.
+- `bots/create` `draft` and `bots/update` `patch` gain optional `modelId?: string | null`. Host stores `LanguageModelChat.id` only.
 
 ---
 
 ## 3. Discovery and labels (MS-1)
 
-Host-owned. Existing LmPort / `selectChatModels({ vendor: 'copilot' })` only. Filter `vendor === 'copilot'` if any leak. **No other vendors.** No fake / hardcoded models.
+Host-owned. **Copilot vendor only.** Existing LmPort / `selectChatModels({ vendor: 'copilot' })` only. Filter `vendor === 'copilot'` if any leak. No other vendor. No fake / hardcoded models.
 
 Form open is enough user gesture for this `selectChatModels` call. Refresh on `vscode.lm.onDidChangeChatModels` **while the form is open**. Do not `sendRequest` from the form. Recheck / sign-in stays `botrider.copilot.recheck`.
 
 LmPort must surface enough of `LanguageModelChat` for matching and labels (`id` required; `name` / `family` for display). Do not add a second discovery path. UI never imports `vscode.lm`.
 
-**Select key = `LanguageModelChat.id`.** Option `value` is that id. Visible string is display only (never persisted).
+**Select key = `LanguageModelChat.id`.** Persist `LanguageModelChat.id` only (label never persisted). Option `value` is that id. Visible string is display only.
 
 Host builds `{ id, label }[]`:
 
@@ -98,7 +98,7 @@ Emit `bots/models` on form open and on `onDidChangeChatModels` while the form is
 | `'ready'` | one or more copilot models | saved `modelId` if it is in `models`, else `null` |
 | `'unavailable'` | Copilot signed out or zero models after filter | `null` |
 
-When the bot’s persisted `modelId` is non-empty and not in the current `models` list, emit `status: 'ready'` (if models exist) with `selectedId: null`. Form copy is `Saved model is unavailable. Using extension default.` (see §22.5). Do **not** invent a blocking error type.
+When the bot’s persisted `modelId` is non-empty and not in the current `models` list, emit `status: 'ready'` (if models exist) with `selectedId: null`. Form copy is `Saved model is unavailable. Using extension default.` (see §22.5). Missing id = host default that turn + visible copy; do **not** block the turn. Do **not** invent a blocking error type.
 
 ---
 
@@ -106,13 +106,13 @@ When the bot’s persisted `modelId` is non-empty and not in the current `models
 
 When sending a bot turn (**propose / critique / direct / implement** only):
 
-1. If `bot.modelId` is empty / omit / `null` → `selectChatModels({ vendor: 'copilot' })` and use today’s default pick (`CopilotGateway`, `models[0]` after vendor filter).
-2. Else find the model where `id === bot.modelId` among copilot models (same vendor filter).
-3. If not found → default pick **this turn** + emit visible notice **once**:
+1. Empty = host default. If `bot.modelId` is empty / omit / `null` → `selectChatModels({ vendor: 'copilot' })` and use today’s default pick (`CopilotGateway`, `models[0]` after vendor filter).
+2. Else find the model where `id === bot.modelId` among copilot models (**Copilot vendor only**).
+3. Missing id = host default that turn + visible copy; do not block the turn. If the saved `LanguageModelChat.id` is not in current Copilot discovery → host default **this turn** + emit visible copy **once**:
 
    `Saved model is unavailable. Using extension default.`
 
-   Use existing `chat/notice` (or equivalent). Do **not** invent a blocking `error`. **Continue the turn.** Composer stays enabled. Do not fail `sendRequest` solely because the saved id is missing.
+   Use existing `chat/notice` (or equivalent). Do **not** invent a blocking `error`. **Do not block the turn.** Composer stays enabled. Do not fail `sendRequest` solely because the saved id is missing.
 
 Vote / consensus, Split chrome, and Stop do **not** take a per-bot model. Continue extra debate rounds are propose / critique and **do** resolve per that bot.
 
@@ -137,7 +137,7 @@ type HostToUi = /* existing */
 // bots/create draft and bots/update patch gain optional modelId?: string | null
 ```
 
-No new UiToHost beyond create/update carrying `modelId`. Select value = id; empty = host default.
+No new UiToHost beyond create/update carrying `modelId` (`LanguageModelChat.id` only; label never persisted). Select value = id; empty = host default.
 
 UI **never** calls `vscode.lm`. Host discovers, labels, and resolves.
 
@@ -167,15 +167,16 @@ Swarm per-message model picker, non-Copilot vendors, persisting display label as
 
 Merge bar after PO allocates, on a **new product PR**:
 
-- Empty `modelId` uses host default.
+- Persist `LanguageModelChat.id` only (label never persisted).
+- Empty = host default.
+- Missing id = host default that turn + visible copy; do not block the turn.
+- Copilot vendor only. Non-copilot never listed.
 - Saved id present → that model for that bot’s propose / critique / direct / implement.
-- Saved id missing → default that turn + notice; turn not blocked.
-- Non-copilot never listed.
 - UI never imports `vscode.lm`.
 - Tree has no model subtitle.
 - §20 attach ports unchanged.
 - Settings Sync still off.
 - Vote / consensus does not require per-bot resolve.
 - Mid-run Edit of `modelId` does not hot-swap the in-flight stream.
-- `BotStoreFile.version` unchanged; missing `modelId` on old records = host default.
+- `BotStoreFile.version` unchanged; empty / unset `modelId` on old records = host default.
 - WM / QC / HV / MA / SD / TA tests conceptually still pass (this slice does not change them).

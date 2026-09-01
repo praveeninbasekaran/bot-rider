@@ -297,6 +297,6 @@ Canonical addendum: [ui-ux-bot-attachments.md](./ui-ux-bot-attachments.md). Arch
 
 **Status:** Additive. **MS-1–3 locked.** New Bot / Edit Bot only. Not a Swarm control. Not a fourth sidebar. Do **not** reopen §20 Attach.
 
-Canonical addendum: [ui-ux-bot-model.md](./ui-ux-bot-model.md). Architecture: [architecture-bot-model.md](./architecture-bot-model.md). HostToUi `bots/models`. Persist `BotRecord.modelId`. Copilot via `vscode.lm` only.
+Canonical addendum: [ui-ux-bot-model.md](./ui-ux-bot-model.md). Architecture: [architecture-bot-model.md](./architecture-bot-model.md). HostToUi `bots/models`. Persist `LanguageModelChat.id` only as `BotRecord.modelId` (label never persisted). Empty = host default. Missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only via `vscode.lm`.
 
 **Out:** Swarm per-message model picker · non-Copilot vendors · persisting display label as key · blocking a turn when saved id missing · token/quota chrome · fourth sidebar · F7 parallel · leftovers 002/003/009/014 · tree model subtitle · fake model list · reopening §20 Attach slots.
