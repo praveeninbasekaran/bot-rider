@@ -2,12 +2,25 @@ import * as path from 'node:path';
 import {
   ATTACH_BINARY_PROBE_BYTES,
   ATTACH_MAX_BYTES,
-  CLEARLY_AGENT_NAMES,
   attachmentsOf,
+  isAttachmentKind,
+  type AttachmentKind,
   type BotAttachment,
 } from '../domain/bot';
-import type { AttachSkipReason } from '../protocol/messages';
+import type { AttachSkipReason, HostToUi } from '../protocol/messages';
 import { COPY } from './copy';
+
+const MARKDOWN_TEXT_EXTS = ['md', 'txt', 'markdown'] as const;
+const SCRIPT_HOOK_EXTS = ['py', 'js', 'ts', 'sh', 'bash', 'zsh', 'ps1'] as const;
+
+const ATTACH_DIALOG_TITLE: Record<AttachmentKind, string> = {
+  agent: 'Attach agent',
+  skills: 'Attach skills',
+  scripts: 'Attach scripts',
+  instructions: 'Attach instructions',
+  prompts: 'Attach prompts',
+  hooks: 'Attach hooks',
+};
 
 export interface AttachFileIo {
   statSize(absPath: string): Promise<number>;
@@ -37,23 +50,36 @@ export interface AttachIngestResult {
   mapped?: { name?: string; handle?: string; persona?: string };
 }
 
-export function shouldOpenAttachDialog(folderFsPath?: string): boolean {
-  return Boolean(folderFsPath);
-}
-
-export function attachOpenDialogOptions(folderFsPath: string): {
-  canSelectMany: true;
+export interface AttachOpenDialogOptions {
+  canSelectMany: boolean;
   canSelectFiles: true;
   canSelectFolders: false;
   defaultUri: { fsPath: string };
   title: string;
-} {
+  filters: Record<string, string[]>;
+}
+
+export function shouldOpenAttachDialog(folderFsPath?: string): boolean {
+  return Boolean(folderFsPath);
+}
+
+export function attachFilterExtensions(slot: AttachmentKind): string[] {
+  if (slot === 'scripts' || slot === 'hooks') {
+    return [...MARKDOWN_TEXT_EXTS, ...SCRIPT_HOOK_EXTS];
+  }
+  return [...MARKDOWN_TEXT_EXTS];
+}
+
+export function attachOpenDialogOptions(folderFsPath: string, slot: AttachmentKind): AttachOpenDialogOptions {
+  const exts = attachFilterExtensions(slot);
+  const filterName = slot === 'scripts' || slot === 'hooks' ? 'Markdown, text, and scripts' : 'Markdown / text';
   return {
-    canSelectMany: true,
+    canSelectMany: slot !== 'agent',
     canSelectFiles: true,
     canSelectFolders: false,
     defaultUri: { fsPath: folderFsPath },
-    title: COPY.attachDialogTitle,
+    title: ATTACH_DIALOG_TITLE[slot],
+    filters: { [filterName]: exts },
   };
 }
 
@@ -65,28 +91,6 @@ export function workspaceRelativeLabel(folderFsPath: string, absPath: string): s
     return undefined;
   }
   return rel.split(path.sep).join('/');
-}
-
-export function isClearlyAgentName(fileName: string): boolean {
-  return (CLEARLY_AGENT_NAMES as readonly string[]).includes(fileName.toLowerCase());
-}
-
-export function isScriptOrHookPath(relPath: string): boolean {
-  const normalized = relPath.replace(/\\/g, '/');
-  const base = (normalized.split('/').pop() ?? '').toLowerCase();
-  if (/\.(sh|ps1|bash|zsh|hook)$/.test(base)) {
-    return true;
-  }
-  const parts = normalized.split('/');
-  return parts.some((part, index) => (part === '.husky' || part === 'hooks') && index < parts.length - 1);
-}
-
-export function canMapClearlyAgent(relPath: string): boolean {
-  if (isScriptOrHookPath(relPath)) {
-    return false;
-  }
-  const base = relPath.replace(/\\/g, '/').split('/').pop() ?? relPath;
-  return isClearlyAgentName(base);
 }
 
 export function isUnfilledAttachField(field: keyof AttachFormFields, value: string): boolean {
@@ -114,7 +118,7 @@ export function applyEmptyOnly(
   return out;
 }
 
-export function parseClearlyAgent(snapshot: string): { name?: string; handle?: string; persona?: string } {
+export function parseAgentSnapshot(snapshot: string): { name?: string; handle?: string; persona?: string } {
   const front = parseFrontmatter(snapshot);
   if (front) {
     const name = front.fields.name?.trim() || undefined;
@@ -133,31 +137,72 @@ export function parseClearlyAgent(snapshot: string): { name?: string; handle?: s
   return {};
 }
 
+type FormAttachmentItem = BotAttachment & { slot?: unknown };
+
+function kindOfFormItem(item: FormAttachmentItem): AttachmentKind | undefined {
+  if (isAttachmentKind(item.kind)) {
+    return item.kind;
+  }
+  if (isAttachmentKind(item.slot)) {
+    return item.slot;
+  }
+  return undefined;
+}
+
 export function resolveFormAttachments(
-  fromForm: BotAttachment[] | undefined,
+  fromForm: FormAttachmentItem[] | undefined,
   session: BotAttachment[],
 ): BotAttachment[] {
   if (!fromForm) {
     return attachmentsOf({ attachments: session });
   }
   return fromForm.map((item) => {
-    if (item.snapshot) {
-      return { path: item.path, name: item.name, snapshot: item.snapshot };
-    }
-    const held = session.find((a) => a.path === item.path);
-    return {
+    const held = findHeldAttachment(session, item);
+    const next: BotAttachment = {
       path: item.path,
       name: item.name || held?.name || path.basename(item.path),
-      snapshot: held?.snapshot ?? '',
+      snapshot: item.snapshot || held?.snapshot || '',
     };
+    const kind = kindOfFormItem(item) ?? (held && isAttachmentKind(held.kind) ? held.kind : undefined);
+    if (kind) {
+      next.kind = kind;
+    }
+    return next;
   });
 }
 
-export function removeAttachment(attachments: BotAttachment[], relPath: string): BotAttachment[] {
-  return attachments.filter((item) => item.path !== relPath);
+export function removeAttachment(
+  attachments: BotAttachment[],
+  slot: AttachmentKind,
+  relPath: string,
+): BotAttachment[] {
+  return attachments.filter((item) => !(item.kind === slot && item.path === relPath));
+}
+
+export function emitAttachResult(
+  slot: AttachmentKind,
+  result: AttachIngestResult,
+  emit: (msg: HostToUi) => void,
+): void {
+  if (result.mapped) {
+    emit({ type: 'bots/attach-mapped', ...result.mapped });
+  }
+  if (result.added.length > 0) {
+    emit({ type: 'bots/attach-added', slot, files: result.added });
+  }
+  for (const skip of result.skipped) {
+    emit({
+      type: 'bots/attach-skipped',
+      slot,
+      name: skip.name,
+      reason: skip.reason,
+      message: skip.message,
+    });
+  }
 }
 
 export async function ingestPickedFiles(args: {
+  slot: AttachmentKind;
   folderFsPath: string;
   picked: AttachPickedFile[];
   existing: BotAttachment[];
@@ -168,8 +213,8 @@ export async function ingestPickedFiles(args: {
   const added: { path: string; name: string }[] = [];
   const skipped: AttachSkip[] = [];
   let mapped: { name?: string; handle?: string; persona?: string } | undefined;
-  let mappedThisPick = false;
   const fields = { ...args.fields };
+  const slot = args.slot;
 
   for (const file of args.picked) {
     const name = path.basename(file.absPath);
@@ -178,7 +223,7 @@ export async function ingestPickedFiles(args: {
       skipped.push(skip(name, 'outside-workspace', COPY.attachSkipOutside(name)));
       continue;
     }
-    if (attachments.some((item) => item.path === rel)) {
+    if (attachments.some((item) => item.kind === slot && item.path === rel)) {
       continue;
     }
 
@@ -217,13 +262,20 @@ export async function ingestPickedFiles(args: {
       continue;
     }
 
-    const attachment: BotAttachment = { path: rel, name, snapshot };
+    if (slot === 'agent') {
+      for (let i = attachments.length - 1; i >= 0; i--) {
+        if (attachments[i]!.kind === 'agent') {
+          attachments.splice(i, 1);
+        }
+      }
+    }
+
+    const attachment: BotAttachment = { path: rel, name, snapshot, kind: slot };
     attachments.push(attachment);
     added.push({ path: rel, name });
 
-    if (!mappedThisPick && canMapClearlyAgent(rel)) {
-      mappedThisPick = true;
-      const parsed = parseClearlyAgent(snapshot);
+    if (slot === 'agent') {
+      const parsed = parseAgentSnapshot(snapshot);
       const next = applyEmptyOnly(fields, parsed);
       if (next.name) {
         fields.name = next.name;
@@ -235,12 +287,23 @@ export async function ingestPickedFiles(args: {
         fields.persona = next.persona;
       }
       if (next.name || next.handle || next.persona) {
-        mapped = next;
+        mapped = { ...mapped, ...next };
       }
     }
   }
 
   return { added, skipped, attachments, mapped };
+}
+
+function findHeldAttachment(session: BotAttachment[], item: FormAttachmentItem): BotAttachment | undefined {
+  const kind = kindOfFormItem(item);
+  if (kind) {
+    return (
+      session.find((held) => held.path === item.path && held.kind === kind) ??
+      session.find((held) => held.path === item.path && !held.kind)
+    );
+  }
+  return session.find((held) => held.path === item.path);
 }
 
 function skip(name: string, reason: AttachSkipReason, message: string): AttachSkip {

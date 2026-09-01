@@ -91,13 +91,18 @@ function mcpMessage(notes: string[]): PromptMessage | undefined {
   };
 }
 
+export function attachmentPackLabel(file: BotAttachment): string {
+  const base = `${file.name} (${file.path})`;
+  return file.kind ? `${base} · ${file.kind}` : base;
+}
+
 export function attachmentsBlock(attachments: BotAttachment[]): string | undefined {
   if (attachments.length === 0) {
     return undefined;
   }
   const parts = ['Attached files'];
   for (const file of attachments) {
-    parts.push(`${file.name} (${file.path})`);
+    parts.push(attachmentPackLabel(file));
     parts.push(file.snapshot);
   }
   return parts.join('\n');

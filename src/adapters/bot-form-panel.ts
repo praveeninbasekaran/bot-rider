@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { Application } from '../app/application';
 import {
   attachOpenDialogOptions,
+  emitAttachResult,
   ingestPickedFiles,
   removeAttachment,
   resolveFormAttachments,
@@ -10,7 +11,7 @@ import {
   type AttachFormFields,
 } from '../app/bot-attach';
 import { COPY } from '../app/copy';
-import { attachmentsOf, type BotAttachment, type BotRecord } from '../domain/bot';
+import { attachmentsOf, isAttachmentKind, type AttachmentKind, type BotAttachment, type BotRecord } from '../domain/bot';
 import { deriveHandle } from '../domain/bot';
 import { webviewHtml } from './webview-html';
 import type { HostToUi, UiToHost } from '../protocol/messages';
@@ -22,7 +23,10 @@ export class BotFormPanel {
     private readonly extensionUri: vscode.Uri,
     private readonly app: Application,
     private readonly io: AttachFileIo = vscodeAttachIo(),
-    private readonly pickFiles: (folderFsPath: string) => Promise<string[] | undefined> = vscodePickFiles,
+    private readonly pickFiles: (
+      folderFsPath: string,
+      slot: AttachmentKind,
+    ) => Promise<string[] | undefined> = vscodePickFiles,
   ) {}
 
   open(bot?: BotRecord): void {
@@ -73,11 +77,17 @@ export class BotFormPanel {
           return;
         }
         if (msg.type === 'bots/attach-pick') {
-          await this.attachPick(session, emit);
+          if (!isAttachmentKind(msg.slot)) {
+            return;
+          }
+          await this.attachPick(session, emit, msg.slot);
           return;
         }
         if (msg.type === 'bots/attach-remove') {
-          session.attachments = removeAttachment(session.attachments, msg.path);
+          if (!isAttachmentKind(msg.slot)) {
+            return;
+          }
+          session.attachments = removeAttachment(session.attachments, msg.slot, msg.path);
           return;
         }
         try {
@@ -116,16 +126,18 @@ export class BotFormPanel {
   private async attachPick(
     session: FormAttachSession,
     emit: (msg: HostToUi) => void,
+    slot: AttachmentKind,
   ): Promise<void> {
     const folderFsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!folderFsPath || !shouldOpenAttachDialog(folderFsPath)) {
       return;
     }
-    const picked = await this.pickFiles(folderFsPath);
+    const picked = await this.pickFiles(folderFsPath, slot);
     if (!picked?.length) {
       return;
     }
     const result = await ingestPickedFiles({
+      slot,
       folderFsPath,
       picked: picked.map((absPath) => ({ absPath })),
       existing: session.attachments,
@@ -139,19 +151,8 @@ export class BotFormPanel {
         handle: result.mapped.handle ?? session.fields.handle,
         persona: result.mapped.persona ?? session.fields.persona,
       };
-      emit({ type: 'bots/attach-mapped', ...result.mapped });
     }
-    if (result.added.length > 0) {
-      emit({ type: 'bots/attach-added', files: result.added });
-    }
-    for (const skip of result.skipped) {
-      emit({
-        type: 'bots/attach-skipped',
-        name: skip.name,
-        reason: skip.reason,
-        message: skip.message,
-      });
-    }
+    emitAttachResult(slot, result, emit);
   }
 }
 
@@ -214,15 +215,15 @@ function vscodeAttachIo(): AttachFileIo {
   };
 }
 
-async function vscodePickFiles(folderFsPath: string): Promise<string[] | undefined> {
-  const options = attachOpenDialogOptions(folderFsPath);
+async function vscodePickFiles(folderFsPath: string, slot: AttachmentKind): Promise<string[] | undefined> {
+  const options = attachOpenDialogOptions(folderFsPath, slot);
   const uris = await vscode.window.showOpenDialog({
     canSelectMany: options.canSelectMany,
     canSelectFiles: options.canSelectFiles,
     canSelectFolders: options.canSelectFolders,
     defaultUri: vscode.Uri.file(folderFsPath),
     title: options.title,
+    filters: options.filters,
   });
   return uris?.map((uri) => uri.fsPath);
 }
-

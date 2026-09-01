@@ -1,4 +1,5 @@
 import {
+  agentKindCount,
   attachmentsOf,
   copyBotRecord,
   type BotAttachment,
@@ -184,5 +185,9 @@ export class BotRegistry {
 }
 
 function copyAttachments(items?: BotAttachment[]): BotAttachment[] {
-  return attachmentsOf({ attachments: items });
+  const next = attachmentsOf({ attachments: items });
+  if (agentKindCount(next) > 1) {
+    throw new BotRegistryError('A bot can have at most one Agent file.');
+  }
+  return next;
 }

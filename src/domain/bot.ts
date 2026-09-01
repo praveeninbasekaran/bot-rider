@@ -1,7 +1,20 @@
+export const ATTACHMENT_KINDS = [
+  'agent',
+  'skills',
+  'scripts',
+  'instructions',
+  'prompts',
+  'hooks',
+] as const;
+
+export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number];
+
 export interface BotAttachment {
   path: string;
   name: string;
   snapshot: string;
+  /** Slot the user picked. Missing on pre-TA IE records; never inferred from filename. */
+  kind?: AttachmentKind;
 }
 
 export interface BotRecord {
@@ -30,17 +43,30 @@ export interface BotDraft {
 
 export const ATTACH_MAX_BYTES = 262144;
 export const ATTACH_BINARY_PROBE_BYTES = 8192;
-export const CLEARLY_AGENT_NAMES = ['agents.md', 'skill.md', 'agent.md'] as const;
+
+export function isAttachmentKind(value: unknown): value is AttachmentKind {
+  return typeof value === 'string' && (ATTACHMENT_KINDS as readonly string[]).includes(value);
+}
 
 export function attachmentsOf(bot?: { attachments?: BotAttachment[] } | null): BotAttachment[] {
   if (!bot || !Array.isArray(bot.attachments)) {
     return [];
   }
-  return bot.attachments.map((item) => ({
-    path: item.path,
-    name: item.name,
-    snapshot: item.snapshot,
-  }));
+  return bot.attachments.map((item) => {
+    const next: BotAttachment = {
+      path: item.path,
+      name: item.name,
+      snapshot: item.snapshot,
+    };
+    if (isAttachmentKind(item.kind)) {
+      next.kind = item.kind;
+    }
+    return next;
+  });
+}
+
+export function agentKindCount(attachments: BotAttachment[]): number {
+  return attachments.filter((item) => item.kind === 'agent').length;
 }
 
 export function copyBotRecord(bot: BotRecord): BotRecord {
