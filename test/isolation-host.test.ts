@@ -166,7 +166,8 @@ describe('SI-1 per-bot session store', () => {
     expect(BOTS_STATE_KEY).toBe('botrider.bots.v1');
     expect(src('src/app/bot-registry.ts')).not.toMatch(/BotStoreFile/);
     expect(src('src/domain/bot.ts')).not.toMatch(/BotStoreFile/);
-    expect(src('src/app/bot-session-store.ts')).not.toMatch(/BotStoreFile|globalState|BOTS_STATE_KEY|setKeysForSync/);
+    expect(src('src/app/bot-session-store.ts')).not.toMatch(/BotStoreFile|BOTS_STATE_KEY|setKeysForSync/);
+    expect(src('src/app/bot-session-store.ts')).not.toMatch(/memento|workspaceState/);
     expect(src('src/app/bot-session-store.ts')).not.toMatch(/version:\s*[2-9]/);
   });
 

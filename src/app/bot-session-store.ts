@@ -103,7 +103,7 @@ export function buildIsolationPacket(args: {
   return packet;
 }
 
-/** In-memory per-bot Copilot session. Not BR-3. Not BotRecord. Not globalState. */
+/** In-memory per-bot Copilot session. Dies with the host. Not persisted with bots. */
 export class BotSessionStore {
   private readonly sessions = new Map<string, BotSession>();
 
