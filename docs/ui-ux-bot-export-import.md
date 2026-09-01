@@ -10,13 +10,15 @@ Architecture: [architecture-bot-export-import.md](./architecture-bot-export-impo
 
 ### 23.1 Surfaces
 
-| Surface | Control | Command (`botrider.*`) |
+Command and view ids are camelCase `botRider.bots.*` (locked chrome). Tree view `botRider.bots`. Context `botRider.hasBots`.
+
+| Surface | Control | Command |
 | --- | --- | --- |
-| Bots tree item context | **Export Bot** | `bots.export` |
-| Bots tree (multi-select) | **Export Selected** | `bots.exportSelected` |
-| Bots tree view/title | **Export All** | `bots.exportAll` |
-| Bots tree view/title + palette | **Import** icon `$(desktop-download)` | `bots.import` |
-| Empty Bots welcome (`!botrider.hasBots`) | link **Import** next to New Bot | `bots.import` |
+| Bots tree item context | **Export Bot** | `botRider.bots.export` |
+| Bots tree (multi-select) | **Export Selected** | `botRider.bots.exportSelected` |
+| Bots tree view/title | **Export All** | `botRider.bots.exportAll` |
+| Bots tree view/title + palette | **Import** icon `$(desktop-download)` | `botRider.bots.import` |
+| Empty Bots welcome (`!botRider.hasBots`) | link **Import** next to New Bot | `botRider.bots.import` |
 | New Bot / Edit Bot footer | **Export** (secondary, left of Save) | posts `bots/export-self` — see §23.7 |
 
 No fourth sidebar. Checkboxes stay **active** (BR-3). Multi-select is `TreeView.canSelectMany: true` and is **independent** of the checkbox. Export Selected uses **selection**, not “active bots”.
@@ -27,16 +29,16 @@ Category **Bot Rider**. Host registers; this chrome contributes menus.
 
 | Command | Title | Icon | Palette | Menus |
 | --- | --- | --- | --- | --- |
-| `botrider.bots.export` | Export Bot | — | hide (`when: false`) or when a bot item is the context | `view/item/context` `view == botrider.bots && viewItem == bot` |
-| `botrider.bots.exportSelected` | Export Selected | — | when `view == botrider.bots` and selection length ≥ 1 | optional title overflow; not inline |
-| `botrider.bots.exportAll` | Export All | — | when `botrider.hasBots` | `view/title` `view == botrider.bots && botrider.hasBots` |
-| `botrider.bots.import` | Import | `$(desktop-download)` | always (empty swarm included) | `view/title` `view == botrider.bots` group `navigation` |
+| `botRider.bots.export` | Export Bot | — | hide (`when: false`) or when a bot item is the context | `view/item/context` `view == botRider.bots && viewItem == bot` |
+| `botRider.bots.exportSelected` | Export Selected | — | when `view == botRider.bots` and selection length ≥ 1 | optional title overflow; not inline |
+| `botRider.bots.exportAll` | Export All | — | when `botRider.hasBots` | `view/title` `view == botRider.bots && botRider.hasBots` |
+| `botRider.bots.import` | Import | `$(desktop-download)` | always (empty swarm included) | `view/title` `view == botRider.bots` group `navigation` |
 
-Welcome (`!botrider.hasBots`) keeps the locked New Bot paragraph and **adds** an Import command link:
+Welcome (`!botRider.hasBots`) keeps the locked New Bot paragraph and **adds** an Import command link:
 
 > No bots yet. Create a bot with a name, persona, and role, then send a master prompt in Swarm.  
-> [New Bot](command:botrider.bots.create)  
-> [Import](command:botrider.bots.import)
+> [New Bot](command:botRider.bots.create)  
+> [Import](command:botRider.bots.import)
 
 Do not remove New Bot. Do not add Marketplace copy.
 
@@ -66,7 +68,9 @@ When an entry’s **handle** is already taken (case-insensitive): modal **Skip**
 - **Rename** → `showInputBox` for a new handle (BR-2 pattern + unique). Stay on the box until valid or cancel.
 - **Cancel rename** (Esc / dismiss) = **Skip** (same skip copy). Then continue.
 
-**Name-only** collision (handle free, name taken, case-insensitive): same Skip | Rename, name `showInputBox`. Skip copy exact: `Skipped {name} · already taken.`
+When **both** handle and name collide: prefer the handle line (`Skipped @{handle} · already taken.`). Do not also show the name-only line.
+
+**Name-only** collision (handle free, name taken, case-insensitive): same Skip | Rename, name `showInputBox`. Skip copy exact: `Skipped "{name}" · a bot with that name already exists.`
 
 Invalid handle on the file: Skip | Rename. Skip copy: `Skipped @{handle} · invalid handle.` Empty name: `Skipped · name is required.`
 
@@ -115,7 +119,7 @@ UI never reads/writes the interchange file. UI never calls `vscode.lm`. UI never
 
 ### 23.8 Tree multi-select
 
-`createTreeView('botrider.bots', { canSelectMany: true, ... existing checkbox options })`.
+`createTreeView('botRider.bots', { canSelectMany: true, ... existing checkbox options })`.
 
 - Checkbox = active (unchanged).
 - Ctrl/Cmd click = selection for Export Selected.

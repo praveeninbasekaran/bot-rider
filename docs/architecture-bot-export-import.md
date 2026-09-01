@@ -1,7 +1,7 @@
 # Bot Rider — F6 bot export / import (additive slice)
 
 Status: **ready for implementation.** Design only until a developer lands it. Not a host rewrite of BR, QC, HV, MA, SD, TA, MS, or SI. **Not** F7 parallel / Event Bus.
-Stories: **EX-1–4 is the full story set.** **EX-1** Export single / multi / (chrome: Export All) as JSON or YAML. Payload: name, handle, persona, role, system instructions (`instructions`), active, modelId, typed attachments (kind + path label + text snapshot). **Not** SI session / transcript / MCP pending / `id` / `createdAt` / `updatedAt`. **EX-2** Import via file picker; create local BR-3 bots (new id, new timestamps). File = one bot object **or** a list. Multi-import: per-bot continue. **EX-3** Handle collision: user picks Skip or Rename. Never overwrite. Never auto-suffix silently. Cancel rename = Skip. Copy exact: `Skipped @{handle} · already taken.` Name-only collision copy in §23. Multi: resolve per entry then continue. **EX-4** Never execute scripts/hooks. No API keys. No Marketplace. No hosted sync. F7 parallel Event Bus **out**. No Copilot on export/import.
+Stories: **EX-1–4 is the full story set.** **EX-1** Export single / multi / (chrome: Export All) as JSON or YAML. Payload: name, handle, persona, role, system instructions (`instructions`), active, modelId, typed attachments (kind + path label + text snapshot). **Not** SI session / transcript / MCP pending / `id` / `createdAt` / `updatedAt`. **EX-2** Import via file picker; create local BR-3 bots (new id, new timestamps). File = one bot object **or** a list. Multi-import: per-bot continue. **EX-3** Handle collision: user picks Skip or Rename. Never overwrite. Never auto-suffix silently. Cancel rename = Skip. Copy exact: `Skipped @{handle} · already taken.` Name-only copy exact: `Skipped "{name}" · a bot with that name already exists.` Prefer the handle line when both collide. Multi: resolve per entry then continue. **EX-4** Never execute scripts/hooks. No API keys. No Marketplace. No hosted sync. F7 parallel Event Bus **out**. No Copilot on export/import.
 UI chrome contract: `ui-ux-spec.md` §23 (addendum `ui-ux-bot-export-import.md`).
 Date: 2026-09-01.
 Parent: `architecture-mvp.md`. Copilot stays `vscode.lm`. ₹0 extra keys. No second runtime. Interchange is a user-chosen file, not BR-3 `globalState` and not Settings Sync.
@@ -24,7 +24,7 @@ Import via file picker; create local BR-3 bots (new `id`, new timestamps). File 
 
 ### EX-3 Handle collision
 
-User picks **Skip** or **Rename**. Never overwrite. Never auto-suffix silently. Cancel rename = Skip. Copy exact: `Skipped @{handle} · already taken.` Name-only collision copy per §23. Multi: resolve per entry then continue.
+User picks **Skip** or **Rename**. Never overwrite. Never auto-suffix silently. Cancel rename = Skip. Copy exact: `Skipped @{handle} · already taken.` Name-only copy exact: `Skipped "{name}" · a bot with that name already exists.` Prefer the handle line when both collide. Multi: resolve per entry then continue.
 
 ### EX-4 Safety
 
@@ -41,7 +41,7 @@ Never execute scripts/hooks. No API keys. No Marketplace. No hosted sync. F7 par
 - **(EX-2)** Import creates **new** local bots through the existing BR-3 **create** path. New `id`, new `createdAt` / `updatedAt`. Do **not** bump `BotStoreFile.version`. Do **not** `update` an existing record as the import path.
 - **(EX-2)** One file may hold one bot or many. After a skip / rename decision, **continue** the rest of the list. Do not abort the whole file because one entry collided.
 - **(EX-3)** Collision = handle taken (case-insensitive) **or** name taken (case-insensitive). **Skip** or **Rename** only. **Never overwrite.** **Never** silent auto-suffix (`uniqueHandle` on create-from-name is **not** used for import). Cancel rename (Esc / dismiss) = **Skip**.
-- **(EX-3)** Handle-skip copy is exact: `Skipped @{handle} · already taken.` Name-only skip copy is §23: `Skipped {name} · already taken.`
+- **(EX-3)** Handle-skip copy is exact: `Skipped @{handle} · already taken.` Name-only skip copy is exact (§23): `Skipped "{name}" · a bot with that name already exists.` Prefer the handle line when both collide.
 - **(EX-3)** Rename/create still run **BR-2**: unique handle / unique name, handle pattern `[a-z0-9][a-z0-9_-]{0,31}`. Invalid rename stays on the input until the user fixes it or cancels (cancel = Skip).
 - **(EX-4)** **Never execute.** Snapshots / scripts / hooks / YAML tags never `spawn`, shell, tasks, eval, or a hooks-runner. YAML parse is **data-only** (safe load). No custom tags.
 - **(EX-4)** No API keys in the file or the flow. No Marketplace. No hosted sync. Settings Sync stays off (`setKeysForSync` stays off).
@@ -80,7 +80,8 @@ Import (palette | title | welcome)
     per entry, continue:
          invalid handle/name/pattern → Skip | Rename (cancel = Skip)
          handle taken → Skip | Rename   copy: Skipped @{handle} · already taken.
-         name taken (handle free) → Skip | Rename   copy: Skipped {name} · already taken.
+         name taken (handle free) → Skip | Rename   copy: Skipped "{name}" · a bot with that name already exists.
+         both collide → prefer handle line: Skipped @{handle} · already taken.
          never overwrite · never auto-suffix
          modelId: keep if in current copilot discovery else unset; do not block
          attachments: store snapshot + path label + kind; never execute; path not live
@@ -170,13 +171,14 @@ YAML write: same object graph, UTF-8, no custom tags. Extension `.yaml` (read al
 
 ## 3. Export (EX-1)
 
-Host-owned. Commands in §23. Native `showQuickPick` then `showSaveDialog`.
+Host-owned. Commands in §23. Native `showQuickPick` then `showSaveDialog`. Command and view ids are camelCase `botRider.bots.*` (locked chrome): `botRider.bots.export` / `exportSelected` / `exportAll` / `import`. Tree view `botRider.bots`. Context `botRider.hasBots`.
 
-| Command (`botrider.*`) | Source bots |
+| Command (`botRider.*`, camelCase) | Source bots |
 | --- | --- |
-| `bots.export` | The context bot (tree item) |
-| `bots.exportSelected` | Tree **selection** (`canSelectMany: true`), not the active checkboxes |
-| `bots.exportAll` | Every bot in `BotRegistry.list()` |
+| `botRider.bots.export` | The context bot (tree item) |
+| `botRider.bots.exportSelected` | Tree **selection** (`canSelectMany: true`), not the active checkboxes |
+| `botRider.bots.exportAll` | Every bot in `BotRegistry.list()` |
+| `botRider.bots.import` | File picker (no export set) |
 | Form **Export** | Persisted bot after Save, or current form draft if Export without saving |
 
 Selection is independent of `checkboxState` (active). Export Selected does **not** mean “active bots”.
@@ -226,10 +228,10 @@ Do **not** call `uniqueHandle` to silently suffix. Import of a free handle uses 
 
 | Gate | User choice | Skip copy (exact) |
 | --- | --- | --- |
-| Handle taken (ci) | Skip \| Rename | `Skipped @{handle} · already taken.` |
-| Name taken, handle free (ci) | Skip \| Rename | `Skipped {name} · already taken.` |
-| Invalid handle pattern | Skip \| Rename | existing BR-2 pattern copy (form-equivalent); if they Skip: `Skipped @{handle} · already taken.` is **wrong** — use `Skipped @{handle} · invalid handle.` |
-| Empty name | Skip \| Rename | `Skipped {name} · already taken.` does not apply; use `Skipped · name is required.` when name is empty |
+| Handle taken (ci), including when name also taken | Skip \| Rename | `Skipped @{handle} · already taken.` (prefer this line when both collide) |
+| Name taken, handle free (ci) | Skip \| Rename | `Skipped "{name}" · a bot with that name already exists.` |
+| Invalid handle pattern | Skip \| Rename | existing BR-2 pattern copy (form-equivalent); if they Skip: do **not** use the handle-taken line — use `Skipped @{handle} · invalid handle.` |
+| Empty name | Skip \| Rename | name-taken copy does not apply; use `Skipped · name is required.` |
 | Cancel rename / dismiss | Skip | same skip copy as the gate that opened Rename |
 | Parse-ok entry with extra junk fields | ignore extras; import | — |
 
@@ -309,8 +311,8 @@ Existing `bots/create` / `bots/update` / `bots/snapshot` unchanged. Import does 
 
 | Situation | Copy |
 | --- | --- |
-| Handle taken, user Skips (or cancel rename) | `Skipped @{handle} · already taken.` |
-| Name taken, handle free, user Skips | `Skipped {name} · already taken.` |
+| Handle taken, user Skips (or cancel rename); also when both collide | `Skipped @{handle} · already taken.` |
+| Name taken, handle free, user Skips | `Skipped "{name}" · a bot with that name already exists.` |
 | Invalid handle, user Skips | `Skipped @{handle} · invalid handle.` |
 | Empty name, user Skips | `Skipped · name is required.` |
 | Attachment snapshot over 256 KiB | existing IE `Skipped {name} · too large` |
@@ -342,7 +344,7 @@ Merge bar after PO allocates, on a **new product PR**:
 - Handle taken → Skip copy exact `Skipped @{handle} · already taken.`; record unchanged (never overwrite).
 - Rename then create under the new handle; cancel rename = Skip.
 - Never auto-suffix on import (no `uniqueHandle` silent path).
-- Name-only collision → Skip copy `Skipped {name} · already taken.`; continue the list.
+- Name-only collision → Skip copy `Skipped "{name}" · a bot with that name already exists.`; both collide → prefer handle line; continue the list.
 - Multi-import: skip one, import the next.
 - `modelId` kept if still in Copilot discovery; else unset; import does not block; no Copilot `sendRequest`.
 - Attachments: kind + path label + snapshot stored; path not `fs.readFile`’d; scripts/hooks never spawn / never eval / no hooks-runner.
