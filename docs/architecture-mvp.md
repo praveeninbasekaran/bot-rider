@@ -12,6 +12,8 @@ Addendum 2026-08-30: Staged MCP actions are additive — architecture-mcp-action
 
 Addendum 2026-08-31: Typed attachments revise IE — architecture-bot-attachments.md + UI §20. HostToUi/UiToHost attach ports pass `slot`. `BotAttachment.kind` equals the slot (`agent | skills | scripts | instructions | prompts | hooks`). BR / QC / HV / MA / SD frozen.
 
+Addendum 2026-09-01: Per-bot Copilot model selection is additive — architecture-bot-model.md + UI §22. HostToUi `bots/models`. Persist `LanguageModelChat.id` only as `BotRecord.modelId` (label never persisted). Empty = host default. Missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only. BR / QC / HV / MA / SD / TA frozen.
+
 ## Product
 
 VS Code extension: `publisher: botrider`, `name: bot-rider`, `displayName: Bot Rider`, `engines.vscode: ^1.99.0`, `activationEvents: []`.
@@ -141,6 +143,8 @@ Additive human voice: [architecture-human-voice.md](./architecture-human-voice.m
 Additive staged MCP actions (Grain B): [architecture-mcp-actions.md](./architecture-mcp-actions.md). HostToUi `mcp/actions-preview` / `mcp/actions-cleared` / `mcp/actions-failed`. UiToHost `mcp/actions-approve` / `mcp/actions-reject`. Two independent Approve gates. Chrome: [ui-ux-mcp-actions.md](./ui-ux-mcp-actions.md) §19. No pack/TokenGovernor change. No HV change. BR-1–BR-6 protocol frozen.
 
 Additive typed bot attachments (revises IE): [architecture-bot-attachments.md](./architecture-bot-attachments.md). HostToUi / UiToHost attach ports pass `slot`. `BotAttachment.kind` equals the slot. Chrome: [ui-ux-bot-attachments.md](./ui-ux-bot-attachments.md) §20. BR / QC / HV / MA / SD frozen.
+
+Additive per-bot Copilot model selection: [architecture-bot-model.md](./architecture-bot-model.md). HostToUi `bots/models`. Persist `LanguageModelChat.id` only as `BotRecord.modelId` (label never persisted). Empty = host default. Missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only. Chrome: [ui-ux-bot-model.md](./ui-ux-bot-model.md) §22. BR / QC / HV / MA / SD / TA frozen.
 
 ### UI → host
 
