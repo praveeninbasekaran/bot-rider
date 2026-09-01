@@ -180,6 +180,7 @@ export class Application {
           instructions: msg.draft.instructions,
           active: msg.draft.active,
           attachments: msg.draft.attachments,
+          modelId: msg.draft.modelId,
         });
         break;
       case 'bots/update': {
@@ -196,6 +197,7 @@ export class Application {
           instructions: patch.instructions ?? msg.instructions ?? existing.instructions,
           active: msg.active ?? existing.active,
           attachments: patch.attachments ?? existing.attachments,
+          modelId: patch.modelId !== undefined ? patch.modelId : existing.modelId,
         });
         break;
       }

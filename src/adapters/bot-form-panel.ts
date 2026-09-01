@@ -52,12 +52,14 @@ export class BotFormPanel {
     const emit = (msg: HostToUi): void => {
       void panel.webview.postMessage(msg);
     };
+    const modelsWatch = this.app.gateway.watchFormModels(bot?.modelId ?? null, emit);
     const sub = panel.webview.onDidReceiveMessage(
       async (
         msg: UiToHost | { type: 'form/ready' } | { type: 'form/cancel' },
       ) => {
         if (msg.type === 'form/ready') {
           postFormLoad(panel, bot, this.app.registry.list(), deriveHandle(''));
+          modelsWatch.refresh();
           return;
         }
         if (msg.type === 'form/cancel') {
@@ -119,7 +121,10 @@ export class BotFormPanel {
         }
       },
     );
-    panel.onDidDispose(() => sub.dispose());
+    panel.onDidDispose(() => {
+      modelsWatch.dispose();
+      sub.dispose();
+    });
     postFormLoad(panel, bot, this.app.registry.list(), bot?.handle ?? '');
   }
 

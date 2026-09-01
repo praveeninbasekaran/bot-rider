@@ -21,6 +21,7 @@ const idle = { isCancellationRequested: false, onCancellationRequested: () => ({
 
 function model(overrides: Partial<LmModel> = {}): LmModel {
   return {
+    id: 'copilot-default',
     vendor: 'copilot',
     maxInputTokens: 1000,
     countTokens: async () => 1,

@@ -9,6 +9,7 @@ import { CancelSource } from './cancel';
 import type { BotRegistry } from './bot-registry';
 import type { ICopilotGateway } from './copilot-gateway';
 import { HungError, mapCopilotError } from './copilot-gateway';
+import { usesPerBotModel } from './bot-models';
 import { EmptyMcpPort, McpGateway } from './mcp-gateway';
 import { PromptBuilder, turnInstruction, type HistoryTurn } from './prompt-builder';
 import { PatchParser } from './patch-parser';
@@ -487,6 +488,16 @@ export class Orchestrator {
       return 'cancelled';
     }
 
+    const perBot = usesPerBotModel(turn);
+    const live = perBot ? this.registry.getById(bot.id) : undefined;
+    const turnModelId = perBot ? (live ? live.modelId : bot.modelId) : undefined;
+    if (perBot) {
+      const prepared = await this.gateway.prepareTurn(turnModelId);
+      if (prepared.usedFallback) {
+        this.emit({ type: 'chat/notice', text: COPY.savedModelUnavailable });
+      }
+    }
+
     const kind = packKindFor(turn);
     if (kind === 'debate') {
       this.lspSlice = withSelectionFallback(await this.lsp.capture(this.workspace), this.workspace);
@@ -538,7 +549,12 @@ export class Orchestrator {
           full += chunk;
           this.emit({ type: 'chat/token', botId: bot.id, delta: chunk });
         },
-        { tools: this.toolsFor(turn), botId: bot.id, handle: bot.handle },
+        {
+          tools: this.toolsFor(turn),
+          botId: bot.id,
+          handle: bot.handle,
+          modelId: perBot ? turnModelId : undefined,
+        },
       );
       if (streamed === 'cancelled' || this.cancelled()) {
         return 'cancelled';
