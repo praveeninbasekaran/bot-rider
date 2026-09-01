@@ -40,7 +40,7 @@ export interface RunBoardDto {
 export type BotCreateDraft = Omit<BotRecord, 'id' | 'createdAt' | 'updatedAt'>;
 
 export type BotPatch = Partial<
-  Pick<BotRecord, 'name' | 'handle' | 'persona' | 'role' | 'instructions' | 'attachments'>
+  Pick<BotRecord, 'name' | 'handle' | 'persona' | 'role' | 'instructions' | 'attachments' | 'modelId'>
 >;
 
 export type AttachSkipReason = 'unreadable' | 'binary' | 'too-large' | 'outside-workspace';
@@ -128,6 +128,12 @@ export type HostToUi =
       message: string;
     }
   | { type: 'bots/attach-mapped'; name?: string; handle?: string; persona?: string }
+  | {
+      type: 'bots/models';
+      models: { id: string; label: string }[];
+      selectedId: string | null;
+      status: 'loading' | 'ready' | 'unavailable';
+    }
   | { type: 'error'; code: ErrorCode; message: string };
 
 export type UiToHost =

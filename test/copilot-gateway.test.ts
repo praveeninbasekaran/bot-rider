@@ -8,6 +8,7 @@ import { FakeLm, FakeMcpPort, readOnlyMcpTool, stageableMcpTool } from './fakes'
 
 function model(overrides: Partial<LmModel> = {}): LmModel {
   return {
+    id: 'copilot-default',
     vendor: 'copilot',
     maxInputTokens: 1000,
     countTokens: async () => 1,

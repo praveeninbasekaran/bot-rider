@@ -29,6 +29,8 @@ export interface BotRecord {
   createdAt: string;
   updatedAt: string;
   attachments?: BotAttachment[];
+  /** LanguageModelChat.id for vendor copilot. Omit/null = host default. Label never persisted. */
+  modelId?: string | null;
 }
 
 export interface BotDraft {
@@ -39,6 +41,8 @@ export interface BotDraft {
   instructions: string;
   active?: boolean;
   attachments?: BotAttachment[];
+  /** LanguageModelChat.id only. Empty / omit / null = host default. */
+  modelId?: string | null;
 }
 
 export const ATTACH_MAX_BYTES = 262144;
@@ -69,8 +73,34 @@ export function agentKindCount(attachments: BotAttachment[]): number {
   return attachments.filter((item) => item.kind === 'agent').length;
 }
 
+/** Empty / unset / omit / null / non-string → host default. Never returns a label. */
+export function normalizeModelId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export function copyBotRecord(bot: BotRecord): BotRecord {
-  return { ...bot, attachments: attachmentsOf(bot) };
+  const next: BotRecord = {
+    id: bot.id,
+    handle: bot.handle,
+    name: bot.name,
+    persona: bot.persona,
+    role: bot.role,
+    instructions: bot.instructions,
+    active: bot.active,
+    colorIndex: bot.colorIndex,
+    createdAt: bot.createdAt,
+    updatedAt: bot.updatedAt,
+    attachments: attachmentsOf(bot),
+  };
+  const modelId = normalizeModelId(bot.modelId);
+  if (modelId) {
+    next.modelId = modelId;
+  }
+  return next;
 }
 
 export const HANDLE_PATTERN = /^[a-z0-9][a-z0-9_-]{0,31}$/;

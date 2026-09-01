@@ -56,7 +56,10 @@ export type LmChatMessage =
   | { role: 'user'; toolResults: Array<{ callId: string; content: string }> };
 
 export interface LmModel {
+  id: string;
   vendor: string;
+  name?: string;
+  family?: string;
   maxInputTokens: number;
   countTokens(messages: PromptMessage[]): Promise<number>;
   sendRequest(

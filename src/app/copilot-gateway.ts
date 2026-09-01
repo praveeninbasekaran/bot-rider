@@ -1,4 +1,4 @@
-import type { CopilotStatus, PromptMessage } from '../protocol/messages';
+import type { CopilotStatus, HostToUi, PromptMessage } from '../protocol/messages';
 import type {
   CancelToken,
   LanguageModelPort,
@@ -9,9 +9,11 @@ import type {
   LmStreamPart,
   LmToolCall,
 } from './ports';
+import { discoverCopilotModels, watchFormCopilotModels, type FormModelsWatch } from './bot-models';
 import { COPILOT_JUSTIFICATION } from './copy';
 import { waitForCancel } from './cancel';
 import type { McpGateway } from './mcp-gateway';
+import { normalizeModelId } from '../domain/bot';
 
 export const MAX_MCP_TOOL_ROUNDS = 8;
 
@@ -19,6 +21,8 @@ export interface CopilotSendOpts {
   tools?: 'mcp-debate' | 'none';
   botId?: string;
   handle?: string;
+  /** LanguageModelChat.id for this bot turn. Empty / omit = host default. Vote does not pass this. */
+  modelId?: string | null;
 }
 
 export interface ICopilotGateway {
@@ -28,6 +32,8 @@ export interface ICopilotGateway {
   readonly settled: boolean;
   countTokens(messages: PromptMessage[]): Promise<number>;
   ensureAvailable(): Promise<CopilotStatus>;
+  prepareTurn(modelId?: string | null): Promise<{ usedFallback: boolean }>;
+  watchFormModels(savedModelId: string | null | undefined, emit: (msg: HostToUi) => void): FormModelsWatch;
   stream(
     messages: PromptMessage[],
     token: CancelToken,
@@ -107,6 +113,8 @@ export class CopilotGateway implements ICopilotGateway {
   requestCount = 0;
   status: CopilotStatus | 'settling' = 'settling';
   private model: LmModel | undefined;
+  /** Resolved for the current pack+send. Captured locally at send start; not swapped mid-stream. */
+  private turnModel: LmModel | undefined;
   private inflight = false;
   private modelsSettled = false;
   private accessSettled = false;
@@ -134,19 +142,40 @@ export class CopilotGateway implements ICopilotGateway {
   }
 
   get maxInputTokens(): number {
-    return this.model?.maxInputTokens ?? 64_000;
+    return (this.turnModel ?? this.model)?.maxInputTokens ?? 64_000;
   }
 
   async countTokens(messages: PromptMessage[]): Promise<number> {
-    if (!this.model) {
+    const model = this.turnModel ?? this.model;
+    if (!model) {
       return messages.reduce((n, m) => n + m.content.length, 0);
     }
-    return this.model.countTokens(messages);
+    return model.countTokens(messages);
+  }
+
+  watchFormModels(savedModelId: string | null | undefined, emit: (msg: HostToUi) => void): FormModelsWatch {
+    return watchFormCopilotModels({ lm: this.lm, savedModelId, emit });
+  }
+
+  async prepareTurn(modelId?: string | null): Promise<{ usedFallback: boolean }> {
+    const copilot = await discoverCopilotModels(this.lm);
+    const hostDefault = copilot[0];
+    const wanted = normalizeModelId(modelId);
+    if (!wanted) {
+      this.turnModel = hostDefault;
+      return { usedFallback: false };
+    }
+    const found = copilot.find((model) => model.id === wanted);
+    if (found) {
+      this.turnModel = found;
+      return { usedFallback: false };
+    }
+    this.turnModel = hostDefault;
+    return { usedFallback: !!hostDefault };
   }
 
   async ensureAvailable(): Promise<CopilotStatus> {
-    const selected = await this.lm.selectChatModels({ vendor: 'copilot' });
-    const copilot = selected.filter((m) => m.vendor === 'copilot');
+    const copilot = await discoverCopilotModels(this.lm);
     const model = copilot[0];
     if (!model) {
       this.model = undefined;
@@ -184,13 +213,15 @@ export class CopilotGateway implements ICopilotGateway {
     this.inflight = true;
     this.requestCount += 1;
     try {
-      if (!this.model) {
+      let model = this.turnModel ?? this.model;
+      if (!model) {
         const status = await this.ensureAvailable();
         if (status !== 'ready' || !this.model) {
           throw Object.assign(new Error(status), { code: status });
         }
+        model = this.model;
       }
-      const can = this.lm.canSendRequest(this.model);
+      const can = this.lm.canSendRequest(model);
       if (can === false) {
         this.setStatus('noPermissions');
         throw Object.assign(new Error('noPermissions'), { code: 'NoPermissions' });
@@ -202,7 +233,7 @@ export class CopilotGateway implements ICopilotGateway {
       const allowTools = !!chatTools?.length;
       let convo: LmChatMessage[] = [...messages];
       for (let round = 0; round < MAX_MCP_TOOL_ROUNDS; round++) {
-        const response = await this.model.sendRequest(convo, requestOptions, token);
+        const response = await model.sendRequest(convo, requestOptions, token);
         const consumed = await consumeResponse(response, onText, token, this.hangMs, allowTools);
         if (consumed.outcome === 'hung') {
           this.setStatus('hung');
@@ -257,6 +288,7 @@ export class CopilotGateway implements ICopilotGateway {
       this.setStatus(status);
       throw err;
     } finally {
+      this.turnModel = undefined;
       this.inflight = false;
     }
   }

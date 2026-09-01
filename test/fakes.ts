@@ -2,6 +2,9 @@ import type { StateStore, ApplyEditPort, FileSystemPort, WorkspaceContextPort, C
 import type { FileEditOp } from '../src/domain/changeset';
 import type { PromptMessage, WorkspaceContext, HostToUi } from '../src/protocol/messages';
 import type { ICopilotGateway, CopilotSendOpts } from '../src/app/copilot-gateway';
+import type { FormModelsWatch } from '../src/app/bot-models';
+import { botsModelsMessage } from '../src/app/bot-models';
+import { normalizeModelId } from '../src/domain/bot';
 import { HungError } from '../src/app/copilot-gateway';
 import type { CopilotStatus } from '../src/protocol/messages';
 import type { TurnKind } from '../src/domain/run-state';
@@ -84,13 +87,19 @@ export function changesetFence(files: unknown): string {
 export class FakeGateway implements ICopilotGateway {
   requestCount = 0;
   ensureCalls = 0;
+  prepareCalls: Array<string | null | undefined> = [];
+  resolvedModelIds: Array<string | null> = [];
+  unavailableModelIds = new Set<string>();
+  formModels: { id: string; label: string }[] = [];
   maxInputTokens = 16_000;
   status: CopilotStatus | 'settling' = 'ready';
   settled = true;
   hang = false;
+  gate: Promise<void> | undefined;
   lastMessages: PromptMessage[][] = [];
   lastSendOpts: CopilotSendOpts[] = [];
   turns: TurnKind[] = [];
+  private preparedModelId: string | null = null;
   script: (info: { turn: TurnKind; instruction: string; messages: PromptMessage[] }) => string = () =>
     'AGREE looks good';
 
@@ -104,6 +113,29 @@ export class FakeGateway implements ICopilotGateway {
       return 'ready';
     }
     return this.status;
+  }
+
+  async prepareTurn(modelId?: string | null): Promise<{ usedFallback: boolean }> {
+    this.prepareCalls.push(modelId);
+    const wanted = normalizeModelId(modelId);
+    if (wanted && this.unavailableModelIds.has(wanted)) {
+      this.preparedModelId = null;
+      this.resolvedModelIds.push(null);
+      return { usedFallback: true };
+    }
+    this.preparedModelId = wanted;
+    this.resolvedModelIds.push(wanted);
+    return { usedFallback: false };
+  }
+
+  watchFormModels(savedModelId: string | null | undefined, emit: (msg: HostToUi) => void): FormModelsWatch {
+    const refresh = (): void => {
+      emit(botsModelsMessage([], savedModelId, 'loading'));
+      const status = this.formModels.length > 0 ? 'ready' : 'unavailable';
+      emit(botsModelsMessage(this.formModels, savedModelId, status));
+    };
+    refresh();
+    return { refresh, dispose() {} };
   }
 
   async send(
@@ -123,6 +155,9 @@ export class FakeGateway implements ICopilotGateway {
   ): Promise<'ok' | 'cancelled'> {
     this.requestCount += 1;
     this.lastMessages.push(messages);
+    if (this.gate) {
+      await this.gate;
+    }
     if (this.hang) {
       return await new Promise<'ok' | 'cancelled'>((resolve, reject) => {
         const timer = setTimeout(() => reject(new HungError()), 60_000);
@@ -221,15 +256,21 @@ export function stageableMcpTool(overrides: Partial<McpToolInfo> = {}): McpToolI
 export class FakeLm implements LanguageModelPort {
   selectCalls = 0;
   models: LmModel[] = [];
+  leakOtherVendors = false;
   can: boolean | undefined = true;
   lastOptions: LmSendOptions | undefined;
+  lastSelector: { vendor: 'copilot' } | undefined;
   private readonly modelLs = new Set<() => void>();
   private readonly accessLs = new Set<() => void>();
 
   async selectChatModels(selector: { vendor: 'copilot' }): Promise<LmModel[]> {
     this.selectCalls += 1;
+    this.lastSelector = selector;
     if (selector.vendor !== 'copilot') {
       return [];
+    }
+    if (this.leakOtherVendors) {
+      return this.models;
     }
     return this.models.filter((m) => m.vendor === 'copilot');
   }

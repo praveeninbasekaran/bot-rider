@@ -16,6 +16,20 @@ import { COPILOT_JUSTIFICATION } from '../app/copy';
 class VsCodeLmModel implements LmModel {
   constructor(readonly inner: vscode.LanguageModelChat) {}
 
+  get id(): string {
+    return this.inner.id;
+  }
+
+  get name(): string | undefined {
+    const name = this.inner.name;
+    return name && name.trim() ? name : undefined;
+  }
+
+  get family(): string | undefined {
+    const value = this.inner.family;
+    return value && value.trim() ? value : undefined;
+  }
+
   get vendor(): string {
     return this.inner.vendor;
   }

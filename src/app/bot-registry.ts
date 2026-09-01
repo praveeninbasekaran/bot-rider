@@ -2,6 +2,7 @@ import {
   agentKindCount,
   attachmentsOf,
   copyBotRecord,
+  normalizeModelId,
   type BotAttachment,
   type BotDraft,
   type BotRecord,
@@ -69,6 +70,10 @@ export class BotRegistry {
       updatedAt: ts,
       attachments: copyAttachments(draft.attachments),
     };
+    const modelId = copyModelId(draft.modelId);
+    if (modelId) {
+      bot.modelId = modelId;
+    }
     this.bots.push(bot);
     await this.persist();
     return { ...bot };
@@ -99,6 +104,14 @@ export class BotRegistry {
         draft.attachments !== undefined ? copyAttachments(draft.attachments) : attachmentsOf(prev),
       updatedAt: this.now(),
     };
+    if (draft.modelId !== undefined) {
+      const modelId = copyModelId(draft.modelId);
+      if (modelId) {
+        next.modelId = modelId;
+      } else {
+        delete next.modelId;
+      }
+    }
     this.bots[index] = next;
     await this.persist();
     return { ...next };
@@ -190,4 +203,8 @@ function copyAttachments(items?: BotAttachment[]): BotAttachment[] {
     throw new BotRegistryError('A bot can have at most one Agent file.');
   }
   return next;
+}
+
+function copyModelId(value: unknown): string | undefined {
+  return normalizeModelId(value) ?? undefined;
 }

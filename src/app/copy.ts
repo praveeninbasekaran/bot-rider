@@ -54,6 +54,10 @@ export const COPY = {
   htmlPreviewTitle: (filename: string) => `${filename} (Proposed)`,
   deliverableImplementerExtra:
     'This Send is a standard deliverable. Each files[] entry must include path with the real extension, op create, format (docx|xlsx|pptx|html), title, and outline (string[]). Optional facts are curated one-liners. Do not emit zip, XML, base64, or file bytes.',
+  savedModelUnavailable: 'Saved model is unavailable. Using extension default.',
+  gettingCopilotModels: 'Getting Copilot models…',
+  signInToPickModel: 'Sign in to GitHub Copilot to pick a model.',
+  useExtensionDefault: 'Use extension default',
 };
 
 export function copilotStatusMessage(status: CopilotStatus): string | undefined {
