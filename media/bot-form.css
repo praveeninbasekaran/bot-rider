@@ -23,13 +23,25 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
   padding: 6px 8px;
+}
+
+select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.model-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
 }
 
 textarea {

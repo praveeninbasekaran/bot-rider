@@ -67,6 +67,8 @@ function loadBotForm() {
     'persona',
     'role',
     'instructions',
+    'model',
+    'model-hint',
     'active',
     'err',
     'delete-btn',
@@ -77,7 +79,15 @@ function loadBotForm() {
     ...SLOTS.flatMap((slot) => [`attach-${slot}-btn`, `attach-${slot}-list`]),
   ];
   for (const id of ids) {
-    const el = new FakeEl(id === 'persona' || id === 'instructions' ? 'textarea' : 'input');
+    const el = new FakeEl(
+      id === 'persona' || id === 'instructions'
+        ? 'textarea'
+        : id === 'model'
+          ? 'select'
+          : id === 'model-hint'
+            ? 'span'
+            : 'input',
+    );
     el.id = id;
     if (id === 'active') el.checked = true;
     if (id === 'attach-hint') {

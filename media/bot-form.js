@@ -18,6 +18,7 @@
     '<label>Persona <textarea id="persona" required></textarea></label>' +
     '<label>Role <input id="role" required /></label>' +
     '<label>System instructions <textarea id="instructions"></textarea></label>' +
+    '<label>Model <select id="model" disabled></select><span id="model-hint" class="model-hint">Getting Copilot models…</span></label>' +
     '<div class="attach-block">' +
     '<div class="attach-slot" data-slot="agent">' +
     '<div class="attach-label">Agent</div>' +
@@ -68,12 +69,18 @@
   const persona = document.getElementById('persona');
   const role = document.getElementById('role');
   const instructions = document.getElementById('instructions');
+  const model = document.getElementById('model');
+  const modelHint = document.getElementById('model-hint');
   const active = document.getElementById('active');
   const err = document.getElementById('err');
   const deleteBtn = document.getElementById('delete-btn');
   const attachHint = document.getElementById('attach-hint');
   const attachSkips = document.getElementById('attach-skips');
   const attachUntypedList = document.getElementById('attach-untyped-list');
+  let wantedModelId = null;
+  let userTouchedModel = false;
+  let savedMissing = false;
+  let lastModelsMsg = null;
 
   handle.addEventListener('input', function () {
     handleTouched = true;
@@ -93,6 +100,14 @@
     document.getElementById('attach-' + slot + '-btn').addEventListener('click', function () {
       vscode.postMessage({ type: 'bots/attach-pick', slot: slot });
     });
+  });
+  model.addEventListener('change', function () {
+    userTouchedModel = true;
+    wantedModelId = model.value || null;
+    savedMissing = false;
+    if (!model.disabled) {
+      setModelHint('');
+    }
   });
 
   function derive(n) {
@@ -140,6 +155,78 @@
     if (reason === 'too-large') return 'Skipped ' + fileName + ' · too large';
     if (reason === 'outside-workspace') return 'Skipped ' + fileName + ' · Not in this workspace.';
     return 'Skipped ' + fileName;
+  }
+
+  function setModelHint(text) {
+    modelHint.textContent = text || '';
+    modelHint.hidden = !text;
+  }
+
+  function paintModelOptions(models) {
+    model.textContent = '';
+    var def = document.createElement('option');
+    def.value = '';
+    def.textContent = 'Use extension default';
+    model.appendChild(def);
+    (models || []).forEach(function (entry) {
+      if (!entry || !entry.id) return;
+      var opt = document.createElement('option');
+      opt.value = entry.id;
+      opt.textContent = entry.label;
+      model.appendChild(opt);
+    });
+  }
+
+  function formModelId() {
+    if (model.disabled) return null;
+    return model.value ? model.value : null;
+  }
+
+  function rememberedModelId(bot) {
+    if (!bot || bot.modelId == null) return null;
+    var id = String(bot.modelId).trim();
+    return id || null;
+  }
+
+  function applyBotsModels(msg) {
+    lastModelsMsg = msg;
+    var status = msg.status;
+    var models = msg.models || [];
+    var selectedId = msg.selectedId || null;
+    paintModelOptions(models);
+    if (status === 'loading') {
+      model.disabled = true;
+      model.value = '';
+      setModelHint('Getting Copilot models…');
+      return;
+    }
+    if (status !== 'ready') {
+      model.disabled = true;
+      model.value = '';
+      setModelHint('Sign in to GitHub Copilot to pick a model.');
+      return;
+    }
+    model.disabled = false;
+    var pick = userTouchedModel ? wantedModelId : wantedModelId || selectedId;
+    var inList = !!(pick && models.some(function (entry) { return entry.id === pick; }));
+    if (inList) {
+      model.value = pick;
+      savedMissing = false;
+      setModelHint('');
+      return;
+    }
+    model.value = '';
+    if (pick) {
+      savedMissing = true;
+      wantedModelId = null;
+      setModelHint('Saved model is unavailable. Using extension default.');
+      return;
+    }
+    if (savedMissing) {
+      setModelHint('Saved model is unavailable. Using extension default.');
+      return;
+    }
+    setModelHint('');
   }
 
   function formAttachments() {
@@ -298,6 +385,7 @@
       active: active.checked,
       colorIndex: 0,
       attachments: formAttachments(),
+      modelId: formModelId(),
     };
     if (editingId) {
       vscode.postMessage({
@@ -310,6 +398,7 @@
           role: draft.role,
           instructions: draft.instructions,
           attachments: draft.attachments,
+          modelId: draft.modelId,
         },
         active: draft.active,
         name: draft.name,
@@ -330,6 +419,9 @@
       attachments = [];
       attachSkips.textContent = '';
       const bot = msg.bot;
+      userTouchedModel = false;
+      savedMissing = false;
+      wantedModelId = rememberedModelId(bot);
       if (bot) {
         editingId = bot.id;
         handleTouched = true;
@@ -359,6 +451,9 @@
         }
         paintAttachments();
       }
+      if (lastModelsMsg) {
+        applyBotsModels(lastModelsMsg);
+      }
       if (msg.workspaceEmpty === true) {
         setNoFolder(true);
       } else if (msg.workspaceEmpty === false) {
@@ -374,8 +469,14 @@
       addSkip(msg);
     } else if (msg.type === 'bots/attach-mapped') {
       applyMapped(msg);
+    } else if (msg.type === 'bots/models') {
+      applyBotsModels(msg);
     }
   });
+
+  paintModelOptions([]);
+  model.disabled = true;
+  setModelHint('Getting Copilot models…');
 
   vscode.postMessage({ type: 'form/ready' });
 })();
