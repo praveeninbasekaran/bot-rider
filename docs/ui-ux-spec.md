@@ -292,3 +292,11 @@ Canonical addendum: [ui-ux-bot-attachments.md](./ui-ux-bot-attachments.md). Arch
 | **Hooks** | 0..n |
 
 **Out:** single undifferentiated Attach · fourth view · remote/catalog/GitHub import · bulk swarm wizard · hooks execute/run / hooks-runner · global skill install copy · token/install MCP chrome · skip banner for TokenGovernor trims · overwriting filled name/handle/persona · treating path as a live file · inferring kind from filename · requiring an Agent file · a second runtime · any model other than `vscode.lm`.
+
+## 22. Per-bot model picker (F5)
+
+**Status:** Additive. **MS-1–3 locked.** New Bot / Edit Bot only. Not a Swarm control. Not a fourth sidebar. Do **not** reopen §20 Attach.
+
+Canonical addendum: [ui-ux-bot-model.md](./ui-ux-bot-model.md). Architecture: [architecture-bot-model.md](./architecture-bot-model.md). HostToUi `bots/models`. Persist `BotRecord.modelId`. Copilot via `vscode.lm` only.
+
+**Out:** Swarm per-message model picker · non-Copilot vendors · persisting display label as key · blocking a turn when saved id missing · token/quota chrome · fourth sidebar · F7 parallel · leftovers 002/003/009/014 · tree model subtitle · fake model list · reopening §20 Attach slots.
