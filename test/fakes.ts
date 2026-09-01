@@ -99,6 +99,8 @@ export class FakeGateway implements ICopilotGateway {
   lastMessages: PromptMessage[][] = [];
   lastSendOpts: CopilotSendOpts[] = [];
   turns: TurnKind[] = [];
+  maxInflight = 0;
+  private inflight = 0;
   private preparedModelId: string | null = null;
   script: (info: { turn: TurnKind; instruction: string; messages: PromptMessage[] }) => string = () =>
     'AGREE looks good';
@@ -155,27 +157,33 @@ export class FakeGateway implements ICopilotGateway {
   ): Promise<'ok' | 'cancelled'> {
     this.requestCount += 1;
     this.lastMessages.push(messages);
-    if (this.gate) {
-      await this.gate;
-    }
-    if (this.hang) {
-      return await new Promise<'ok' | 'cancelled'>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new HungError()), 60_000);
-        token.onCancellationRequested(() => {
-          clearTimeout(timer);
-          resolve('cancelled');
+    this.inflight += 1;
+    this.maxInflight = Math.max(this.maxInflight, this.inflight);
+    try {
+      if (this.gate) {
+        await this.gate;
+      }
+      if (this.hang) {
+        return await new Promise<'ok' | 'cancelled'>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new HungError()), 60_000);
+          token.onCancellationRequested(() => {
+            clearTimeout(timer);
+            resolve('cancelled');
+          });
         });
-      });
+      }
+      const instruction = messages[messages.length - 1]?.content ?? '';
+      const turn = detectTurn(instruction);
+      this.turns.push(turn);
+      const text = this.script({ turn, instruction, messages });
+      onText(text);
+      if (token.isCancellationRequested) {
+        return 'cancelled';
+      }
+      return 'ok';
+    } finally {
+      this.inflight -= 1;
     }
-    const instruction = messages[messages.length - 1]?.content ?? '';
-    const turn = detectTurn(instruction);
-    this.turns.push(turn);
-    const text = this.script({ turn, instruction, messages });
-    onText(text);
-    if (token.isCancellationRequested) {
-      return 'cancelled';
-    }
-    return 'ok';
   }
 }
 

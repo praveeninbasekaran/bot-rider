@@ -516,9 +516,9 @@ describe('Orchestrator TokenGovernor packs and RunBoard', () => {
   it('debate and @ packs omit full buffer and history restuff; implementer includes full files', async () => {
     const { app, gw } = harness();
     await twoBots(app);
-    gw.script = ({ turn, instruction }) => {
+    gw.script = ({ turn, instruction, messages }) => {
       const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
-      if (turn === 'propose') {
+      if (turn === 'propose' && (messages[0]?.content.includes('@alpha') ?? false)) {
         return 'UNIQUE-SPEECH-ALPHA-ZZZ';
       }
       if (turn === 'consensus') {
@@ -530,11 +530,21 @@ describe('Orchestrator TokenGovernor packs and RunBoard', () => {
       return 'language only';
     };
     await app.send('build the feature');
-    expect(gw.lastMessages.every((ms) => ms.every((m) => m.role === 'user'))).toBe(true);
+    const alphaId = app.registry.getByHandle('alpha')!.id;
+    const betaId = app.registry.getByHandle('beta')!.id;
     for (let i = 0; i < gw.turns.length; i++) {
       const turn = gw.turns[i]!;
-      const text = gw.lastMessages[i]!.map((m) => m.content).join('\n');
-      expect(text).not.toContain('UNIQUE-SPEECH-ALPHA-ZZZ');
+      const botId = gw.lastSendOpts[i]?.botId;
+      const pack = gw.lastMessages[i]!;
+      const text = pack.map((m) => m.content).join('\n');
+      const isolation = pack
+        .filter((m) => m.content.startsWith('Isolation packet:'))
+        .map((m) => m.content)
+        .join('\n');
+      expect(isolation).not.toContain('UNIQUE-SPEECH-ALPHA-ZZZ');
+      if (botId === betaId) {
+        expect(text).not.toContain('UNIQUE-SPEECH-ALPHA-ZZZ');
+      }
       expect(text).toContain('Run board:');
       if (turn === 'propose' || turn === 'critique' || turn === 'direct') {
         expect(text).toContain('LSP slice of active file');
@@ -553,6 +563,7 @@ describe('Orchestrator TokenGovernor packs and RunBoard', () => {
         expect(text).toContain('Files in play (full contents):');
         expect(text).toContain('export const n = 1;');
         expect(text).not.toContain('LSP slice of active file');
+        expect(botId).toBe(alphaId);
       }
     }
   });

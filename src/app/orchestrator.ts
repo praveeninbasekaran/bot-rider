@@ -21,6 +21,12 @@ import type { WorkspaceContextPort, FileSystemPort } from './ports';
 import { EmptyLspSlicePort, withSelectionFallback, type LspSlicePort, type LspSliceSnapshot } from './lsp-slice';
 import { RunBoardStore } from './run-board';
 import { packKindFor } from './token-governor';
+import {
+  BotSessionStore,
+  buildIsolationPacket,
+  packetToMessage,
+  type IsolationPacket,
+} from './bot-session-store';
 import { detectFormat } from './deliverable-detect';
 import { DeliverableBuilder, templateForBot } from './deliverable-builder';
 import { curateFacts } from './deliverable-facts';
@@ -37,6 +43,8 @@ export class Orchestrator {
   private lspSlice: LspSliceSnapshot = { diagnostics: [], symbols: [] };
   private deliverableAskCount = 0;
   private deliverableAnswers: string[] = [];
+  readonly sessions = new BotSessionStore();
+  private remainingSlots: { botId: string; turn: TurnKind }[] = [];
 
   constructor(
     private readonly registry: BotRegistry,
@@ -83,6 +91,7 @@ export class Orchestrator {
       this.lsp.invalidate();
       this.lspSlice = { diagnostics: [], symbols: [] };
     }
+    this.clearSessions();
     this.hideBoard();
     this.noteApplyFailed(false);
   }
@@ -146,6 +155,7 @@ export class Orchestrator {
 
     this.userText = text;
     this.history = [];
+    this.clearSessions();
     this.deliverableAskCount = 0;
     this.deliverableAnswers = [];
     this.cts = new CancelSource();
@@ -232,6 +242,8 @@ export class Orchestrator {
     this.board.clearDissents();
     this.board.addDecision(`Pick @${bot.handle}`);
     this.emitBoard();
+    this.remainingSlots = [{ botId: bot.id, turn: 'implement' }];
+    this.publishPacket(buildIsolationPacket({ at: 'pick', board: this.board.snapshot() }));
     this.state = {
       ...this.state,
       splitOpen: false,
@@ -257,6 +269,7 @@ export class Orchestrator {
   }
 
   private async runDebateRounds(fromRound: number, toRound: number): Promise<void> {
+    this.planDebateSlots(fromRound, toRound);
     for (let round = fromRound; round <= toRound; round++) {
       if (this.cancelled()) {
         return;
@@ -288,6 +301,7 @@ export class Orchestrator {
         this.board.clearDissents();
         this.board.addDecision('Consensus');
         this.emitBoard();
+        this.publishPacket(buildIsolationPacket({ at: 'consensus', board: this.board.snapshot() }));
         const implementer = this.freeze[0];
         if (implementer) {
           await this.maybeStartImplementer(implementer);
@@ -301,6 +315,7 @@ export class Orchestrator {
   }
 
   private async runDirect(bot: BotRecord): Promise<void> {
+    this.remainingSlots = [{ botId: bot.id, turn: 'direct' }];
     const notice = bot.active ? undefined : COPY.inactiveTurn(bot.name);
     const result = await this.runTurn(
       bot,
@@ -503,6 +518,7 @@ export class Orchestrator {
       this.lspSlice = withSelectionFallback(await this.lsp.capture(this.workspace), this.workspace);
     }
 
+    const inbox = this.sessions.takeInbox(bot.id);
     const packed = await this.prompts.pack({
       bot,
       kind,
@@ -513,6 +529,8 @@ export class Orchestrator {
       lspSlice: kind === 'debate' ? this.lspSlice : undefined,
       implementerFiles: kind === 'implement' ? await this.implementerFiles() : undefined,
       mcpContext: kind === 'debate' ? this.mcp.contextLines() : undefined,
+      sessionMessages: this.sessions.messagesOf(bot.id),
+      isolationPackets: inbox,
     });
     if (!packed.ok) {
       this.emit({ type: 'error', code: 'pack-overflow', message: COPY.packOverflow });
@@ -621,6 +639,25 @@ export class Orchestrator {
       vote,
       trailer,
     });
+    this.completeSlot(bot.id, turn);
+    if (turn === 'direct' && trailer === 'NEED_EDIT') {
+      this.remainingSlots.push({ botId: bot.id, turn: 'implement' });
+    }
+    if (turn === 'propose' || turn === 'critique' || turn === 'direct') {
+      this.publishPacket(
+        buildIsolationPacket({
+          at: 'turn-end',
+          fromBotId: bot.id,
+          board: this.board.snapshot(),
+          trailer,
+        }),
+      );
+    }
+    this.sessions.append(bot.id, [
+      ...inbox.map(packetToMessage),
+      { role: 'user', content: instruction },
+      { role: 'assistant', content: turn === 'implement' ? full : visible },
+    ]);
     return { ok: true, text: turn === 'implement' ? full : visible, trailer, vote };
   }
 
@@ -663,6 +700,7 @@ export class Orchestrator {
   }
 
   private exitToIdle(): void {
+    this.clearSessions();
     this.hideBoard();
     this.deliverableAskCount = 0;
     this.deliverableAnswers = [];
@@ -677,6 +715,7 @@ export class Orchestrator {
   private fail(code: ErrorCode, message: string): void {
     this.emit({ type: 'error', code, message });
     if (code !== 'pack-overflow') {
+      this.clearSessions();
       this.hideBoard();
     }
     this.state = { ...idleRunState(), phase: 'error', applyFailed: this.changesets.applyFailed };
@@ -779,6 +818,49 @@ export class Orchestrator {
 
   snapshotBoard(): RunBoardDto {
     return this.board.snapshot();
+  }
+
+  private clearSessions(): void {
+    this.sessions.clear();
+    this.remainingSlots = [];
+  }
+
+  private planDebateSlots(fromRound: number, toRound: number): void {
+    this.remainingSlots = [];
+    for (let round = fromRound; round <= toRound; round++) {
+      for (const turn of ['propose', 'critique', 'consensus'] as const) {
+        for (const bot of this.freeze) {
+          this.remainingSlots.push({ botId: bot.id, turn });
+        }
+      }
+    }
+    const implementer = this.freeze[0];
+    if (implementer) {
+      this.remainingSlots.push({ botId: implementer.id, turn: 'implement' });
+    }
+  }
+
+  private completeSlot(botId: string, turn: TurnKind): void {
+    const index = this.remainingSlots.findIndex((slot) => slot.botId === botId && slot.turn === turn);
+    if (index >= 0) {
+      this.remainingSlots.splice(index, 1);
+    }
+  }
+
+  private downstreamIds(): string[] {
+    const ids: string[] = [];
+    for (const slot of this.remainingSlots) {
+      if (!ids.includes(slot.botId)) {
+        ids.push(slot.botId);
+      }
+    }
+    return ids;
+  }
+
+  private publishPacket(packet: IsolationPacket): void {
+    for (const botId of this.downstreamIds()) {
+      this.sessions.enqueue(botId, packet);
+    }
   }
 }
 
