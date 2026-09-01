@@ -14,6 +14,8 @@ Addendum 2026-08-31: Typed attachments revise IE — architecture-bot-attachment
 
 Addendum 2026-09-01: Per-bot Copilot model selection is additive — architecture-bot-model.md + UI §22. HostToUi `bots/models`. Persist `LanguageModelChat.id` only as `BotRecord.modelId` (label never persisted). Empty = host default. Missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only. BR / QC / HV / MA / SD / TA frozen.
 
+Addendum 2026-09-01: F7 isolation / SI-1–4 is additive — architecture-bot-isolation.md. Host-only. Zero new chrome. Sequential only. Parallel Event Bus out. BR / QC / HV / MA / SD / TA / MS frozen.
+
 ## Product
 
 VS Code extension: `publisher: botrider`, `name: bot-rider`, `displayName: Bot Rider`, `engines.vscode: ^1.99.0`, `activationEvents: []`.
@@ -145,6 +147,8 @@ Additive staged MCP actions (Grain B): [architecture-mcp-actions.md](./architect
 Additive typed bot attachments (revises IE): [architecture-bot-attachments.md](./architecture-bot-attachments.md). HostToUi / UiToHost attach ports pass `slot`. `BotAttachment.kind` equals the slot. Chrome: [ui-ux-bot-attachments.md](./ui-ux-bot-attachments.md) §20. BR / QC / HV / MA / SD frozen.
 
 Additive per-bot Copilot model selection: [architecture-bot-model.md](./architecture-bot-model.md). HostToUi `bots/models`. Persist `LanguageModelChat.id` only as `BotRecord.modelId` (label never persisted). Empty = host default. Missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only. Chrome: [ui-ux-bot-model.md](./ui-ux-bot-model.md) §22. BR / QC / HV / MA / SD / TA frozen.
+
+Additive F7 isolation / SI-1–4: [architecture-bot-isolation.md](./architecture-bot-isolation.md). Host-only. Zero new chrome. Sequential only. Parallel Event Bus out. BR / QC / HV / MA / SD / TA / MS frozen.
 
 ### UI → host
 
