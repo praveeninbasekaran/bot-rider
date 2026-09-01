@@ -1,6 +1,7 @@
 import { attachmentsOf, type BotAttachment, type BotRecord } from '../domain/bot';
 import type { TurnKind } from '../domain/run-state';
 import type { PromptMessage, RunBoardDto, WorkspaceContext } from '../protocol/messages';
+import { packetToMessage, type IsolationPacket } from './bot-session-store';
 import { formatLspSlice, withSelectionFallback, type LspSliceSnapshot } from './lsp-slice';
 import { boardPackText } from './run-board';
 
@@ -34,6 +35,10 @@ export interface PackRequest {
   lspSlice?: LspSliceSnapshot;
   implementerFiles?: { path: string; content: string }[];
   mcpContext?: string[];
+  /** This bot's prior session messages only. Not the global Swarm transcript. */
+  sessionMessages?: PromptMessage[];
+  /** Required published packets for this turn. Not silent-trim extras. */
+  isolationPackets?: IsolationPacket[];
 }
 
 export function packKindFor(turn: TurnKind): PackKind {
@@ -139,6 +144,8 @@ export class TokenGovernor {
 
   async pack(args: PackRequest): Promise<PackResult> {
     const persona: PromptMessage = { role: 'user', content: personaBlock(args.bot) };
+    const session = [...(args.sessionMessages ?? [])];
+    const packets = (args.isolationPackets ?? []).map(packetToMessage);
     const board: PromptMessage = { role: 'user', content: boardPackText(args.board) };
     const tabs: PromptMessage = { role: 'user', content: tabPathsBlock(args.workspace) };
     const instruction: PromptMessage = { role: 'user', content: args.instruction };
@@ -157,7 +164,17 @@ export class TokenGovernor {
     let extras = allowAttach ? attachmentsOf(args.bot) : [];
 
     const build = (): PromptMessage[] =>
-      assemble([persona, board, fileMsg, tabs, mcpMessage(mcpNotes), extrasMessage(extras), instruction]);
+      assemble([
+        persona,
+        ...session,
+        ...packets,
+        board,
+        fileMsg,
+        tabs,
+        mcpMessage(mcpNotes),
+        extrasMessage(extras),
+        instruction,
+      ]);
 
     let messages = build();
     while ((await args.counter.countTokens(messages)) > args.counter.maxInputTokens) {
