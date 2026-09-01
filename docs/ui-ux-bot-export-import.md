@@ -8,6 +8,8 @@ Architecture: [architecture-bot-export-import.md](./architecture-bot-export-impo
 
 **Status:** Additive. **EX-1–4 locked.** File interchange for BR-3 bots. Not a fourth sidebar. Not Swarm chrome. Not token chrome. Not F7 parallel. Not leftovers 002/003/009/014. Do **not** reopen §20 / §22.
 
+Locked ids (camelCase): `botRider.bots.export` · `botRider.bots.exportSelected` · `botRider.bots.exportAll` · `botRider.bots.import`. View `botRider.bots`. Context `botRider.hasBots`. Welcome `[Import](command:botRider.bots.import)` and `[New Bot](command:botRider.bots.create)`. File schema `format: 'botrider.bots.v1'` is **not** a command. Name-only skip exact: `Skipped "{name}" · a bot with that name already exists.` Handle skip exact: `Skipped @{handle} · already taken.`
+
 ### 23.1 Surfaces
 
 Command and view ids are camelCase `botRider.bots.*` (locked chrome). Tree view `botRider.bots`. Context `botRider.hasBots`.

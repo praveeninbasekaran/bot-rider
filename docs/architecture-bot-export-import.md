@@ -1,6 +1,7 @@
 # Bot Rider — F6 bot export / import (additive slice)
 
 Status: **ready for implementation.** Design only until a developer lands it. Not a host rewrite of BR, QC, HV, MA, SD, TA, MS, or SI. **Not** F7 parallel / Event Bus.
+Locked ids (camelCase): `botRider.bots.export` · `botRider.bots.exportSelected` · `botRider.bots.exportAll` · `botRider.bots.import`. View `botRider.bots`. Context `botRider.hasBots`. File schema `format: 'botrider.bots.v1'` is **not** a command.
 Stories: **EX-1–4 is the full story set.** **EX-1** Export single / multi / (chrome: Export All) as JSON or YAML. Payload: name, handle, persona, role, system instructions (`instructions`), active, modelId, typed attachments (kind + path label + text snapshot). **Not** SI session / transcript / MCP pending / `id` / `createdAt` / `updatedAt`. **EX-2** Import via file picker; create local BR-3 bots (new id, new timestamps). File = one bot object **or** a list. Multi-import: per-bot continue. **EX-3** Handle collision: user picks Skip or Rename. Never overwrite. Never auto-suffix silently. Cancel rename = Skip. Copy exact: `Skipped @{handle} · already taken.` Name-only copy exact: `Skipped "{name}" · a bot with that name already exists.` Prefer the handle line when both collide. Multi: resolve per entry then continue. **EX-4** Never execute scripts/hooks. No API keys. No Marketplace. No hosted sync. F7 parallel Event Bus **out**. No Copilot on export/import.
 UI chrome contract: `ui-ux-spec.md` §23 (addendum `ui-ux-bot-export-import.md`).
 Date: 2026-09-01.

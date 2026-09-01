@@ -48,10 +48,10 @@ New Bot, Edit Bot, Delete Bot, Toggle Active, Expand, Stop (`botrider.chat.stop`
 
 ### Views welcome
 
-**Bots** `!botrider.hasBots`:
+**Bots** `!botRider.hasBots`:
 
 > No bots yet. Create a bot with a name, persona, and role, then send a master prompt in Swarm.  
-> [New Bot](command:botrider.bots.create)
+> [New Bot](command:botRider.bots.create)
 
 **Review** `!botrider.hasPendingChanges`:
 
