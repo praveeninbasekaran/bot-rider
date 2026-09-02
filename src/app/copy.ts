@@ -71,6 +71,7 @@ export const COPY = {
   argueHeader: (path: string) => `ARGUE · ${path}`,
   argueRound: (round: 1 | 2) => `Argue round ${round}`,
   invalidSplit: 'Dispatcher split is not disjoint.',
+  followOnSkipped: 'Follow-on work skipped.',
   unreadableBotFile: "Couldn't read this bot file.",
   dirtyExportPrompt: 'Save before export?',
   dirtyExportSave: 'Save',

@@ -501,7 +501,9 @@ describe('AG-4 union + composer + §28 header', () => {
     await first;
     expect(gw.turns.filter((t) => t === 'direct').length).toBeGreaterThanOrEqual(2);
     expect(gw.lastSendOpts.filter((_, i) => gw.turns[i] === 'direct').some((opts) => opts.botId === dewa)).toBe(true);
-    expect(gw.turns.filter((t) => t === 'dispatch').length).toBe(1);
+    const firstWork = gw.turns.indexOf('work');
+    expect(gw.turns.slice(0, firstWork).filter((t) => t === 'dispatch')).toHaveLength(1);
+    expect(gw.turns.filter((t) => t === 'dispatch').length).toBeLessThanOrEqual(2);
   });
 
   it('Header ARGUE · {path}; round headers Argue round 1 / 2, not ROUND n · CRITIQUE', async () => {

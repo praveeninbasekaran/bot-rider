@@ -129,6 +129,8 @@ export function validateDispatcherSplit(args: {
   declaredPaths?: string[];
   remaining: Pick<BotRecord, 'id' | 'handle' | 'active'>[];
   workspaceRoot: string;
+  /** Paths already in the pending union. Follow-on assignments must not overlap. */
+  blockedPaths?: string[];
 }): SplitValidate {
   if (args.assignments.length === 0) {
     return { ok: false, reason: 'empty assignment' };
@@ -137,6 +139,7 @@ export function validateDispatcherSplit(args: {
   const byHandle = new Map(remaining.map((bot) => [handleKey(bot.handle), bot]));
   const seenHandles = new Set<string>();
   const seenPaths = new Set<string>();
+  const blocked = new Set(args.blockedPaths ?? []);
   const validated: ValidatedAssignment[] = [];
 
   for (const item of args.assignments) {
@@ -162,6 +165,9 @@ export function validateDispatcherSplit(args: {
         return { ok: false, reason: check.reason };
       }
       if (seenPaths.has(check.relative)) {
+        return { ok: false, reason: 'overlap' };
+      }
+      if (blocked.has(check.relative)) {
         return { ok: false, reason: 'overlap' };
       }
       seenPaths.add(check.relative);
@@ -195,6 +201,31 @@ export function validateDispatcherSplit(args: {
 export function remainingWorkBots(freeze: BotRecord[], spec: BotRecord, dispatcher: BotRecord): BotRecord[] {
   const skip = new Set([spec.id, dispatcher.id]);
   return freeze.filter((bot) => bot.active && !skip.has(bot.id));
+}
+
+/** Active, not spec, not dispatcher, no file in the pending union. */
+export function idleWorkBots(
+  freeze: BotRecord[],
+  unionOwnerIds: Set<string>,
+): BotRecord[] {
+  return freeze.filter(
+    (bot) => bot.active && !bot.spec && !bot.dispatcher && !unionOwnerIds.has(bot.id),
+  );
+}
+
+/** Bot ids that wrote any of these disjoint remainder files. */
+export function ownerIdsForFiles(
+  files: ChangeFile[],
+  byWorker: Map<string, ChangeFile[]>,
+): Set<string> {
+  const paths = new Set(files.map((file) => file.path));
+  const ids = new Set<string>();
+  for (const [botId, workerFiles] of byWorker) {
+    if (workerFiles.some((file) => paths.has(file.path))) {
+      ids.add(botId);
+    }
+  }
+  return ids;
 }
 
 export function isTestPath(path: string): boolean {

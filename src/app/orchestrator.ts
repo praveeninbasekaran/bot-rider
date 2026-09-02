@@ -29,7 +29,9 @@ import {
 } from './bot-session-store';
 import { HostEventBus } from './event-bus';
 import {
+  idleWorkBots,
   isTesterAssignment,
+  ownerIdsForFiles,
   parseDispatcherSplit,
   remainingWorkBots,
   workPathClaims,
@@ -70,6 +72,9 @@ export class Orchestrator {
   private workRunActive = false;
   private workBatchActive = false;
   private argueActive = false;
+  private extraDispatchActive = false;
+  private workUnionHeld = false;
+  private extraDispatchUsed = false;
   private argueClaimantHandles: string[] = [];
   private baPackets: IsolationPacket[] = [];
   private workAssignments: ValidatedAssignment[] = [];
@@ -145,7 +150,7 @@ export class Orchestrator {
       await this.answerDeliverableAsk(text);
       return;
     }
-    if (this.workBatchActive || this.argueActive) {
+    if (this.workBatchActive || this.argueActive || this.extraDispatchActive) {
       await this.sendDuringWorkBatch(text);
       return;
     }
@@ -326,7 +331,7 @@ export class Orchestrator {
     this.cts?.cancel();
     if (this.state.debateRunning && this.isWorkRun()) {
       this.emit({ type: 'chat/notice', text: COPY.interrupted });
-      if (this.argueActive) {
+      if (this.argueActive || this.extraDispatchActive || this.workUnionHeld) {
         return;
       }
       this.abortWorkRun();
@@ -359,6 +364,9 @@ export class Orchestrator {
     this.workBatchActive = false;
     this.workRunActive = false;
     this.argueActive = false;
+    this.extraDispatchActive = false;
+    this.workUnionHeld = false;
+    this.extraDispatchUsed = false;
     this.argueClaimantHandles = [];
     this.workAssignments = [];
     this.workerFiles.clear();
@@ -504,6 +512,9 @@ export class Orchestrator {
     this.workBatchActive = false;
     this.workRunActive = false;
     this.argueActive = false;
+    this.extraDispatchActive = false;
+    this.workUnionHeld = false;
+    this.extraDispatchUsed = false;
     this.argueClaimantHandles = [];
     this.state = {
       phase: 'pendingReview',
@@ -931,6 +942,9 @@ export class Orchestrator {
     this.workBatchActive = false;
     this.workRunActive = false;
     this.argueActive = false;
+    this.extraDispatchActive = false;
+    this.workUnionHeld = false;
+    this.extraDispatchUsed = false;
     this.argueClaimantHandles = [];
     this.state = {
       phase: 'split',
@@ -1091,6 +1105,9 @@ export class Orchestrator {
     this.workRunActive = false;
     this.workBatchActive = false;
     this.argueActive = false;
+    this.extraDispatchActive = false;
+    this.workUnionHeld = false;
+    this.extraDispatchUsed = false;
     this.argueClaimantHandles = [];
     this.baPackets = [];
     this.workAssignments = [];
@@ -1218,6 +1235,7 @@ export class Orchestrator {
   private async runDispatch(
     dispatcher: BotRecord,
     extra: string,
+    opts?: { remaining?: BotRecord[]; blockedPaths?: string[] },
   ): Promise<SplitValidate> {
     if (this.cancelled()) {
       return { ok: false, reason: 'cancelled' };
@@ -1239,7 +1257,7 @@ export class Orchestrator {
     if (!roles) {
       return { ok: false, reason: 'unknown handle' };
     }
-    const remaining = remainingWorkBots(this.freeze, roles.spec, roles.dispatcher);
+    const remaining = opts?.remaining ?? remainingWorkBots(this.freeze, roles.spec, roles.dispatcher);
     const root = this.workspace.folderFsPath;
     if (!root) {
       return { ok: false, reason: 'no-workspace' };
@@ -1249,6 +1267,7 @@ export class Orchestrator {
       declaredPaths: parsed.declaredPaths,
       remaining,
       workspaceRoot: root,
+      blockedPaths: opts?.blockedPaths,
     });
   }
 
@@ -1345,17 +1364,97 @@ export class Orchestrator {
   }
 
   private async finishWorkUnion(): Promise<void> {
+    this.workUnionHeld = true;
     const byWorker = [...this.workerFiles.entries()].map(([botId, files]) => ({ botId, files }));
     const claims = workPathClaims(byWorker);
+    const ownerIds = ownerIdsForFiles(claims.remainder, this.workerFiles);
     if (claims.collisions.length === 0) {
-      if (claims.remainder.length === 0) {
-        this.exitToIdle();
-        return;
-      }
-      this.enterPendingReview(claims.remainder);
+      await this.afterFirstUnion(claims.remainder, ownerIds);
       return;
     }
-    await this.runArgue(claims.remainder, claims.collisions);
+    await this.runArgue(claims.remainder, claims.collisions, ownerIds);
+  }
+
+  private commitUnion(files: ChangeFile[]): void {
+    this.extraDispatchActive = false;
+    this.workUnionHeld = false;
+    if (files.length === 0) {
+      this.exitToIdle();
+      return;
+    }
+    this.enterPendingReview(files);
+  }
+
+  private async afterFirstUnion(pending: ChangeFile[], ownerIds: Set<string>): Promise<void> {
+    if (this.cancelled() || this.extraDispatchUsed) {
+      this.commitUnion(pending);
+      return;
+    }
+    const idle = idleWorkBots(this.freeze, ownerIds);
+    if (idle.length === 0) {
+      this.commitUnion(pending);
+      return;
+    }
+    await this.runExtraDispatch(pending, idle);
+  }
+
+  private async runExtraDispatch(pending: ChangeFile[], idle: BotRecord[]): Promise<void> {
+    this.extraDispatchUsed = true;
+    this.extraDispatchActive = true;
+    if (pending.length > 0) {
+      this.showHeldUnion(pending, new Map());
+    }
+    const roles = this.workRoles();
+    if (!roles) {
+      this.commitUnion(pending);
+      return;
+    }
+    const handles = idle.map((bot) => `@${bot.handle}`).join(', ') || '(none)';
+    const claimed = pending.map((file) => file.path).sort((a, b) => a.localeCompare(b)).join(', ') || '(none)';
+    const dispatchExtra = `Remaining worker handles: ${handles}\nClaimed paths: ${claimed}`;
+    const split = await this.runDispatch(roles.dispatcher, dispatchExtra, {
+      remaining: idle,
+      blockedPaths: pending.map((file) => file.path),
+    });
+    if (!split.ok) {
+      if (!this.cancelled() && split.reason !== 'cancelled') {
+        this.emit({ type: 'chat/notice', text: COPY.followOnSkipped });
+      }
+      this.commitUnion(pending);
+      return;
+    }
+    this.workAssignments = split.assignments;
+    this.ingestSettledBatch(this.workFreezeIds());
+    for (const assignment of this.workAssignments) {
+      this.remainingSlots.push({ botId: assignment.botId, turn: 'work' });
+    }
+    const batch = await this.runWorkBatch();
+    if (this.cancelled() || batch === 'cancelled' || batch === 'hung') {
+      this.commitUnion(pending);
+      return;
+    }
+    const followByWorker = [...this.workerFiles.entries()].map(([botId, files]) => ({ botId, files }));
+    this.commitUnion(this.mergeExtraBatch(pending, followByWorker));
+  }
+
+  private mergeExtraBatch(
+    pending: ChangeFile[],
+    followByWorker: { botId: string; files: ChangeFile[] }[],
+  ): ChangeFile[] {
+    const pendingPaths = new Set(pending.map((file) => file.path));
+    const claims = workPathClaims(followByWorker);
+    for (const collision of claims.collisions) {
+      this.noteSkippedCollision(collision.path);
+    }
+    const extra: ChangeFile[] = [];
+    for (const file of claims.remainder) {
+      if (pendingPaths.has(file.path)) {
+        this.noteSkippedCollision(file.path);
+        continue;
+      }
+      extra.push(file);
+    }
+    return [...pending, ...extra].sort((a, b) => a.path.localeCompare(b.path));
   }
 
   private claimantsOf(collision: CollisionClaim): { bot: BotRecord; file: ChangeFile }[] {
@@ -1434,7 +1533,7 @@ export class Orchestrator {
     return claimants.find((item) => item.bot.handle.toLowerCase() === key);
   }
 
-  private async runArgue(remainder: ChangeFile[], collisions: CollisionClaim[]): Promise<void> {
+  private async runArgue(remainder: ChangeFile[], collisions: CollisionClaim[], ownerIds: Set<string>): Promise<void> {
     this.argueActive = true;
     this.workBatchActive = false;
     const ordered = [...collisions].sort((a, b) => a.path.localeCompare(b.path));
@@ -1453,6 +1552,9 @@ export class Orchestrator {
       }
       if (outcome.winnerFile) {
         winners.set(collision.path, outcome.winnerFile);
+        if (outcome.winnerBotId) {
+          ownerIds.add(outcome.winnerBotId);
+        }
         this.showHeldUnion(remainder, winners);
       } else {
         this.noteSkippedCollision(collision.path);
@@ -1467,16 +1569,12 @@ export class Orchestrator {
     this.state.argueRound = undefined;
 
     const union = [...remainder, ...winners.values()].sort((a, b) => a.path.localeCompare(b.path));
-    if (union.length === 0) {
-      this.exitToIdle();
-      return;
-    }
-    this.enterPendingReview(union);
+    await this.afterFirstUnion(union, ownerIds);
   }
 
   private async arguePath(
     collision: CollisionClaim,
-  ): Promise<{ winnerFile?: ChangeFile } | 'cancelled'> {
+  ): Promise<{ winnerFile?: ChangeFile; winnerBotId?: string } | 'cancelled'> {
     const claimants = this.claimantsOf(collision);
     this.argueClaimantHandles = claimants.map((item) => item.bot.handle);
     this.pushArgueState(collision.path, 1);
@@ -1525,7 +1623,7 @@ export class Orchestrator {
 
       const winner = this.writerFromLatest(latest, claimants);
       if (winner) {
-        return { winnerFile: winner.file };
+        return { winnerFile: winner.file, winnerBotId: winner.bot.id };
       }
     }
     return {};
