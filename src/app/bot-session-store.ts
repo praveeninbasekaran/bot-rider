@@ -10,6 +10,8 @@ export type IsolationPacket = {
   openQuestions: string[];
   /** OS-4; omit when empty. Verbatim spec.md bodies. Never stuffed into requirements. */
   specs?: { id: string; body: string }[];
+  /** CM-4 extras only; omit unknown/stale; omit when empty. Never replace SI-2 bodies. */
+  nodeIds?: string[];
 };
 
 export type BotSession = {
@@ -32,6 +34,9 @@ function copyPacket(packet: IsolationPacket): IsolationPacket {
   }
   if (packet.specs && packet.specs.length > 0) {
     next.specs = packet.specs.map((spec) => ({ id: spec.id, body: spec.body }));
+  }
+  if (packet.nodeIds && packet.nodeIds.length > 0) {
+    next.nodeIds = [...packet.nodeIds];
   }
   return next;
 }
@@ -118,9 +123,19 @@ export function buildIsolationPacket(args: {
 /** In-memory per-bot Copilot session. Dies with the host. Not persisted with bots. */
 export class BotSessionStore {
   private readonly sessions = new Map<string, BotSession>();
+  private published: IsolationPacket[] = [];
 
   clear(): void {
     this.sessions.clear();
+    this.published = [];
+  }
+
+  recordPublished(packet: IsolationPacket): void {
+    this.published.push(copyPacket(packet));
+  }
+
+  listPublished(): IsolationPacket[] {
+    return this.published.map(copyPacket);
   }
 
   peek(botId: string): BotSession | undefined {

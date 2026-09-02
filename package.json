@@ -149,6 +149,12 @@
         "title": "Import",
         "category": "Bot Rider",
         "icon": "$(desktop-download)"
+      },
+      {
+        "command": "botrider.contextMap.refresh",
+        "title": "Refresh",
+        "category": "Bot Rider",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -259,6 +265,11 @@
           "command": "botrider.changeset.retry",
           "when": "view == botrider.review && botrider.applyFailed",
           "group": "navigation@3"
+        },
+        {
+          "command": "botrider.contextMap.refresh",
+          "when": "view == botrider.contextMap",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -323,6 +334,12 @@
           "id": "botrider.chat",
           "name": "Swarm",
           "type": "webview"
+        },
+        {
+          "id": "botrider.contextMap",
+          "name": "Context Map",
+          "type": "webview",
+          "visibility": "visible"
         },
         {
           "id": "botrider.review",

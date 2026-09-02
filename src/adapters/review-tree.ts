@@ -94,6 +94,23 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     }
   }
 
+  async revealFile(path: string): Promise<void> {
+    if (!this.view) {
+      return;
+    }
+    await vscode.commands.executeCommand('botrider.review.focus');
+    const roots = this.getChildren();
+    const section = roots.find((item) => item.kind === 'filesSection');
+    if (section) {
+      await this.view.reveal(section, { expand: true });
+    }
+    const wanted = path.replace(/\\/g, '/');
+    const target = this.fileItems().find((item) => item.file?.path.replace(/\\/g, '/') === wanted);
+    if (target) {
+      await this.view.reveal(target, { expand: true, focus: true, select: true });
+    }
+  }
+
   getTreeItem(element: ReviewItem): vscode.TreeItem {
     return element;
   }

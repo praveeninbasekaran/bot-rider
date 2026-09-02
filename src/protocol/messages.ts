@@ -134,7 +134,15 @@ export type HostToUi =
       selectedId: string | null;
       status: 'loading' | 'ready' | 'unavailable';
     }
-  | { type: 'error'; code: ErrorCode; message: string };
+  | { type: 'error'; code: ErrorCode; message: string }
+  | {
+      type: 'contextMap/workspace';
+      nodes: ContextMapNode[];
+      edges: ContextMapEdge[];
+      scopeHint?: string;
+      focusUri?: string;
+    }
+  | { type: 'contextMap/run'; nodes: ContextMapNode[]; edges: ContextMapEdge[] };
 
 export type UiToHost =
   | { type: 'bots/create'; draft: BotCreateDraft }
@@ -182,13 +190,55 @@ export type UiToHost =
           snapshot: string;
         }[];
       };
-    };
+    }
+  | { type: 'contextMap/expand-file'; uri: string }
+  | { type: 'contextMap/select'; nodeId: string }
+  | { type: 'contextMap/open'; nodeId: string };
 
 export interface WorkspaceContext {
   folderFsPath?: string;
   activeEditor?: { path: string; content: string; selection?: string };
   otherTabPaths: string[];
 }
+
+export type ContextMapNodeKind =
+  | 'folder'
+  | 'file'
+  | 'symbol'
+  | 'bot'
+  | 'packet'
+  | 'proposedFile';
+
+export type ContextMapNode = {
+  id: string;
+  kind: ContextMapNodeKind;
+  label: string;
+  path?: string;
+  uri?: string;
+  start?: { line: number; character: number };
+  end?: { line: number; character: number };
+  symbolKind?: string;
+  handle?: string;
+  packetId?: string;
+};
+
+export type ContextMapEdge = {
+  from: string;
+  to: string;
+  kind: 'contains' | 'neighborhood' | 'published' | 'proposes' | 'mapsTo';
+};
+
+export type ContextMapWorkspacePayload = {
+  nodes: ContextMapNode[];
+  edges: ContextMapEdge[];
+  scopeHint?: string;
+  focusUri?: string;
+};
+
+export type ContextMapRunPayload = {
+  nodes: ContextMapNode[];
+  edges: ContextMapEdge[];
+};
 
 export function filesToPreview(files: ChangeFile[]): ProposedFileDto[] {
   return files.map((f) => {

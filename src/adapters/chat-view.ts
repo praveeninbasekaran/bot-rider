@@ -47,6 +47,9 @@ export class ChatHub {
   }
 
   post(msg: HostToUi): void {
+    if (msg.type === 'contextMap/workspace' || msg.type === 'contextMap/run') {
+      return;
+    }
     if (msg.type === 'bots/snapshot') {
       this.lastSnapshot = msg;
     }

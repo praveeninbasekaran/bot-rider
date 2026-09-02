@@ -83,6 +83,7 @@ describe('§21 standard-deliverables Proposed Changes chrome', () => {
     expect(pkg.contributes.views.botrider.map((v) => v.id)).toEqual([
       'botrider.bots',
       'botrider.chat',
+      'botrider.contextMap',
       'botrider.review',
     ]);
     const titles = pkg.contributes.menus['view/title'];

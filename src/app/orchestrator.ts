@@ -33,6 +33,7 @@ import {
   citedIdsFromFiles,
   matchSpecBodies,
 } from './openspec-catalog';
+import type { ContextMapHost } from './context-map';
 import { detectFormat } from './deliverable-detect';
 import { DeliverableBuilder, templateForBot } from './deliverable-builder';
 import { curateFacts } from './deliverable-facts';
@@ -52,6 +53,7 @@ export class Orchestrator {
   readonly sessions = new BotSessionStore();
   readonly catalog: OpenSpecCatalog;
   private remainingSlots: { botId: string; turn: TurnKind }[] = [];
+  private contextMap: ContextMapHost | undefined;
 
   constructor(
     private readonly registry: BotRegistry,
@@ -76,6 +78,10 @@ export class Orchestrator {
 
   getFrozenBots(): BotRecord[] {
     return this.freeze.map((b) => ({ ...b }));
+  }
+
+  bindContextMap(host: ContextMapHost): void {
+    this.contextMap = host;
   }
 
   getPositionSummaries(): { botId: string; name: string; summary: string }[] {
@@ -189,6 +195,7 @@ export class Orchestrator {
         turn: 'direct',
       };
       this.pushState();
+      this.contextMap?.syncRun();
       await this.runDirect(solo);
     } else {
       this.freeze = this.registry.snapshotActive();
@@ -201,6 +208,7 @@ export class Orchestrator {
         frozenBotIds: this.freeze.map((b) => b.id),
       };
       this.pushState();
+      this.contextMap?.syncRun();
       await this.runDebateRounds(1, 2);
     }
 
@@ -416,6 +424,7 @@ export class Orchestrator {
     const catalog = this.catalog.snapshot();
     this.changesets.setPending(files.map((file) => attachFileCites(file, catalog)));
     this.syncFiles(files.map((f) => f.path));
+    this.contextMap?.syncRun();
     this.emitBoard();
     this.state = {
       phase: 'pendingReview',
@@ -834,6 +843,7 @@ export class Orchestrator {
   private clearSessions(): void {
     this.sessions.clear();
     this.remainingSlots = [];
+    this.contextMap?.clearRun();
   }
 
   private planDebateSlots(fromRound: number, toRound: number): void {
@@ -874,10 +884,16 @@ export class Orchestrator {
       citedIdsFromFiles(this.changesets.files),
       this.userText,
     );
-    const next: IsolationPacket = specs.length > 0 ? { ...packet, specs } : packet;
+    let next: IsolationPacket = specs.length > 0 ? { ...packet, specs } : packet;
+    const nodeIds = this.contextMap?.nodeIdsFor(next);
+    if (nodeIds && nodeIds.length > 0) {
+      next = { ...next, nodeIds };
+    }
+    this.sessions.recordPublished(next);
     for (const botId of this.downstreamIds()) {
       this.sessions.enqueue(botId, next);
     }
+    this.contextMap?.syncRun();
   }
 }
 
