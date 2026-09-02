@@ -345,3 +345,11 @@ Canonical addendum: [ui-ux-context-map.md](./ui-ux-context-map.md). Architecture
 Canonical addendum: [ui-ux-parallel-stream.md](./ui-ux-parallel-stream.md). Architecture: [architecture-event-bus.md](./architecture-event-bus.md). `ROUND {n} · PROPOSE` then `ROUND {n} · CRITIQUE` after propose settled. No “parallel” header. `@` / vote / Split / implementer: no overlap chrome. Run board MAY show multiple in-flight speakers (one static ●/chip per handle). Composer locked until the batch settles. Stop = `botrider.chat.stop`, aborts all in-flight.
 
 **Out:** Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · “parallel” header · overlap chrome on `@` / vote / Split / implementer · Approve/MCP/packets/OpenSpec on the run board · F3 dashboard · F4 register · leftovers 002/003/009/014 · reopening §20–§25.
+
+## 27. Work run (F8a)
+
+**Status:** Additive. **WK-1–6 locked.** Swarm + New/Edit Bot chrome only. New run type **Work**, not a protocol on F7 Debate. **Work | Debate** segmented control on the composer (and Expand); default **Debate**; Send follows it. Not a fourth view. Not Event Bus chrome. Not a per-Send picker. Do **not** rewrite §20–§26. F7 Debate composer-lock stays in §26.
+
+Canonical addendum: [ui-ux-work-run.md](./ui-ux-work-run.md). Architecture: [architecture-work-run.md](./architecture-work-run.md). Form: optional Dispatcher / Spec after Active; Save is not the gate. Work Send is the gate — `Work needs one Dispatcher and one Spec.` Work-batch composer unlocked (`Work batch still running.`). One Files list; `Skipped {path} · collision`. Approve disabled until settle. Stop = `botrider.chat.stop`, aborts all in this Work-batch.
+
+**Out:** F8b Argue chrome · F8c idle follow-on · F8d Stop-one · N Approves · per-Send picker · Save-time designation gate · new sidebar · new Activity Bar icon · Event Bus chrome · reopening §20–§26.
