@@ -1,8 +1,8 @@
-# Bot Rider — UI/UX addendum: F8a Work run + F8b sequential Argue
+# Bot Rider — UI/UX addendum: F8a Work run + F8b sequential Argue + F8c idle follow-on
 
-Fold into `ui-ux-spec.md` as **§27** (F8a Work) and **§28** (F8b Argue). Additive Swarm + New/Edit Bot chrome. Do **not** reopen §20 Attach, §22 model picker, §23 export/import, §24 OpenSpec chips, §25 Context Map, or §26 F7 Debate composer-lock. Do **not** rewrite §27.9 (F8a Work-batch overlap). Not a new sidebar. Not a new Activity Bar icon. Not a fourth view. Not Event Bus chrome.
+Fold into `ui-ux-spec.md` as **§27** (F8a Work), **§28** (F8b Argue), and **§29** (F8c idle follow-on). Additive Swarm + New/Edit Bot chrome. Do **not** reopen §20 Attach, §22 model picker, §23 export/import, §24 OpenSpec chips, §25 Context Map, or §26 F7 Debate composer-lock. Do **not** rewrite §27.9 (F8a Work-batch overlap). Do **not** rewrite §28 except the Out pointer. Not a new sidebar. Not a new Activity Bar icon. Not a fourth view. Not Event Bus chrome.
 
-Architecture: [architecture-work-run.md](./architecture-work-run.md). Additive. **WK-1–6 locked** (F8a shipped). **AG-1–4 locked** (F8b host). Work is a **different run type**, not Debate chrome. Host Event Bus is **not** painted. HV is **display only**. Debate lock in §26 stays Debate-only. Argue chrome is **§28**, never §27.9.
+Architecture: [architecture-work-run.md](./architecture-work-run.md). Additive. **WK-1–6 locked** (F8a shipped). **AG-1–4 locked** (F8b host). **FO-1–4 locked** (F8c host). Work is a **different run type**, not Debate chrome. Host Event Bus is **not** painted. HV is **display only**. Debate lock in §26 stays Debate-only. Argue chrome is **§28**, never §27.9. Follow-on chrome is **§29**. Reuse §27 run-board in-flight+waiting. No ARGUE header for follow-on.
 
 ## 27. Work run chrome (F8a)
 
@@ -162,7 +162,7 @@ UI never calls `vscode.lm`. UI never paints packets. UI never implies same-batch
 
 ### 27.13 Out
 
-Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourth view · per-Send role picker · reserved Dev1 / Dev2 / tester chrome · name-contains-`BA` inference · Save-time designation gate · blocking Save / New Bot for flags · F8c idle follow-on chrome · F8d Stop-one / compare-to-spec · N Approves · combined Files+MCP Approve · last-writer-wins · whole-batch fail on collision · changing default Send to Work · overlap restyle of §26 Debate lock · moving Approve / MCP / packets / OpenSpec onto the run board · reopening §20 / §22 / §23 / §24 / §25 / §26 · F3 dashboard · F4 register · leftovers 002/003/009/014 · Graphify vendor UI · token/quota chrome. **F8b Argue chrome** lives in §28 (not out of the product forever; not §27.9).
+Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourth view · per-Send role picker · reserved Dev1 / Dev2 / tester chrome · name-contains-`BA` inference · Save-time designation gate · blocking Save / New Bot for flags · F8d Stop-one / compare-to-spec · N Approves · combined Files+MCP Approve · last-writer-wins · whole-batch fail on collision · changing default Send to Work · overlap restyle of §26 Debate lock · moving Approve / MCP / packets / OpenSpec onto the run board · reopening §20 / §22 / §23 / §24 / §25 / §26 · F3 dashboard · F4 register · leftovers 002/003/009/014 · Graphify vendor UI · token/quota chrome. **F8b Argue chrome** lives in §28 (not out of the product forever; not §27.9). **F8c idle follow-on chrome** lives in §29 (not out of the product forever).
 
 ### 27.14 Copy exact
 
@@ -278,11 +278,122 @@ UI never calls `vscode.lm`. UI never paints packets.
 
 ### 28.11 Out
 
-Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourth view · Argue as a third Send mode · Pick chrome · Continue · F7 Split card · `chat/split` · enterSplit · Debate-paused Split · host auto-pick · reserved-role tie-break · reserved Dev/tester roles · vote chips · `ROUND n · CRITIQUE` header · overlapping HV during Argue · reusing or overwriting §27.9 · N Approves · combined Files+MCP Approve · last-writer-wins chrome · discarding remainder from Proposed Changes while Argue runs · F8c idle follow-on chrome · F8d Stop-one / compare-to-spec · reopening §20–§26 / F8a WK-1–6 except the collision pointer · F3 dashboard · F4 register · leftovers 002/003/009/014 · Graphify vendor UI · token/quota chrome
+Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourth view · Argue as a third Send mode · Pick chrome · Continue · F7 Split card · `chat/split` · enterSplit · Debate-paused Split · host auto-pick · reserved-role tie-break · reserved Dev/tester roles · vote chips · `ROUND n · CRITIQUE` header · overlapping HV during Argue · reusing or overwriting §27.9 · N Approves · combined Files+MCP Approve · last-writer-wins chrome · discarding remainder from Proposed Changes while Argue runs · F8d Stop-one / compare-to-spec · reopening §20–§26 / F8a WK-1–6 except the collision pointer · F3 dashboard · F4 register · leftovers 002/003/009/014 · Graphify vendor UI · token/quota chrome. **F8c idle follow-on chrome** lives in §29 (not out of the product forever).
 
 ### 28.12 Copy exact
 
 | Key | Copy |
 | --- | --- |
 | Argue header | `ARGUE · {path}` |
+| Collision drop (unchanged) | `Skipped {path} · collision` |
+
+---
+
+## 29. Idle follow-on chrome (F8c)
+
+**Status:** Additive after §28. **FO-1–4 locked** (host). This section is chrome only. Follow-on chrome is **§29**. Do **not** reopen §20–§28 except the §27/§28 Out pointer. Do **not** rewrite §27.9 or §28. Not a fourth view. Not Event Bus chrome. Not packet rows. Not a new sidebar. Not a new Activity Bar icon. Not F3 / F4. Not leftovers 002/003/009/014. Do **not** reopen §20–§26. F8a Work | Debate, designation, Work-batch unlocked composer, F8b `ARGUE · {path}`, and one Files list stay as shipped.
+
+Architecture: [architecture-work-run.md](./architecture-work-run.md) F8c / FO-1–4. **This chrome stamp does not change the host FO lock.** Host freeze unchanged: one extra dispatch + one extra Work-batch of idle bots only; disjoint from pending union and among follow-on assignments; cap one per Send; no second Argue.
+
+### 29.0 Chrome lock (BA, matches FO-1–4)
+
+- Follow-on only after first Work-batch + Argue settle. Not during BA, first batch, or Argue. Cap one per Send. Work | Debate unchanged. No third Send mode. No ARGUE header for follow-on.
+- No idle bots: silent, Approve first union. No banner.
+- Invalid split: exact `Follow-on work skipped.` then first union Approves.
+- Follow-on collisions: `Skipped {path} · collision`. No second Argue. No ARGUE header.
+- Approve disabled until follow-on settles or skipped. One union. Not N Approves. MCP unchanged.
+- Spec/Dispatcher never follow-on workers. Workers = idle-bot handles from the follow-on dispatch split (not reserved roles).
+- Composer @/assign/Stop as WK-6. Stop aborts this follow-on batch. Reuse §27 run-board in-flight+waiting chips. No new Activity Bar.
+
+### 29.1 When follow-on chrome shows
+
+Follow-on Work-batch **after Argue** (or after first Work-batch if no Argue). Not during BA, first Work-batch, or Argue.
+
+Cap one per Send. Work | Debate unchanged. No third Send mode. No Follow-on Send mode.
+
+**No ARGUE header for follow-on.** Follow-on is a Work-batch, not Argue. `ARGUE · {path}` stays F8b-only.
+
+### 29.2 Silent skip (zero idle)
+
+No idle bots: silent, Approve first union. **No banner.** Do **not** paint `Follow-on work skipped.` when there are zero idle bots.
+
+### 29.3 Invalid split
+
+Invalid follow-on split: exact copy:
+
+```
+Follow-on work skipped.
+```
+
+Then first union Approves.
+
+### 29.4 Follow-on collisions
+
+Follow-on collisions: exact copy (unchanged F8a string):
+
+```
+Skipped {path} · collision
+```
+
+No second Argue. No ARGUE header.
+
+### 29.5 Approve
+
+Approve is **disabled** until follow-on settles or is skipped.
+
+Then **one** union (remainder + F8b winners + follow-on disjoint). Not N Approves. Remainder still in Proposed Changes (visible, not discarded).
+
+**MCP Grain B unchanged / separate click** (§19). Do not combine the gates.
+
+### 29.6 Workers (chrome identity)
+
+Spec/Dispatcher never follow-on workers. Workers = idle-bot handles from the follow-on dispatch split (not reserved roles). Not name matching. No reserved Dev/tester roles. Label `@{handle}` (never display name as the identity). Dropped-collision-only workers MAY appear if they are idle (active, not spec, not dispatcher, no path in the pending union).
+
+### 29.7 Composer + Stop
+
+Composer during follow-on Work-batch: unlocked `@` / assign / Stop as WK-6 / §27. Stop works; **@ stays sole respondent** (existing @ chrome, not a second Work run).
+
+Master Send reuses exact copy:
+
+```
+Work batch still running.
+```
+
+No Follow-on Send mode. Work | Debate unchanged.
+
+**Stop** = existing `botrider.chat.stop` / `chat/stop` only. Stop aborts this follow-on batch. No enterSplit. No Split card. No F8d Stop-one.
+
+### 29.8 Run board
+
+Reuse **§27** run-board in-flight + waiting chips: ● in-flight + ○ waiting `@{handle}`. Clicks are a no-op.
+
+Do **not** show Event Bus / packet rows / path lists on the chip. Do **not** move Approve, MCP, packets, or OpenSpec chips onto the board. No new Activity Bar. No new sidebar. No fourth view.
+
+### 29.9 Accessibility
+
+Skip note `Follow-on work skipped.` polite once when the invalid split is skipped. Collision notes `Skipped {path} · collision` polite once each. Zero-idle silent skip: **no** announcement / no banner.
+
+Per-article live regions. **≤ 1 announce / 2 seconds / article.** In-flight / waiting chips: text includes `@{handle}`. Glyph `aria-hidden` if a ● is decorative.
+
+Do **not** announce an ARGUE header for follow-on.
+
+### 29.10 Protocol consume
+
+No new Event Bus protocol members. Consume existing `chat/turn-start` / `chat/token` / `chat/turn-end` / `chat/stop` / `run/state` / `chat/board` / `changeset/preview` / `error`.
+
+No `chat/split`. No Pick. No Continue. No ARGUE header for follow-on.
+
+UI never calls `vscode.lm`. UI never paints packets.
+
+### 29.11 Out
+
+Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourth view · third Send mode · Follow-on Send mode · ARGUE header for follow-on · Pick chrome · enterSplit · Split card · N Approves · combined Files+MCP Approve · last-writer-wins · second Argue on follow-on collisions · spec/dispatcher as follow-on workers · reserved Dev/tester roles · banner on zero-idle skip · looping follow-on · follow-on during BA/first batch/Argue · F8d Stop-one / compare-to-spec · reopening §20–§28 / F8a WK-1–6 / F8b AG-1–4 except the settle / Out pointer · F3 dashboard · F4 register · leftovers 002/003/009/014 · Graphify vendor UI · token/quota chrome
+
+### 29.12 Copy exact
+
+| Key | Copy |
+| --- | --- |
+| Follow-on split invalid | `Follow-on work skipped.` |
+| Zero idle | _(silent — no banner)_ |
+| Master Send during follow-on Work-batch | `Work batch still running.` (reuse WK-5 / §27) |
 | Collision drop (unchanged) | `Skipped {path} · collision` |
