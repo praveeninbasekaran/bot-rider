@@ -14,7 +14,9 @@ Addendum 2026-08-31: Typed attachments revise IE — architecture-bot-attachment
 
 Addendum 2026-09-01: Per-bot Copilot model selection is additive — architecture-bot-model.md + UI §22. HostToUi `bots/models`. Persist `LanguageModelChat.id` only as `BotRecord.modelId` (label never persisted). Empty = host default. Missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only. BR / QC / HV / MA / SD / TA frozen.
 
-Addendum 2026-09-01: F7 isolation / SI-1–4 is additive — architecture-bot-isolation.md. Host-only. Zero new chrome. Sequential only. Parallel Event Bus out. BR / QC / HV / MA / SD / TA / MS frozen.
+Addendum 2026-09-01: F7 isolation / SI-1–4 is additive — architecture-bot-isolation.md. Host-only. Zero new chrome for isolation. SI-1/2/4 held. SI-3 reopened for Debate speakers in a batch — architecture-event-bus.md. BR / QC / HV / MA / SD / TA / MS frozen otherwise.
+
+Addendum 2026-09-02: F7 parallel / Event Bus / EB-1–4 is additive — architecture-event-bus.md + UI §26. Host in-process Event Bus. Not vscode.EventBus. Not network. SI-3 reopened for Debate speakers in a batch. Same-batch speakers do not hear each other until the phase ends. Chrome: ui-ux-parallel-stream.md §26. Do not reopen §20–§25. Leftovers 002/003/009/014 out. F3 / F4 out.
 
 Addendum 2026-09-01: F6 bot export / import is additive — architecture-bot-export-import.md + UI §23. Envelope `format: 'botrider.bots.v1'`. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
 
@@ -154,7 +156,9 @@ Additive typed bot attachments (revises IE): [architecture-bot-attachments.md](.
 
 Additive per-bot Copilot model selection: [architecture-bot-model.md](./architecture-bot-model.md). HostToUi `bots/models`. Persist `LanguageModelChat.id` only as `BotRecord.modelId` (label never persisted). Empty = host default. Missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only. Chrome: [ui-ux-bot-model.md](./ui-ux-bot-model.md) §22. BR / QC / HV / MA / SD / TA frozen.
 
-Additive F7 isolation / SI-1–4: [architecture-bot-isolation.md](./architecture-bot-isolation.md). Host-only. Zero new chrome. Sequential only. Parallel Event Bus out. BR / QC / HV / MA / SD / TA / MS frozen.
+Additive F7 isolation / SI-1–4: [architecture-bot-isolation.md](./architecture-bot-isolation.md). Host-only. Zero new chrome for isolation. SI-1/2/4 held. SI-3 reopened for Debate speakers in a batch — [architecture-event-bus.md](./architecture-event-bus.md). BR / QC / HV / MA / SD / TA / MS frozen otherwise.
+
+Additive F7 parallel / Event Bus / EB-1–4: [architecture-event-bus.md](./architecture-event-bus.md). Host in-process only. Not vscode.EventBus. Not network. SI-3 reopened for Debate speakers in a batch. Same-batch speakers do not hear each other until the phase ends. Chrome: [ui-ux-parallel-stream.md](./ui-ux-parallel-stream.md) §26. Do not reopen §20–§25.
 
 Additive F6 bot export / import: [architecture-bot-export-import.md](./architecture-bot-export-import.md). Envelope `format: 'botrider.bots.v1'`. UiToHost `bots/export-self` only (form Export). Chrome: [ui-ux-bot-export-import.md](./ui-ux-bot-export-import.md) §23. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
 
@@ -170,7 +174,7 @@ Card Stop posts `chat/stop`.
 
 ## Orchestrator
 
-One run, never overlapping `sendRequest`. One cancellation token source per run.
+One run. Debate parallel batches: [architecture-event-bus.md](./architecture-event-bus.md) (SI-3 reopened). `@` / vote / Split / implementer stay one `sendRequest` at a time.
 
 - Freeze at RunStarted; keep freeze on split/Continue.
 - Sequential propose then critique ×2 then AGREE/DISSENT. Vote: first token `AGREE` or `DISSENT` case-insensitive; rest is reason; unparseable = `DISSENT`. All AGREE ⇒ implementer = first frozen active bot. Else Split. No auto round 3.
