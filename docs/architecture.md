@@ -54,6 +54,8 @@ Additive F8a Work run / WK-1–6: [architecture-work-run.md](./architecture-work
 
 Additive F8b sequential Argue / AG-1–4: [architecture-work-run.md](./architecture-work-run.md) F8b / AG-1–4. After Work-batch collision. Winner = SI-2 AGREE on one writer handle. Chrome: [ui-ux-work-run.md](./ui-ux-work-run.md) §28. Do not reopen §20–§26 / F8a WK-1–6 except the collision pointer.
 
+Additive F8c idle follow-on / FO-1–4: [architecture-work-run.md](./architecture-work-run.md) F8c / FO-1–4. After first Work-batch + Argue settle. Idle = active, not spec, not dispatcher, no path in pending union (dropped-collision-only workers included). One extra dispatch + one extra Work-batch. Chrome: [ui-ux-work-run.md](./ui-ux-work-run.md) §29. Do not reopen §20–§28 / F8a WK-1–6 / F8b AG-1–4 except the settle pointer.
+
 Additive F6 bot export / import: [architecture-bot-export-import.md](./architecture-bot-export-import.md). Envelope `format: 'botrider.bots.v1'`. UiToHost `bots/export-self` only (form Export). Chrome: [ui-ux-bot-export-import.md](./ui-ux-bot-export-import.md) §23. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
 
 Additive F2 OpenSpec / OS-1–4: [architecture-openspec-trace.md](./architecture-openspec-trace.md). Optional `specIds` on `changeset/preview` Files. Chrome: [ui-ux-openspec-chips.md](./ui-ux-openspec-chips.md) §24. Missing `openspec/` = empty catalog, no error, no chips, no banner. BR / QC / HV / MA / SD / TA / MS / SI / EX frozen otherwise. F1 Graphify out. F7 parallel out.
