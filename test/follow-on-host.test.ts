@@ -603,7 +603,7 @@ describe('FO-4 union + Stop', () => {
     scriptFollowOn(skipHold.gw, { extra: [{ handle: 'devc', paths: ['src/a.ts'] }] });
     const skipDone = skipHold.app.send('hold extra skip', 'work');
     await vi.waitFor(() => {
-      expect(skipHold.gw.turns.filter((t) => t === 'dispatch').length).toBe(2);
+      expect(extraDispatchHeld).toBe(true);
     });
     expect(skipHold.app.changesets.hasPending()).toBe(false);
     expect(await skipHold.app.approve()).toBe(false);
