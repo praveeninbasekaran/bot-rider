@@ -30,19 +30,21 @@ export function proposedFileLabel(path: string): string {
 
 export type ProposedFileChrome = {
   label: string;
-  description: 'Added' | 'Deleted' | 'Modified';
+  description: string;
   contextValue: 'proposedFile';
   command: 'botrider.review.openDiff';
   resourcePath: string;
   decoration?: { badge: 'A'; tooltip: 'Added' };
 };
 
-export function proposedFileChrome(file: Pick<ChangeFile, 'path' | 'op'>): ProposedFileChrome {
+/** Files-row chrome. Chip suffix is catalog ids as stored, array order, no re-sort. */
+export function proposedFileChrome(file: Pick<ChangeFile, 'path' | 'op' | 'specIds'>): ProposedFileChrome {
   const label = proposedFileLabel(file.path);
   const description = file.op === 'create' ? 'Added' : file.op === 'delete' ? 'Deleted' : 'Modified';
+  const specIds = file.specIds;
   return {
     label,
-    description,
+    description: specIds && specIds.length > 0 ? `${description} · ${specIds.join(' · ')}` : description,
     contextValue: 'proposedFile',
     command: 'botrider.review.openDiff',
     resourcePath: label,

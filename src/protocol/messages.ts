@@ -191,5 +191,11 @@ export interface WorkspaceContext {
 }
 
 export function filesToPreview(files: ChangeFile[]): ProposedFileDto[] {
-  return files.map((f) => ({ path: f.path, op: f.op, kind: inferChangeKind(f) }));
+  return files.map((f) => {
+    const dto: ProposedFileDto = { path: f.path, op: f.op, kind: inferChangeKind(f) };
+    if (f.specIds && f.specIds.length > 0) {
+      dto.specIds = [...f.specIds];
+    }
+    return dto;
+  });
 }

@@ -8,6 +8,8 @@ export type IsolationPacket = {
   decisions: string[];
   constraints: string[];
   openQuestions: string[];
+  /** OS-4; omit when empty. Verbatim spec.md bodies. Never stuffed into requirements. */
+  specs?: { id: string; body: string }[];
 };
 
 export type BotSession = {
@@ -27,6 +29,9 @@ function copyPacket(packet: IsolationPacket): IsolationPacket {
   };
   if (packet.fromBotId) {
     next.fromBotId = packet.fromBotId;
+  }
+  if (packet.specs && packet.specs.length > 0) {
+    next.specs = packet.specs.map((spec) => ({ id: spec.id, body: spec.body }));
   }
   return next;
 }
@@ -57,6 +62,13 @@ export function packetToMessage(packet: IsolationPacket): PromptMessage {
   section(lines, 'Decisions', packet.decisions);
   section(lines, 'Constraints', packet.constraints);
   section(lines, 'Open questions', packet.openQuestions);
+  if (packet.specs && packet.specs.length > 0) {
+    lines.push('Specs:');
+    for (const spec of packet.specs) {
+      lines.push(spec.id);
+      lines.push(spec.body);
+    }
+  }
   return { role: 'user', content: lines.join('\n') };
 }
 
