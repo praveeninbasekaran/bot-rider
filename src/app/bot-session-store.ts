@@ -20,7 +20,7 @@ export type BotSession = {
   inbox: IsolationPacket[];
 };
 
-function copyPacket(packet: IsolationPacket): IsolationPacket {
+export function copyPacket(packet: IsolationPacket): IsolationPacket {
   const next: IsolationPacket = {
     id: packet.id,
     at: packet.at,

@@ -42,11 +42,13 @@ describe('Swarm article chrome (HV-1 AC8 §18)', () => {
   });
 
   it('streams tokens into the paragraph and paints host-stripped text only at turn-end', () => {
-    expect(tokenHandler).toContain('state.current.stream.appendChild(document.createTextNode(msg.delta || \'\'))');
+    expect(tokenHandler).toContain('const current = flightFor(msg.botId)');
+    expect(tokenHandler).toContain("current.stream.appendChild(document.createTextNode(msg.delta || ''))");
     expect(tokenHandler).not.toContain('paintArticle');
     expect(tokenHandler).not.toContain('splitArticleBlocks');
     expect(tokenHandler).not.toContain('innerHTML');
-    expect(turnEnd).toContain('paintArticle(state.current.body, msg.text)');
+    expect(turnEnd).toContain('const current = flightFor(msg.botId)');
+    expect(turnEnd).toContain('paintArticle(current.body, msg.text)');
     expect(turnEnd).toContain('msg.text !== undefined');
     expect(chatJs).not.toMatch(/mid-turn|truncate|ellipsis|word-cap|length counter/i);
   });

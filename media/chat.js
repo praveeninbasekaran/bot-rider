@@ -11,6 +11,7 @@
     lastPhaseKey: '',
     lastTurn: '',
     current: null,
+    flights: {},
     pendingSend: '',
     pickerIndex: 0,
     pickerOpen: false,
@@ -40,7 +41,7 @@
     '</span></button>' +
     '<div id="run-board-body" class="run-board-body"></div>' +
     '</section>' +
-    '<div id="thread" class="thread" role="log" aria-live="polite"></div>' +
+    '<div id="thread" class="thread" role="log" aria-live="off"></div>' +
     '<div id="live" class="sr-only" aria-live="polite"></div>' +
     '<div id="run-board-goal-live" class="sr-only" aria-live="polite"></div>' +
     '<div class="composer-wrap">' +
@@ -295,6 +296,78 @@
     live.textContent = text;
   }
 
+  function isDebateTurn(turn) {
+    return turn === 'propose' || turn === 'critique';
+  }
+
+  function roundHeaderCopy(n, turn) {
+    if (turn === 'propose') {
+      return 'ROUND ' + n + ' · PROPOSE';
+    }
+    if (turn === 'critique') {
+      return 'ROUND ' + n + ' · CRITIQUE';
+    }
+    return '';
+  }
+
+  function shouldShowInFlightChips(handles) {
+    return (handles || []).length >= 2;
+  }
+
+  function canAnnounceArticle(lastAt, now) {
+    return !lastAt || now - lastAt >= 2000;
+  }
+
+  function flightFor(botId) {
+    if (botId && state.flights[botId]) {
+      return state.flights[botId];
+    }
+    if (state.current && (!botId || state.current.botId === botId)) {
+      return state.current;
+    }
+    return null;
+  }
+
+  function debateInFlightHandles() {
+    const handles = [];
+    const seen = {};
+    const ids = Object.keys(state.flights);
+    for (let i = 0; i < ids.length; i++) {
+      const flight = state.flights[ids[i]];
+      if (!flight || !isDebateTurn(flight.turn) || !flight.handle) {
+        continue;
+      }
+      if (seen[flight.handle]) {
+        continue;
+      }
+      seen[flight.handle] = true;
+      handles.push(flight.handle);
+    }
+    return handles;
+  }
+
+  function announceArticle(flight, text) {
+    if (!flight || !flight.live) {
+      return;
+    }
+    const now = Date.now();
+    if (!canAnnounceArticle(flight.lastAnnounce, now)) {
+      return;
+    }
+    flight.lastAnnounce = now;
+    flight.live.textContent = text;
+  }
+
+  function dropFlight(botId) {
+    if (botId && state.flights[botId]) {
+      delete state.flights[botId];
+    }
+    if (state.current && botId && state.current.botId === botId) {
+      const rest = Object.keys(state.flights);
+      state.current = rest.length ? state.flights[rest[0]] : null;
+    }
+  }
+
   function boardIsEmpty(board) {
     if (!board) {
       return true;
@@ -389,6 +462,9 @@
 
   function renderBoardBody(board) {
     runBoardBody.replaceChildren();
+    if (!board) {
+      return;
+    }
     const todos = board.todos || [];
     const decisions = board.decisions || [];
     const dissents = board.dissents || [];
@@ -477,23 +553,57 @@
     }
   }
 
+  function renderInFlightChips() {
+    const existing = document.getElementById('run-board-inflight');
+    if (existing) {
+      existing.remove();
+    }
+    const handles = debateInFlightHandles();
+    if (!shouldShowInFlightChips(handles)) {
+      return;
+    }
+    const wrap = document.createElement('div');
+    wrap.id = 'run-board-inflight';
+    wrap.className = 'run-board-inflight';
+    wrap.setAttribute('aria-label', 'In flight');
+    for (let i = 0; i < handles.length; i++) {
+      const chip = document.createElement('span');
+      chip.className = 'run-board-inflight-chip';
+      const glyph = document.createElement('span');
+      glyph.className = 'run-board-inflight-glyph';
+      glyph.setAttribute('aria-hidden', 'true');
+      glyph.textContent = '\u25cf';
+      const label = document.createElement('span');
+      label.className = 'run-board-inflight-handle';
+      label.textContent = '@' + handles[i];
+      chip.appendChild(glyph);
+      chip.appendChild(label);
+      chip.addEventListener('click', function (e) {
+        e.preventDefault();
+      });
+      wrap.appendChild(chip);
+    }
+    runBoardBody.insertBefore(wrap, runBoardBody.firstChild);
+  }
+
   function paintBoard(board) {
     state.board = board || null;
-    if (boardIsEmpty(board)) {
+    const handles = debateInFlightHandles();
+    if (boardIsEmpty(board) && !shouldShowInFlightChips(handles)) {
       hideBoardChrome();
       return;
     }
     runBoard.hidden = false;
     const collapsed = !!state.boardCollapsed;
     runBoard.classList.toggle('is-collapsed', collapsed);
-    const todos = board.todos || [];
+    const todos = (board && board.todos) || [];
     const counts = todoCounts(todos);
     runBoardToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     runBoardToggle.setAttribute(
       'aria-label',
       'Run, ' + counts.done + ' of ' + counts.total + ' todos, ' + (collapsed ? 'collapsed' : 'expanded'),
     );
-    const goalText = String(board.goal || '');
+    const goalText = String((board && board.goal) || '');
     runBoardSummaryGoal.textContent = goalText;
     if (counts.total === 0) {
       runBoardSummaryCount.textContent = '';
@@ -506,6 +616,7 @@
     runBoardSummary.hidden = !collapsed;
     runBoardBody.hidden = collapsed;
     renderBoardBody(board);
+    renderInFlightChips();
     if (goalText !== state.lastBoardGoal) {
       boardGoalLive.textContent = goalText;
       state.lastBoardGoal = goalText;
@@ -517,12 +628,22 @@
     el.className = 'error system';
     el.setAttribute('aria-live', 'polite');
     el.textContent = message || PACK_OVERFLOW_COPY;
-    thread.appendChild(el);
-    thread.scrollTop = thread.scrollHeight;
-    state.debateRunning = false;
-    if (state.run) {
-      state.run.debateRunning = false;
+    const host = findOverflowHost();
+    if (host) {
+      const bubble = host.querySelector('.bubble') || host;
+      bubble.appendChild(el);
+    } else {
+      thread.appendChild(el);
     }
+    thread.scrollTop = thread.scrollHeight;
+  }
+
+  function findOverflowHost() {
+    const ids = Object.keys(state.flights);
+    if (ids.length === 1 && state.flights[ids[0]] && state.flights[ids[0]].turn === 'direct') {
+      return state.flights[ids[0]].el;
+    }
+    return null;
   }
 
   function reduceMotion() {
@@ -570,6 +691,10 @@
   }
 
   function findMcpArticle(botId) {
+    const flight = flightFor(botId);
+    if (flight && flight.el) {
+      return flight.el;
+    }
     if (state.current && state.current.el && state.current.botId === botId) {
       return state.current.el;
     }
@@ -772,20 +897,37 @@
   }
 
   function markInterrupted() {
-    if (!state.current) {
+    const ids = Object.keys(state.flights);
+    if (!ids.length && !state.current) {
       return;
     }
-    const host = state.current.el || (state.current.stream && state.current.stream.closest('.msg'));
-    if (!host || host.querySelector('.interrupted')) {
-      return;
+    const seen = {};
+    function markOne(flight) {
+      if (!flight || !flight.el || seen[flight.botId]) {
+        return;
+      }
+      seen[flight.botId] = true;
+      const host = flight.el;
+      if (host.querySelector('.interrupted')) {
+        return;
+      }
+      if (flight.speak) flight.speak.style.display = 'none';
+      if (flight.think) flight.think.style.display = 'none';
+      const note = document.createElement('div');
+      note.className = 'notice interrupted';
+      note.textContent = 'Interrupted';
+      const bubble = host.querySelector('.bubble') || host;
+      bubble.appendChild(note);
     }
-    if (state.current.speak) state.current.speak.style.display = 'none';
-    if (state.current.think) state.current.think.style.display = 'none';
-    const note = document.createElement('div');
-    note.className = 'notice interrupted';
-    note.textContent = 'Interrupted';
-    const bubble = host.querySelector('.bubble') || host;
-    bubble.appendChild(note);
+    for (let i = 0; i < ids.length; i++) {
+      markOne(state.flights[ids[i]]);
+    }
+    if (state.current) {
+      markOne(state.current);
+    }
+    state.flights = {};
+    state.current = null;
+    paintBoard(state.board);
     thread.scrollTop = thread.scrollHeight;
   }
 
@@ -987,11 +1129,15 @@
       if (key === state.lastPhaseKey) {
         return;
       }
+      const prev = state.lastPhaseKey;
       state.lastPhaseKey = key;
       const rh = document.createElement('div');
       rh.className = 'round-header';
-      rh.textContent = 'ROUND ' + n + ' · ' + (turn === 'propose' ? 'PROPOSE' : 'CRITIQUE');
+      rh.textContent = roundHeaderCopy(n, turn);
       thread.appendChild(rh);
+      if (turn === 'critique' && prev) {
+        announce(rh.textContent);
+      }
     }
   }
 
@@ -1173,8 +1319,9 @@
         chips +
         '</div>' +
         (msg.inactiveNotice ? '<div class="notice">' + esc(msg.inactiveNotice) + '</div>' : '') +
-        '<div class="body article-body"><p class="article-p article-stream"></p></div></div>';
-      state.current = {
+        '<div class="body article-body"><p class="article-p article-stream"></p></div>' +
+        '<div class="article-live sr-only" aria-live="polite"></div></div>';
+      const flight = {
         botId: msg.botId,
         name: msg.name,
         handle: msg.handle,
@@ -1184,17 +1331,25 @@
         stream: el.querySelector('.article-stream'),
         think: el.querySelector('.think'),
         speak: el.querySelector('.speak'),
+        live: el.querySelector('.article-live'),
+        lastAnnounce: 0,
       };
-      announce(msg.name + ' is thinking');
+      state.flights[msg.botId] = flight;
+      state.current = flight;
+      announceArticle(flight, msg.name + ' is thinking');
       thread.appendChild(el);
       empty.hidden = true;
+      if (isDebateTurn(msg.turn)) {
+        paintBoard(state.board);
+      }
       thread.scrollTop = thread.scrollHeight;
     } else if (msg.type === 'chat/token') {
-      if (state.current && state.current.stream && (!msg.botId || msg.botId === state.current.botId)) {
-        state.current.stream.appendChild(document.createTextNode(msg.delta || ''));
-        if (state.current.think) state.current.think.style.display = 'none';
-        if (state.current.speak) state.current.speak.style.display = 'inline';
-        announce((state.current.name || 'Bot') + ' is speaking');
+      const current = flightFor(msg.botId);
+      if (current && current.stream) {
+        current.stream.appendChild(document.createTextNode(msg.delta || ''));
+        if (current.think) current.think.style.display = 'none';
+        if (current.speak) current.speak.style.display = 'inline';
+        announceArticle(current, (current.name || 'Bot') + ' is speaking');
         thread.scrollTop = thread.scrollHeight;
       }
     } else if (msg.type === 'chat/mcp-read-start' || msg.type === 'chat/mcp-read-end' || msg.type === 'chat/mcp-skip') {
@@ -1210,13 +1365,19 @@
           break;
       }
     } else if (msg.type === 'chat/turn-end') {
-      if (state.current && state.current.speak) state.current.speak.style.display = 'none';
-      if (state.current && state.current.think) state.current.think.style.display = 'none';
-      if (msg.text !== undefined && state.current && state.current.body) {
-        paintArticle(state.current.body, msg.text);
+      const current = flightFor(msg.botId);
+      if (current && current.speak) current.speak.style.display = 'none';
+      if (current && current.think) current.think.style.display = 'none';
+      if (msg.text !== undefined && current && current.body) {
+        paintArticle(current.body, msg.text);
       }
-      announce((state.current && state.current.name ? state.current.name : 'Bot') + ' finished');
-      state.current = null;
+      if (current) {
+        announceArticle(current, (current.name || 'Bot') + ' finished');
+      }
+      dropFlight(msg.botId || (current && current.botId));
+      if (isDebateTurn(msg.turn) || !msg.turn) {
+        paintBoard(state.board);
+      }
     } else if (msg.type === 'chat/split') {
       if (msg.paused) {
         markInterrupted();

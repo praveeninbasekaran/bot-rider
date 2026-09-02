@@ -337,9 +337,29 @@ describe('SI-2 controlled ingest', () => {
 });
 
 describe('SI-3 sequential orchestrator / zero chrome', () => {
-  it('does not overlap sendRequest', async () => {
+  it('debate batches may overlap sendRequest; @ / vote / implementer stay sequential', async () => {
     const { app, gw } = harness();
     await twoBots(app);
+    let seqInflight = 0;
+    let seqMax = 0;
+    const original = gw.stream.bind(gw);
+    gw.stream = async (messages, token, onText) => {
+      const instruction = messages[messages.length - 1]?.content ?? '';
+      const sequential =
+        instruction.includes('Role: vote') ||
+        instruction.includes('Emit a JSON changeset') ||
+        instruction.includes('NEED_EDIT');
+      if (sequential) {
+        seqInflight += 1;
+        seqMax = Math.max(seqMax, seqInflight);
+        try {
+          return await original(messages, token, onText);
+        } finally {
+          seqInflight -= 1;
+        }
+      }
+      return original(messages, token, onText);
+    };
     gw.script = ({ turn, instruction }) => {
       const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
       if (turn === 'consensus') {
@@ -352,10 +372,9 @@ describe('SI-3 sequential orchestrator / zero chrome', () => {
     };
     await app.send('build');
     expect(gw.requestCount).toBeGreaterThan(1);
-    expect(gw.maxInflight).toBe(1);
+    expect(gw.maxInflight).toBeGreaterThan(1);
+    expect(seqMax).toBe(1);
     const orch = src('src/app/orchestrator.ts');
-    expect(orch).not.toMatch(/Promise\.all\s*\(/);
-    expect(orch).not.toMatch(/Event Bus/);
     expect(orch).not.toMatch(/F7 parallel/);
   });
 
@@ -387,12 +406,12 @@ describe('SI-4 TokenGovernor required packets', () => {
       return result;
     };
     await app.send('build the feature');
-    expect(gw.requestCount).toBe(1);
-    expect(gw.turns).toEqual(['propose']);
+    expect(gw.requestCount).toBe(2);
+    expect(gw.turns).toEqual(['propose', 'propose']);
     const err = msgs.find((m) => m.type === 'error' && m.code === 'pack-overflow');
     expect(err && err.type === 'error' && err.message).toBe(COPY.packOverflow);
-    expect(msgs.some((m) => m.type === 'chat/turn-start' && m.round === 1 && m.turn === 'propose')).toBe(true);
-    expect(msgs.filter((m) => m.type === 'chat/turn-start')).toHaveLength(1);
+    expect(msgs.filter((m) => m.type === 'chat/turn-start' && m.round === 1 && m.turn === 'propose')).toHaveLength(2);
+    expect(msgs.some((m) => m.type === 'chat/turn-start' && m.turn === 'critique')).toBe(false);
 
     const gov = new TokenGovernor();
     const huge: IsolationPacket = packet({

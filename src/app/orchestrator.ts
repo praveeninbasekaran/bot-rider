@@ -3,7 +3,7 @@ import type { ChangeFile } from '../domain/changeset';
 import type { FormatSpec } from '../domain/deliverable';
 import type { RunStateDto, TurnKind } from '../domain/run-state';
 import { idleRunState } from '../domain/run-state';
-import type { ErrorCode, HostToUi, RunBoardDto, WorkspaceContext } from '../protocol/messages';
+import type { ErrorCode, HostToUi, PromptMessage, RunBoardDto, WorkspaceContext } from '../protocol/messages';
 import { COPY, copilotStatusMessage } from './copy';
 import { CancelSource } from './cancel';
 import type { BotRegistry } from './bot-registry';
@@ -27,6 +27,7 @@ import {
   packetToMessage,
   type IsolationPacket,
 } from './bot-session-store';
+import { HostEventBus } from './event-bus';
 import {
   OpenSpecCatalog,
   attachFileCites,
@@ -51,9 +52,11 @@ export class Orchestrator {
   private deliverableAskCount = 0;
   private deliverableAnswers: string[] = [];
   readonly sessions = new BotSessionStore();
+  readonly bus = new HostEventBus();
   readonly catalog: OpenSpecCatalog;
   private remainingSlots: { botId: string; turn: TurnKind }[] = [];
   private contextMap: ContextMapHost | undefined;
+  private debateBatchActive = false;
 
   constructor(
     private readonly registry: BotRegistry,
@@ -294,17 +297,13 @@ export class Orchestrator {
       }
       this.state.round = round;
       this.pushState();
-      for (const bot of this.freeze) {
-        const result = await this.runTurn(bot, 'propose', round, turnInstruction('propose', round, this.userText));
-        if (!isTurnOk(result)) {
-          return;
-        }
+      const proposed = await this.runDebateBatch('propose', round);
+      if (!isTurnOk(proposed)) {
+        return;
       }
-      for (const bot of this.freeze) {
-        const result = await this.runTurn(bot, 'critique', round, turnInstruction('critique', round, this.userText));
-        if (!isTurnOk(result)) {
-          return;
-        }
+      const critiqued = await this.runDebateBatch('critique', round);
+      if (!isTurnOk(critiqued)) {
+        return;
       }
       const votes = new Map<string, 'AGREE' | 'DISSENT'>();
       for (const bot of this.freeze) {
@@ -518,7 +517,99 @@ export class Orchestrator {
     round: number,
     instruction: string,
     extras?: { inactiveNotice?: string; solo?: boolean },
-  ): Promise<{ ok: true; text: string; trailer?: 'NEED_EDIT' | 'NO_EDIT'; vote?: 'AGREE' | 'DISSENT' } | 'hung' | 'cancelled' | 'error'> {
+  ): Promise<TurnResult> {
+    const prepared = await this.prepareSpeaker(bot, turn, round, instruction, extras);
+    if (prepared === 'cancelled' || prepared === 'error') {
+      return prepared;
+    }
+    if (prepared === 'overflow') {
+      this.state.debateRunning = false;
+      this.state.phase = 'error';
+      this.pushState();
+      return 'error';
+    }
+    const result = await this.streamPrepared(prepared);
+    if (result === 'hung' && !this.debateBatchActive) {
+      await this.waitUntilCancelled();
+    }
+    return result;
+  }
+
+  private speakersFor(turn: TurnKind): BotRecord[] {
+    return this.freeze.filter((bot) => this.remainingSlots.some((slot) => slot.botId === bot.id && slot.turn === turn));
+  }
+
+  private async runDebateBatch(turn: 'propose' | 'critique', round: number): Promise<TurnResult> {
+    if (this.cancelled()) {
+      return 'cancelled';
+    }
+    const speakers = this.speakersFor(turn);
+    const instruction = turnInstruction(turn, round, this.userText);
+    this.debateBatchActive = true;
+    this.state.turn = turn;
+    this.state.round = round;
+    this.state.debateRunning = true;
+    this.pushState();
+    this.lspSlice = withSelectionFallback(await this.lsp.capture(this.workspace), this.workspace);
+
+    const prepared: PreparedSpeaker[] = [];
+    let overflowed = 0;
+    for (const bot of speakers) {
+      const next = await this.prepareSpeaker(bot, turn, round, instruction);
+      if (next === 'cancelled') {
+        this.debateBatchActive = false;
+        this.ingestSettledBatch();
+        return 'cancelled';
+      }
+      if (next === 'error') {
+        this.debateBatchActive = false;
+        this.ingestSettledBatch();
+        return 'error';
+      }
+      if (next === 'overflow') {
+        overflowed += 1;
+        this.completeSlot(bot.id, turn);
+        continue;
+      }
+      prepared.push(next);
+    }
+
+    if (prepared.length === 0) {
+      this.ingestSettledBatch();
+      this.debateBatchActive = false;
+      if (overflowed > 0) {
+        this.state.debateRunning = false;
+        this.state.phase = 'error';
+        this.pushState();
+        return 'error';
+      }
+      return { ok: true, text: '' };
+    }
+
+    const results = await Promise.all(prepared.map((item) => this.streamPrepared(item)));
+    this.ingestSettledBatch();
+    this.debateBatchActive = false;
+
+    if (results.some((item) => item === 'cancelled') || this.cancelled()) {
+      return 'cancelled';
+    }
+    if (results.some((item) => item === 'hung')) {
+      await this.waitUntilCancelled();
+      return 'hung';
+    }
+    if (results.some((item) => item === 'error')) {
+      return 'error';
+    }
+    return { ok: true, text: '' };
+  }
+
+  private async prepareSpeaker(
+    bot: BotRecord,
+    turn: TurnKind,
+    round: number,
+    instruction: string,
+    extras?: { inactiveNotice?: string; solo?: boolean },
+  ): Promise<PreparedSpeaker | 'overflow' | 'cancelled' | 'error'> {
     if (this.cancelled()) {
       return 'cancelled';
     }
@@ -534,7 +625,7 @@ export class Orchestrator {
     }
 
     const kind = packKindFor(turn);
-    if (kind === 'debate') {
+    if (kind === 'debate' && !this.debateBatchActive) {
       this.lspSlice = withSelectionFallback(await this.lsp.capture(this.workspace), this.workspace);
     }
 
@@ -553,11 +644,34 @@ export class Orchestrator {
       isolationPackets: inbox,
     });
     if (!packed.ok) {
+      for (const packet of inbox) {
+        this.sessions.enqueue(bot.id, packet);
+      }
       this.emit({ type: 'error', code: 'pack-overflow', message: COPY.packOverflow });
-      this.state.debateRunning = false;
-      this.state.phase = 'error';
-      this.pushState();
-      return 'error';
+      if (!this.debateBatchActive) {
+        this.state.debateRunning = false;
+        this.state.phase = 'error';
+        this.pushState();
+      }
+      return 'overflow';
+    }
+
+    return {
+      bot,
+      turn,
+      round,
+      instruction,
+      inbox,
+      packed,
+      turnModelId: perBot ? turnModelId : undefined,
+      extras,
+    };
+  }
+
+  private async streamPrepared(prepared: PreparedSpeaker): Promise<TurnResult> {
+    const { bot, turn, round, instruction, inbox, packed, turnModelId, extras } = prepared;
+    if (this.cancelled()) {
+      return 'cancelled';
     }
 
     this.state.turn = turn;
@@ -591,7 +705,7 @@ export class Orchestrator {
           tools: this.toolsFor(turn),
           botId: bot.id,
           handle: bot.handle,
-          modelId: perBot ? turnModelId : undefined,
+          modelId: turnModelId,
         },
       );
       if (streamed === 'cancelled' || this.cancelled()) {
@@ -605,7 +719,6 @@ export class Orchestrator {
         this.emit({ type: 'copilot/status', status: 'hung', message: COPY.hung });
         this.state.debateRunning = true;
         this.pushState();
-        await this.waitUntilCancelled();
         return 'hung';
       }
       const status = mapCopilotError(err);
@@ -613,9 +726,11 @@ export class Orchestrator {
       if (!isAuthQuotaHung(status)) {
         this.emit({ type: 'error', code: 'copilot', message: err instanceof Error ? err.message : 'Copilot request failed.' });
       }
-      this.state.debateRunning = false;
-      this.state.phase = 'error';
-      this.pushState();
+      if (!this.debateBatchActive) {
+        this.state.debateRunning = false;
+        this.state.phase = 'error';
+        this.pushState();
+      }
       return 'error';
     }
 
@@ -679,6 +794,16 @@ export class Orchestrator {
       { role: 'assistant', content: turn === 'implement' ? full : visible },
     ]);
     return { ok: true, text: turn === 'implement' ? full : visible, trailer, vote };
+  }
+
+  private ingestSettledBatch(): void {
+    for (const botId of this.downstreamIds()) {
+      const packets = this.sessions.takeInbox(botId);
+      if (packets.length === 0) {
+        continue;
+      }
+      this.sessions.append(botId, packets.map(packetToMessage));
+    }
   }
 
   private toolsFor(turn: TurnKind): 'mcp-debate' | 'none' {
@@ -842,7 +967,9 @@ export class Orchestrator {
 
   private clearSessions(): void {
     this.sessions.clear();
+    this.bus.clear();
     this.remainingSlots = [];
+    this.debateBatchActive = false;
     this.contextMap?.clearRun();
   }
 
@@ -889,6 +1016,7 @@ export class Orchestrator {
     if (nodeIds && nodeIds.length > 0) {
       next = { ...next, nodeIds };
     }
+    this.bus.publish(next);
     this.sessions.recordPublished(next);
     for (const botId of this.downstreamIds()) {
       this.sessions.enqueue(botId, next);
@@ -913,6 +1041,17 @@ type TurnResult =
   | 'hung'
   | 'cancelled'
   | 'error';
+
+type PreparedSpeaker = {
+  bot: BotRecord;
+  turn: TurnKind;
+  round: number;
+  instruction: string;
+  inbox: IsolationPacket[];
+  packed: { ok: true; messages: PromptMessage[]; tokens: number };
+  turnModelId?: string | null;
+  extras?: { inactiveNotice?: string; solo?: boolean };
+};
 
 function isTurnOk(result: TurnResult): result is { ok: true; text: string; trailer?: 'NEED_EDIT' | 'NO_EDIT'; vote?: 'AGREE' | 'DISSENT' } {
   return typeof result === 'object' && result.ok === true;

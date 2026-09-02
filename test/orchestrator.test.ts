@@ -164,27 +164,25 @@ describe('Orchestrator negative', () => {
   it('drops debate file bodies and never implements on Stop', async () => {
     const { app, gw, msgs } = harness();
     await twoBots(app);
-    let started = 0;
     gw.script = ({ turn }) => {
       if (turn === 'propose') {
-        started += 1;
-        if (started === 1) {
-          return 'see\n```ts\nSECRET_BODY\n```\n';
-        }
+        return 'see\n```ts\nSECRET_BODY\n```\n';
       }
       return 'AGREE';
     };
-    const original = gw.stream.bind(gw);
-    gw.stream = async (messages, token, onText) => {
-      if (gw.turns.length >= 1) {
-        app.stop();
-        return 'cancelled';
-      }
-      return original(messages, token, onText);
-    };
-    await app.send('go');
+    let release!: () => void;
+    gw.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const done = app.send('go');
+    await vi.waitFor(() => {
+      expect(gw.requestCount).toBeGreaterThan(1);
+    });
+    app.stop();
+    release();
+    await done;
     const ended = msgs.find((m) => m.type === 'chat/turn-end');
-    expect(ended && ended.type === 'chat/turn-end' && ended.text.includes('SECRET_BODY')).toBe(false);
+    expect(!!ended && ended.type === 'chat/turn-end' && ended.text.includes('SECRET_BODY')).toBe(false);
     expect(gw.turns.includes('implement')).toBe(false);
     expect(app.orchestrator.getRunState().splitOpen).toBe(true);
     expect(app.orchestrator.getRunState().phase).toBe('split');
@@ -287,10 +285,10 @@ describe('Orchestrator negative', () => {
     await Promise.resolve();
     expect(msgs.some((m) => m.type === 'copilot/status' && m.status === 'hung')).toBe(true);
     expect(app.orchestrator.getRunState().debateRunning).toBe(true);
-    expect(gw.requestCount).toBe(1);
+    expect(gw.requestCount).toBe(2);
     app.stop();
     await done;
-    expect(gw.requestCount).toBe(1);
+    expect(gw.requestCount).toBe(2);
     expect(gw.turns.includes('implement')).toBe(false);
     expect(app.orchestrator.getRunState().splitOpen).toBe(true);
     vi.useRealTimers();
@@ -727,19 +725,16 @@ describe('Orchestrator TokenGovernor packs and RunBoard', () => {
   it('interrupt Split writes dissents from Split-card positions', async () => {
     const { app, gw, msgs } = harness();
     await twoBots(app);
-    let started = 0;
     gw.script = ({ turn }) => {
       if (turn === 'propose') {
-        started += 1;
-        if (started === 1) {
-          return 'Ship the cache layer now.';
-        }
+        return 'Ship the cache layer now.';
       }
       return 'talk';
     };
     const original = gw.stream.bind(gw);
     gw.stream = async (messages, token, onText) => {
-      if (gw.turns.length >= 1) {
+      const instruction = messages[messages.length - 1]?.content ?? '';
+      if (instruction.includes('Role: critique')) {
         app.stop();
         return 'cancelled';
       }
