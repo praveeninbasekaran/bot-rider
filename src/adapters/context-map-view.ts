@@ -140,7 +140,7 @@ export function vscodeContextMapActions(
 
 /**
  * Context Map webview host. Posts protocol so §25 chrome can attach.
- * Does not take retainContextWhenHidden. Replays last payloads when visible.
+ * Hidden state is not retained; last payloads are replayed when visible.
  */
 export class ContextMapViewProvider implements vscode.WebviewViewProvider {
   static readonly viewId = 'botrider.contextMap';

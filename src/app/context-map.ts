@@ -291,17 +291,9 @@ export class ContextMapHost {
     const nodes = this.lastWorkspace.nodes.map((n) => ({ ...n }));
     const edges = this.lastWorkspace.edges.map((e) => ({ ...e }));
 
-    if (!existing || existing.kind === 'folder') {
+    if (existing?.kind === 'folder') {
       const children = await this.safeChildren(uri);
-      const parentId = existing?.id ?? folderNodeId(uri);
-      if (!existing) {
-        upsertNode(nodes, {
-          id: parentId,
-          kind: 'folder',
-          label: uri.split('/').filter(Boolean).pop() ?? uri,
-          uri,
-        });
-      }
+      const parentId = existing.id;
       for (const child of children) {
         const node: ContextMapNode = child.directory
           ? {
@@ -323,9 +315,16 @@ export class ContextMapHost {
       }
     } else {
       const file =
-        existing.kind === 'file'
+        existing?.kind === 'file'
           ? existing
-          : nodes.find((n) => n.kind === 'file' && n.uri === uri) ?? existing;
+          : nodes.find((n) => n.kind === 'file' && n.uri === uri) ??
+            {
+              id: fileNodeId(uri),
+              kind: 'file' as const,
+              label: uri.split('/').filter(Boolean).pop() ?? uri,
+              uri,
+            };
+      upsertNode(nodes, file);
       const symbols = await this.safeSymbols(uri);
       addSymbols(file, symbols, nodes, edges);
     }
