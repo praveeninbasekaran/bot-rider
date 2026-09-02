@@ -103,6 +103,8 @@ type BotSession = {
 
 Do **not** bump `BotStoreFile.version`. Sessions are not BR-3. Not on `BotRecord`. Not `globalState`. Clear with ThreadStore / RunBoard on reload / run end.
 
+Optional CM-4 extra: published SI packets MAY carry additive `nodeIds?: string[]` when a packet maps to a Context Map code node. Omit unknown/stale ids. Do **not** replace SI-2 verbatim bodies. Do **not** block the packet or the turn. See [architecture-context-map.md](./architecture-context-map.md).
+
 ---
 
 ## 3. Publish rules (SI-2)
