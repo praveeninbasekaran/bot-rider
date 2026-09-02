@@ -145,6 +145,7 @@ export class TokenGovernor {
   async pack(args: PackRequest): Promise<PackResult> {
     const persona: PromptMessage = { role: 'user', content: personaBlock(args.bot) };
     const session = [...(args.sessionMessages ?? [])];
+    // Required published packets include OS-4 spec bodies (not silent extras). Never drop them.
     const packets = (args.isolationPackets ?? []).map(packetToMessage);
     const board: PromptMessage = { role: 'user', content: boardPackText(args.board) };
     const tabs: PromptMessage = { role: 'user', content: tabPathsBlock(args.workspace) };

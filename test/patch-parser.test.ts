@@ -30,6 +30,34 @@ describe('PatchParser', () => {
     }
   });
 
+  it('keeps catalog specIds and exact content tokens; drops unknown without failing parse', () => {
+    const catalog = [
+      { id: 'EX-1', body: 'export spec' },
+      { id: 'BR-6', body: 'gated edit' },
+    ];
+    const text = [
+      '```json',
+      JSON.stringify({
+        files: [
+          {
+            path: 'src/a.ts',
+            op: 'create',
+            content: 'cite BR-6 here, not BR-60',
+            specIds: ['EX-1', 'NOPE', 'BR-6', 'EX-1'],
+          },
+          { path: 'src/gone.ts', op: 'delete', specIds: ['BR-6', 'F3-1'] },
+        ],
+      }),
+      '```',
+    ].join('\n');
+    const result = parser.parseImplementer(text, root, catalog);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.files[0]?.specIds).toEqual(['EX-1', 'BR-6']);
+      expect(result.files[1]?.specIds).toEqual(['BR-6']);
+    }
+  });
+
   it('drops file bodies on debate text', () => {
     const raw = 'proposal:\n```ts\nfunction secret() { return 1 }\n```\ndone';
     expect(dropFileBodies(raw)).toBe('proposal:\n```ts\n```\ndone');

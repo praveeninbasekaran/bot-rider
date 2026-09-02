@@ -8,6 +8,8 @@ export interface ChangeFile {
   content?: string;
   binary?: Uint8Array;
   kind?: ChangePreviewKind;
+  /** Surviving catalog ids (OS-2). Omit when empty. */
+  specIds?: string[];
 }
 
 export interface Changeset {
@@ -42,4 +44,6 @@ export interface ProposedFileDto {
   path: string;
   op: FileOp;
   kind?: ChangePreviewKind;
+  /** Catalog ids as stored, surviving OS-2. Omit when empty. */
+  specIds?: string[];
 }

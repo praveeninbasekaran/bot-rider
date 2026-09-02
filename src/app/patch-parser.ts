@@ -1,5 +1,6 @@
 import type { ChangeFile, FileOp } from '../domain/changeset';
 import * as nodePath from 'node:path';
+import { attachFileCites, type OpenSpecEntry } from './openspec-catalog';
 
 export type ParseResult =
   | { ok: true; files: ChangeFile[] }
@@ -66,8 +67,15 @@ export function validateRelativePath(
   return { ok: true, relative: relPosix };
 }
 
+function readJsonSpecIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
 export class PatchParser {
-  parseImplementer(text: string, workspaceRoot: string): ParseResult {
+  parseImplementer(text: string, workspaceRoot: string, catalog: readonly OpenSpecEntry[] = []): ParseResult {
     const json = extractChangesetJson(text);
     if (!json) {
       return { ok: false, code: 'parse-failed', message: 'No JSON changeset with files[] found.' };
@@ -81,7 +89,7 @@ export class PatchParser {
       if (!item || typeof item !== 'object') {
         return { ok: false, code: 'validate-failed', message: 'Each file entry must be an object.' };
       }
-      const rec = item as { path?: unknown; op?: unknown; content?: unknown };
+      const rec = item as { path?: unknown; op?: unknown; content?: unknown; specIds?: unknown };
       if (typeof rec.path !== 'string') {
         return { ok: false, code: 'validate-failed', message: 'Each file needs a path.' };
       }
@@ -93,14 +101,20 @@ export class PatchParser {
       if (!pathCheck.ok) {
         return { ok: false, code: 'validate-failed', message: `Rejected path ${rec.path}: ${pathCheck.reason}.` };
       }
+      const jsonIds = readJsonSpecIds(rec.specIds);
       if (op === 'delete') {
-        files.push({ path: pathCheck.relative, op });
+        files.push(attachFileCites({ path: pathCheck.relative, op, specIds: jsonIds }, catalog));
         continue;
       }
       if (typeof rec.content !== 'string') {
         return { ok: false, code: 'validate-failed', message: `${op} requires string content.` };
       }
-      files.push({ path: pathCheck.relative, op, content: rec.content });
+      files.push(
+        attachFileCites(
+          { path: pathCheck.relative, op, content: rec.content, specIds: jsonIds },
+          catalog,
+        ),
+      );
     }
     return { ok: true, files };
   }

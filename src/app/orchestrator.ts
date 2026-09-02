@@ -27,6 +27,12 @@ import {
   packetToMessage,
   type IsolationPacket,
 } from './bot-session-store';
+import {
+  OpenSpecCatalog,
+  attachFileCites,
+  citedIdsFromFiles,
+  matchSpecBodies,
+} from './openspec-catalog';
 import { detectFormat } from './deliverable-detect';
 import { DeliverableBuilder, templateForBot } from './deliverable-builder';
 import { curateFacts } from './deliverable-facts';
@@ -44,6 +50,7 @@ export class Orchestrator {
   private deliverableAskCount = 0;
   private deliverableAnswers: string[] = [];
   readonly sessions = new BotSessionStore();
+  readonly catalog: OpenSpecCatalog;
   private remainingSlots: { botId: string; turn: TurnKind }[] = [];
 
   constructor(
@@ -59,7 +66,9 @@ export class Orchestrator {
     readonly board: RunBoardStore = new RunBoardStore(),
     readonly lsp: LspSlicePort = new EmptyLspSlicePort(),
     private readonly files: FileSystemPort = { exists: async () => false, readText: async () => undefined },
-  ) {}
+  ) {
+    this.catalog = new OpenSpecCatalog(files);
+  }
 
   getRunState(): RunStateDto {
     return { ...this.state };
@@ -152,6 +161,7 @@ export class Orchestrator {
     }
 
     await this.mcp.ensureStartedFromSend();
+    await this.catalog.load();
 
     this.userText = text;
     this.history = [];
@@ -381,7 +391,7 @@ export class Orchestrator {
       this.finishDeliverable(bot, result.text, detected, root);
       return;
     }
-    const parsed = this.parser.parseImplementer(result.text, root);
+    const parsed = this.parser.parseImplementer(result.text, root, this.catalog.snapshot());
     if (!parsed.ok) {
       this.fail(parsed.code, parsed.code === 'parse-failed' ? COPY.parseFailed : COPY.validateFailed);
       return;
@@ -403,7 +413,8 @@ export class Orchestrator {
   }
 
   private enterPendingReview(files: ChangeFile[]): void {
-    this.changesets.setPending(files);
+    const catalog = this.catalog.snapshot();
+    this.changesets.setPending(files.map((file) => attachFileCites(file, catalog)));
     this.syncFiles(files.map((f) => f.path));
     this.emitBoard();
     this.state = {
@@ -858,8 +869,14 @@ export class Orchestrator {
   }
 
   private publishPacket(packet: IsolationPacket): void {
+    const specs = matchSpecBodies(
+      this.catalog.snapshot(),
+      citedIdsFromFiles(this.changesets.files),
+      this.userText,
+    );
+    const next: IsolationPacket = specs.length > 0 ? { ...packet, specs } : packet;
     for (const botId of this.downstreamIds()) {
-      this.sessions.enqueue(botId, packet);
+      this.sessions.enqueue(botId, next);
     }
   }
 }
