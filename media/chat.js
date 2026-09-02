@@ -20,6 +20,10 @@
     boardCollapsed: false,
     todosExpanded: false,
     lastBoardGoal: '',
+    runType: 'debate',
+    workBatch: false,
+    completedBots: {},
+    announced: {},
   };
 
   if (document.body.classList.contains('vscode-high-contrast')) {
@@ -46,7 +50,13 @@
     '<div id="run-board-goal-live" class="sr-only" aria-live="polite"></div>' +
     '<div class="composer-wrap">' +
     '<div id="picker" class="picker" role="listbox"></div>' +
-    '<div class="composer"><textarea id="input" rows="2" placeholder="Message the swarm. Use @handle to lock a bot."></textarea><button id="send" class="send-btn" type="button">Send</button></div>' +
+    '<div class="composer"><textarea id="input" rows="2" placeholder="Message the swarm. Use @handle to lock a bot."></textarea>' +
+    '<div id="run-type" class="run-type" role="radiogroup" aria-label="Debate">' +
+    '<button type="button" id="run-type-work" class="run-type-btn" role="radio" aria-checked="false" data-run-type="work">Work</button>' +
+    '<button type="button" id="run-type-debate" class="run-type-btn is-selected" role="radio" aria-checked="true" data-run-type="debate">Debate</button>' +
+    '</div>' +
+    '<button id="send" class="send-btn" type="button">Send</button>' +
+    '<button id="work-stop" class="send-btn work-stop" type="button" hidden>Stop</button></div>' +
     '<div id="helper" class="helper"></div>' +
     '</div>';
   document.body.appendChild(root);
@@ -59,6 +69,10 @@
   const live = document.getElementById('live');
   const input = document.getElementById('input');
   const send = document.getElementById('send');
+  const workStop = document.getElementById('work-stop');
+  const runTypeGroup = document.getElementById('run-type');
+  const runTypeWork = document.getElementById('run-type-work');
+  const runTypeDebate = document.getElementById('run-type-debate');
   const picker = document.getElementById('picker');
   const helper = document.getElementById('helper');
   const recheck = document.getElementById('recheck');
@@ -88,6 +102,15 @@
     paintBoard(state.board);
   });
   send.addEventListener('click', onSendOrStop);
+  workStop.addEventListener('click', function () {
+    vscode.postMessage({ type: 'chat/stop' });
+  });
+  runTypeWork.addEventListener('click', function () {
+    setRunType('work');
+  });
+  runTypeDebate.addEventListener('click', function () {
+    setRunType('debate');
+  });
   input.addEventListener('keydown', onKey);
   input.addEventListener('input', function () {
     renderPicker();
@@ -101,8 +124,27 @@
     }
   }, 3000);
 
+  function selectedRunType() {
+    return state.runType === 'work' ? 'work' : 'debate';
+  }
+
+  function setRunType(next) {
+    state.runType = next === 'work' ? 'work' : 'debate';
+    paintRunType();
+  }
+
+  function paintRunType() {
+    const selected = selectedRunType();
+    const workOn = selected === 'work';
+    runTypeGroup.setAttribute('aria-label', workOn ? 'Work' : 'Debate');
+    runTypeWork.classList.toggle('is-selected', workOn);
+    runTypeDebate.classList.toggle('is-selected', !workOn);
+    runTypeWork.setAttribute('aria-checked', workOn ? 'true' : 'false');
+    runTypeDebate.setAttribute('aria-checked', workOn ? 'false' : 'true');
+  }
+
   function onSendOrStop() {
-    if (state.debateRunning) {
+    if (state.debateRunning && !state.workBatch) {
       vscode.postMessage({ type: 'chat/stop' });
       return;
     }
@@ -150,11 +192,18 @@
 
   function sendNow() {
     const text = input.value.trim();
-    if (!text || state.splitOpen || state.debateRunning || state.copilotStatus !== 'ready') {
+    if (!text || state.splitOpen || state.debateRunning && !state.workBatch || state.copilotStatus !== 'ready') {
       return;
     }
     state.pendingSend = input.value;
-    vscode.postMessage({ type: 'chat/send', text: input.value });
+    const runType = selectedRunType();
+    vscode.postMessage({ type: 'chat/send', text: input.value, runType: runType });
+    if (state.workBatch) {
+      appendUser(input.value);
+      input.value = '';
+      state.pendingSend = '';
+      closePicker();
+    }
     renderPicker();
   }
 
@@ -296,8 +345,21 @@
     live.textContent = text;
   }
 
+  function announceOnce(text) {
+    const key = String(text || '');
+    if (!key || state.announced[key]) {
+      return;
+    }
+    state.announced[key] = true;
+    announce(key);
+  }
+
   function isDebateTurn(turn) {
     return turn === 'propose' || turn === 'critique';
+  }
+
+  function isWorkTurn(turn) {
+    return turn === 'spec' || turn === 'dispatch' || turn === 'work';
   }
 
   function roundHeaderCopy(n, turn) {
@@ -344,6 +406,86 @@
       handles.push(flight.handle);
     }
     return handles;
+  }
+
+  function workInFlightHandles() {
+    const handles = [];
+    const seen = {};
+    const ids = Object.keys(state.flights);
+    for (let i = 0; i < ids.length; i++) {
+      const flight = state.flights[ids[i]];
+      if (!flight || !isWorkTurn(flight.turn) || !flight.handle) {
+        continue;
+      }
+      if (seen[flight.handle]) {
+        continue;
+      }
+      seen[flight.handle] = true;
+      handles.push(flight.handle);
+    }
+    return handles;
+  }
+
+  function inflightBotIds() {
+    const ids = {};
+    const keys = Object.keys(state.flights);
+    for (let i = 0; i < keys.length; i++) {
+      const flight = state.flights[keys[i]];
+      if (flight && flight.botId) {
+        ids[flight.botId] = true;
+      }
+    }
+    return ids;
+  }
+
+  function handleForBotId(botId) {
+    const bots = state.bots || [];
+    for (let i = 0; i < bots.length; i++) {
+      if (bots[i].id === botId) {
+        return bots[i].handle;
+      }
+    }
+    return '';
+  }
+
+  function waitingHandles() {
+    if (!state.run || state.run.runType !== 'work' || !state.debateRunning) {
+      return [];
+    }
+    const inflight = inflightBotIds();
+    const frozen = state.run.frozenBotIds || [];
+    const handles = [];
+    const seen = {};
+    for (let i = 0; i < frozen.length; i++) {
+      const id = frozen[i];
+      if (!id || inflight[id] || state.completedBots[id]) {
+        continue;
+      }
+      const handle = handleForBotId(id);
+      if (!handle || seen[handle]) {
+        continue;
+      }
+      seen[handle] = true;
+      handles.push(handle);
+    }
+    return handles;
+  }
+
+  function inflightHandlesForBoard() {
+    const debate = debateInFlightHandles();
+    if (shouldShowInFlightChips(debate)) {
+      return debate;
+    }
+    const work = workInFlightHandles();
+    const waiting = waitingHandles();
+    if (work.length >= 2 || (work.length >= 1 && waiting.length >= 1)) {
+      return work;
+    }
+    return [];
+  }
+
+  function shouldShowWorkChips() {
+    return inflightHandlesForBoard().length > 0 || waitingHandles().length > 0;
   }
 
   function announceArticle(flight, text) {
@@ -558,8 +700,8 @@
     if (existing) {
       existing.remove();
     }
-    const handles = debateInFlightHandles();
-    if (!shouldShowInFlightChips(handles)) {
+    const handles = inflightHandlesForBoard();
+    if (!handles.length) {
       return;
     }
     const wrap = document.createElement('div');
@@ -586,10 +728,50 @@
     runBoardBody.insertBefore(wrap, runBoardBody.firstChild);
   }
 
+  function renderWaitingChips() {
+    const existing = document.getElementById('run-board-waiting');
+    if (existing) {
+      existing.remove();
+    }
+    const handles = waitingHandles();
+    if (!handles.length) {
+      return;
+    }
+    const wrap = document.createElement('div');
+    wrap.id = 'run-board-waiting';
+    wrap.className = 'run-board-waiting';
+    wrap.setAttribute('aria-label', 'Waiting');
+    for (let i = 0; i < handles.length; i++) {
+      const chip = document.createElement('span');
+      chip.className = 'run-board-waiting-chip';
+      const glyph = document.createElement('span');
+      glyph.className = 'run-board-waiting-glyph';
+      glyph.setAttribute('aria-hidden', 'true');
+      glyph.textContent = '\u25cb';
+      const label = document.createElement('span');
+      label.className = 'run-board-waiting-handle';
+      label.textContent = '@' + handles[i];
+      chip.appendChild(glyph);
+      chip.appendChild(label);
+      chip.addEventListener('click', function (e) {
+        e.preventDefault();
+      });
+      wrap.appendChild(chip);
+    }
+    const inflight = document.getElementById('run-board-inflight');
+    if (inflight && inflight.nextSibling) {
+      runBoardBody.insertBefore(wrap, inflight.nextSibling);
+    } else if (inflight) {
+      runBoardBody.appendChild(wrap);
+    } else {
+      runBoardBody.insertBefore(wrap, runBoardBody.firstChild);
+    }
+  }
+
   function paintBoard(board) {
     state.board = board || null;
     const handles = debateInFlightHandles();
-    if (boardIsEmpty(board) && !shouldShowInFlightChips(handles)) {
+    if (boardIsEmpty(board) && !shouldShowInFlightChips(handles) && !shouldShowWorkChips()) {
       hideBoardChrome();
       return;
     }
@@ -617,6 +799,7 @@
     runBoardBody.hidden = collapsed;
     renderBoardBody(board);
     renderInFlightChips();
+    renderWaitingChips();
     if (goalText !== state.lastBoardGoal) {
       boardGoalLive.textContent = goalText;
       state.lastBoardGoal = goalText;
@@ -892,6 +1075,10 @@
     const el = document.createElement('div');
     el.className = 'notice';
     el.textContent = text;
+    if (/ · collision$/.test(String(text || ''))) {
+      el.setAttribute('aria-live', 'polite');
+      announceOnce(text);
+    }
     thread.appendChild(el);
     thread.scrollTop = thread.scrollHeight;
   }
@@ -947,7 +1134,7 @@
   function renderPicker() {
     const match = input.value.match(/(?:^|\s)@([A-Za-z0-9_-]*)$/);
     picker.replaceChildren();
-    if (!match || state.splitOpen || state.debateRunning) {
+    if (!match || state.splitOpen || state.debateRunning && !state.workBatch) {
       closePicker();
       return;
     }
@@ -1036,6 +1223,16 @@
         ? 'Activate a bot, or @mention one.'
         : 'Message the swarm. Use @handle to lock a bot.';
       helper.textContent = '';
+    }
+    if (state.workBatch && ready && !state.splitOpen) {
+      input.disabled = false;
+      send.disabled = false;
+      send.textContent = 'Send';
+      input.placeholder = 'Message the swarm. Use @handle to lock a bot.';
+      helper.textContent = '';
+      workStop.hidden = false;
+    } else {
+      workStop.hidden = true;
     }
   }
 
@@ -1280,9 +1477,14 @@
       }
       renderCopilot();
     } else if (msg.type === 'run/state') {
+      const wasRunning = state.debateRunning;
       state.run = msg.state || state.run;
       state.splitOpen = !!(state.run && state.run.splitOpen);
       state.debateRunning = !!(state.run && state.run.debateRunning);
+      state.workBatch = !!(state.run && state.run.workBatch);
+      if (!state.debateRunning || (!wasRunning && state.debateRunning)) {
+        state.completedBots = {};
+      }
       if (state.debateRunning && state.pendingSend) {
         appendUser(state.pendingSend);
         input.value = '';
@@ -1294,6 +1496,7 @@
         hideSplit();
       }
       renderEmpty();
+      paintBoard(state.board);
     } else if (msg.type === 'chat/turn-start') {
       state.lastTurn = msg.turn;
       if (msg.turn === 'implement' || msg.turn === 'consensus') {
@@ -1339,7 +1542,7 @@
       announceArticle(flight, msg.name + ' is thinking');
       thread.appendChild(el);
       empty.hidden = true;
-      if (isDebateTurn(msg.turn)) {
+      if (isDebateTurn(msg.turn) || isWorkTurn(msg.turn)) {
         paintBoard(state.board);
       }
       thread.scrollTop = thread.scrollHeight;
@@ -1374,8 +1577,12 @@
       if (current) {
         announceArticle(current, (current.name || 'Bot') + ' finished');
       }
-      dropFlight(msg.botId || (current && current.botId));
-      if (isDebateTurn(msg.turn) || !msg.turn) {
+      const endedId = msg.botId || (current && current.botId);
+      if (endedId && state.run && state.run.runType === 'work') {
+        state.completedBots[endedId] = true;
+      }
+      dropFlight(endedId);
+      if (isDebateTurn(msg.turn) || isWorkTurn(msg.turn) || !msg.turn) {
         paintBoard(state.board);
       }
     } else if (msg.type === 'chat/split') {
@@ -1399,13 +1606,27 @@
     } else if (msg.type === 'error') {
       const el = document.createElement('div');
       el.className = 'error';
-      el.setAttribute('role', 'alert');
-      if (msg.code === 'unknown-handle') {
-        el.textContent = unknownCopy(msg.message);
-      } else if (msg.code === 'zero-active') {
-        el.textContent = 'Activate a bot or @mention one.';
-      } else {
+      const workCopy =
+        msg.code === 'work-gate' ||
+        msg.code === 'work-running' ||
+        msg.message === 'Work needs one Dispatcher and one Spec.' ||
+        msg.message === 'Work batch still running.';
+      if (workCopy) {
+        el.setAttribute('aria-live', 'polite');
         el.textContent = msg.message || msg.code;
+        if (msg.code === 'work-gate' || msg.code === 'work-running') {
+          state.pendingSend = '';
+        }
+        announceOnce(el.textContent);
+      } else {
+        el.setAttribute('role', 'alert');
+        if (msg.code === 'unknown-handle') {
+          el.textContent = unknownCopy(msg.message);
+        } else if (msg.code === 'zero-active') {
+          el.textContent = 'Activate a bot or @mention one.';
+        } else {
+          el.textContent = msg.message || msg.code;
+        }
       }
       thread.appendChild(el);
       thread.scrollTop = thread.scrollHeight;
@@ -1426,6 +1647,7 @@
     }
   });
 
+  paintRunType();
   renderCopilot();
   renderExpand();
   lockComposer();

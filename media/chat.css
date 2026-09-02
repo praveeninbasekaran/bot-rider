@@ -720,9 +720,75 @@ body.vscode-reduce-motion .mcp-read-spinner {
 
 .composer {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: 6px;
   align-items: end;
+}
+
+.run-type {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.run-type-btn {
+  font-family: var(--vscode-font-family);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 4px 8px;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+}
+
+.run-type-btn.is-selected,
+.run-type-btn[aria-checked='true'] {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.run-type-btn:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.work-stop[hidden] {
+  display: none !important;
+}
+
+.run-board-waiting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.run-board-waiting-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--vscode-descriptionForeground);
+  cursor: default;
+  animation: none;
+}
+
+.run-board-waiting-glyph {
+  color: var(--vscode-descriptionForeground);
+  line-height: 1;
+  animation: none;
+}
+
+.run-board-waiting-handle {
+  min-width: 0;
 }
 
 textarea {

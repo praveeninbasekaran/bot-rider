@@ -61,6 +61,8 @@
     '<ul id="attach-skips" class="attach-skips"></ul>' +
     '</div>' +
     '<label class="row"><input id="active" type="checkbox" checked /> Active in swarm</label>' +
+    '<label class="row"><input id="dispatcher" type="checkbox" /> Dispatcher</label>' +
+    '<label class="row"><input id="spec" type="checkbox" /> Spec</label>' +
     '<div id="err" class="error" role="alert"></div>' +
     '<div class="footer"><button type="button" class="link grow" id="delete-btn" hidden>Delete</button><button type="button" class="secondary" id="cancel">Cancel</button><button type="button" class="secondary" id="export-btn">Export</button><button type="submit">Save</button></div>' +
     '<div id="export-dirty-modal" class="export-dirty-modal" hidden><div class="export-dirty-card" role="dialog" aria-modal="true" aria-labelledby="export-dirty-title"><p id="export-dirty-title">Save before export?</p><div class="export-dirty-actions"><button type="button" id="export-dirty-save">Save</button><button type="button" class="secondary" id="export-dirty-without">Export without saving</button><button type="button" class="secondary" id="export-dirty-cancel">Cancel</button></div></div></div>';
@@ -73,6 +75,8 @@
   const model = document.getElementById('model');
   const modelHint = document.getElementById('model-hint');
   const active = document.getElementById('active');
+  const dispatcher = document.getElementById('dispatcher');
+  const spec = document.getElementById('spec');
   const err = document.getElementById('err');
   const deleteBtn = document.getElementById('delete-btn');
   const exportBtn = document.getElementById('export-btn');
@@ -388,6 +392,8 @@
       role: role.value,
       instructions: instructions.value,
       active: active.checked,
+      dispatcher: dispatcher.checked,
+      spec: spec.checked,
       modelId: wantedModelId,
       attachments: JSON.stringify(formAttachments()),
     };
@@ -401,6 +407,8 @@
     if (role.value !== cleanEdit.role) return true;
     if (instructions.value !== cleanEdit.instructions) return true;
     if (active.checked !== cleanEdit.active) return true;
+    if (dispatcher.checked !== cleanEdit.dispatcher) return true;
+    if (spec.checked !== cleanEdit.spec) return true;
     if (JSON.stringify(formAttachments()) !== cleanEdit.attachments) return true;
     if (userTouchedModel && formModelId() !== cleanEdit.modelId) return true;
     return false;
@@ -431,6 +439,8 @@
       colorIndex: 0,
       attachments: formAttachments(),
       modelId: formModelId(),
+      dispatcher: !!dispatcher.checked,
+      spec: !!spec.checked,
     };
   }
 
@@ -469,6 +479,8 @@
           instructions: draft.instructions,
           attachments: draft.attachments,
           modelId: draft.modelId,
+          dispatcher: draft.dispatcher,
+          spec: draft.spec,
         },
         active: draft.active,
         name: draft.name,
@@ -544,6 +556,8 @@
         role.value = bot.role;
         instructions.value = bot.instructions;
         active.checked = !!bot.active;
+        dispatcher.checked = !!bot.dispatcher;
+        spec.checked = !!bot.spec;
         deleteBtn.hidden = false;
         addFiles(undefined, bot.attachments);
       } else {
@@ -553,6 +567,8 @@
           handle: (msg.defaults && msg.defaults.handle) || '',
           persona: (msg.defaults && msg.defaults.persona) || DEFAULT_NEW_BOT_PERSONA,
         };
+        dispatcher.checked = false;
+        spec.checked = false;
         if (msg.defaults) {
           if (!persona.value.trim()) {
             persona.value = msg.defaults.persona || '';
