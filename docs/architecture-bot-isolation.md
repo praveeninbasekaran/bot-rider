@@ -44,7 +44,7 @@ May trim extras silent. Required published packets must not be silently cut; min
 - **(SI-2)** Controlled publish of structured packets only. Fields: `requirements`, `decisions`, `constraints`, `openQuestions` (host-owned strings / lists). **Verbatim.** Drop debate banter and failed drafts only. Never lossy-summarize away acceptance criteria.
 - **(SI-2)** Publish at end of each meaningful bot turn (propose / critique / direct that produced lasting content) AND on consensus / Pick.
 - **(SI-2)** Downstream receivers: bots that still have a remaining turn (including ones that already spoke if they will speak again) + implementer. Not inactive. Not bots that are done for this run. **Not fan-out to everyone.**
-- **(SI-2 held)** Ingest next-pack **after the batch settles**, never mid-flight. Same-batch speakers do **not** hear each other until the phase ends. No late-start sibling ingest inside a batch — [architecture-event-bus.md](./architecture-event-bus.md).
+- **(SI-2 held)** Ingest next-pack **after the batch settles**, never mid-flight. Same-batch speakers do **not** hear each other until the phase ends. **No sibling packets inside the batch.** DROP stands even if a speaker has not started yet — [architecture-event-bus.md](./architecture-event-bus.md).
 - **(SI-3 reopened)** Debate speakers in a batch: concurrent `sendRequest` allowed (Event Bus / EB-1–4). `@` / vote / Split / implementer stay one `sendRequest` at a time. In-flight `sendRequest` is never mutated.
 - **(SI-3)** Visible Swarm stays full HV prose. No new Swarm chrome **for isolation**. Parallel chrome is §26. No tree / form chrome. No fourth sidebar. MS / TA / HV / MA / SD / QC otherwise frozen.
 - **(SI-4)** TokenGovernor: attachment / MCP-style extras still trim silent first. **Required published packets for this turn are NOT silent extras.** If they cannot fit with prompt + board + (LSP slice OR implementer files) + tab paths → existing QC-3 `error` `code: 'pack-overflow'`, no `sendRequest` / no Copilot call, composer enabled.
@@ -142,7 +142,7 @@ When publishing, enqueue a copy (or id-ref) for:
 
 Do **not** enqueue for inactive bots (unless this-turn `@` solo — that bot is the downstream). **Not fan-out to everyone.**
 
-Ingest inbox packets into that bot’s session as structured user messages (verbatim field text) **after the batch settles**, **BEFORE** the next `sendRequest` starts — never mid-flight, never into an unstarted same-batch sibling (no late-start ingest). **APPEND** into SI-1; never replace; never merge `BotSession` stores. Then clear those from inbox. See [architecture-event-bus.md](./architecture-event-bus.md).
+Ingest inbox packets into that bot’s session as structured user messages (verbatim field text) **after the batch settles**, **BEFORE** the next `sendRequest` starts — never mid-flight. **No sibling packets inside the batch.** DROP stands even if a speaker has not started yet. **APPEND** into SI-1; never replace; never merge `BotSession` stores. Then clear those from inbox. See [architecture-event-bus.md](./architecture-event-bus.md).
 
 ---
 
@@ -174,7 +174,7 @@ Visible Swarm stays full HV prose. **SI-3 reopened** for Debate speakers in a ba
 
 ## 7. Out of this slice
 
-New isolation UI / packet rows, fourth sidebar, tree / form changes, reopening §20 / §22, lossy summarizer that drops acceptance criteria, silent trim of required packets, fan-out to everyone / inactive bots, persisting sessions to disk, merging `BotSession` stores, replacing a bot’s own history, late-start sibling ingest inside a batch, mutating in-flight `sendRequest`, Graphify, leftovers 002 / 003 / 009 / 014, F6 export / import, BR / QC / HV / MA / SD / TA / MS product rewrites.
+New isolation UI / packet rows, fourth sidebar, tree / form changes, reopening §20 / §22, lossy summarizer that drops acceptance criteria, silent trim of required packets, fan-out to everyone / inactive bots, persisting sessions to disk, merging `BotSession` stores, replacing a bot’s own history, sibling packets inside a batch, mutating in-flight `sendRequest`, Graphify, leftovers 002 / 003 / 009 / 014, F6 export / import, BR / QC / HV / MA / SD / TA / MS product rewrites.
 
 F7 parallel / Event Bus is **not** out — it is [architecture-event-bus.md](./architecture-event-bus.md) (this file holds SI-1/2/4 and reopens SI-3).
 

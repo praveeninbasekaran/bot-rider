@@ -1,7 +1,7 @@
 # Bot Rider — F7 parallel / Event Bus / EB-1–4 (additive slice)
 
 Status: **ready for implementation.** Design only until a developer lands it. Not a host rewrite of BR, QC, HV, MA, SD, TA, MS, SI-1/2/4, EX, OS, or CM. **Not** F3 dashboard / F4 register. Layers on frozen F7 isolation (SI-1/2/4 held) + F6 / F2 / F1.
-Stories: **EB-1–4 is the full story set.** **EB-1** Event Bus is **host in-process only**. Not `vscode.EventBus`. Not network. Publish at existing SI-2 moments (turn-end / consensus / Pick) even if siblings still in flight. Subscribe remaining-turn + implementer. Not fan-out to inactive / done. **EB-2 (Q1)** Remaining propose speakers = one parallel `sendRequest` batch; then remaining critique = second batch. Do **not** mix propose + critique. A scheduling round = one parallel batch. Stop aborts all in-flight `sendRequest`. Composer locked until the batch settles. Continue = another parallel batch among remaining debate speakers of that phase. `@` solo. Vote / Split / implementer one-at-a-time. **EB-3** **REJECT / DROP late-start sibling ingest inside a batch.** Same-batch speakers do **NOT** hear each other until the phase ends. Do **NOT** ingest sibling packets into an unstarted speaker in the same batch. Full simultaneous start is the rule. In-flight `sendRequest` is never mutated. After a batch settles, remaining-turn bots + implementer **SHALL** ingest **every** packet from that batch **BEFORE** the next `sendRequest` starts. Critique = the talk moment (all propose packets + own SI-1). Continue / later batches: same. No silent drop. QC-3 pack-overflow **that bot only**; siblings in the batch keep running. **EB-4** SI-1 persists the whole run (propose → critique → Continue / Split / Pick). Packets **APPEND** into the subscriber’s SI-1. Never merge `BotSession` stores. Never replace or wipe a bot’s own history when others speak. Never restuff a global Swarm transcript into packs. Not reset between batches. Reload / run-end still clears. BR-3 is not a session store. Talk = SI-2 verbatim (`requirements` / `decisions` / `constraints` / `openQuestions`) + OS-4 spec bodies. Never lossy-summarize AC. **HV is display only**, not the bot transcript / talk channel. Failed drafts unpublished. Implementer one JSON changeset after consensus / Pick, with the full packet set. SI-1/2/4 held. **SI-3 reopened** for Debate speakers in a batch. CM-4 `nodeIds` extras: omit stale, do not block, do not replace SI-2 bodies. Each bot MS-1 `modelId`. `vscode.lm` only. ₹0 extra keys. No new speaker cap.
+Stories: **EB-1–4 is the full story set.** **EB-1** Event Bus is **host in-process only**. Not `vscode.EventBus`. Not network. Publish at existing SI-2 moments (turn-end / consensus / Pick) even if siblings still in flight. Subscribe remaining-turn + implementer. Not fan-out to inactive / done. **EB-2 (Q1)** Remaining propose speakers = one parallel `sendRequest` batch; then remaining critique = second batch. Do **not** mix propose + critique. A scheduling round = one parallel batch. Stop aborts all in-flight `sendRequest`. Composer locked until the batch settles. Continue = another parallel batch among remaining debate speakers of that phase. `@` solo. Vote / Split / implementer one-at-a-time. **EB-3** **No sibling packets inside the batch.** DROP stands even if a speaker has not started yet. Do **not** fold late-start ingest. Same-batch speakers do **NOT** hear each other until the phase ends. Full simultaneous start. In-flight `sendRequest` is never mutated. After a batch settles, remaining-turn bots + implementer **SHALL** ingest **every** packet from that batch **BEFORE** the next `sendRequest` starts. Critique is the talk step (all propose packets + own SI-1). Continue / later batches: same. No silent drop. QC-3 pack-overflow **that bot only**; siblings in the batch keep running. **EB-4** SI-1 persists the whole run (propose → critique → Continue / Split / Pick). Packets **APPEND** into the subscriber’s SI-1. Never merge `BotSession` stores. Never replace or wipe a bot’s own history when others speak. Never restuff a global Swarm transcript into packs. Not reset between batches. Reload / run-end still clears. BR-3 is not a session store. Talk = SI-2 verbatim (`requirements` / `decisions` / `constraints` / `openQuestions`) + OS-4 spec bodies. Never lossy-summarize AC. **HV is display only**, not the bot transcript / talk channel. Failed drafts unpublished. Implementer one JSON changeset after consensus / Pick, with the full packet set. SI-1/2/4 held. **SI-3 reopened** for Debate speakers in a batch. CM-4 `nodeIds` extras: omit stale, do not block, do not replace SI-2 bodies. Each bot MS-1 `modelId`. `vscode.lm` only. ₹0 extra keys. No new speaker cap.
 UI chrome contract: `ui-ux-spec.md` §26 (addendum `ui-ux-parallel-stream.md`). Host is the talk-channel source of truth. HV overlap is display only.
 Date: 2026-09-02.
 Parent: `architecture-mvp.md`. Isolation: `architecture-bot-isolation.md` (SI-1/2/4 held; SI-3 reopened here). OpenSpec: `architecture-openspec-trace.md` (OS-4 bodies stay required talk). Pack: `architecture-token-save.md` (QC-3 unchanged; overflow **that bot only** in a batch). Context Map: `architecture-context-map.md` (CM-4 extras only). Copilot stays `vscode.lm`. ₹0 extra keys. No second runtime.
@@ -36,25 +36,23 @@ Continue = another parallel batch among remaining debate speakers of that phase.
 
 **Vote / Split / implementer:** one-at-a-time. No overlapping `sendRequest`. Implementer emits **one** JSON changeset after consensus / Pick, packed with the **full** settled packet set (EB-4).
 
-Full **simultaneous start** of a batch is the model. Host starts every remaining speaker of that phase together. There is **no** late-start speaker inside a batch.
+Full **simultaneous start** of a batch is the model. Host starts every remaining speaker of that phase together.
 
 ### EB-3 Settle-then-ingest (PO lock)
 
-**REJECT / DROP late-start sibling ingest inside a batch.**
+**No sibling packets inside the batch.** DROP stands even if a speaker has not started yet. Do **not** fold late-start ingest. There is **no MAY**.
 
 Same-batch speakers do **NOT** hear each other until the phase ends.
 
-Do **NOT** ingest sibling packets into an unstarted speaker in the same batch. There is **no** MAY for that path. Full simultaneous start is the rule.
-
-In-flight `sendRequest` is **never** mutated (no inbox splice, no pack restuff, no mid-flight prompt edit).
+Full simultaneous start. In-flight `sendRequest` is **never** mutated (no inbox splice, no pack restuff, no mid-flight prompt edit).
 
 **SHALL:** after a batch settles, remaining-turn bots + implementer ingest **every** packet published from that batch **BEFORE** the next `sendRequest` starts.
 
-Critique is the **talk moment** for the prior propose batch: each remaining critique speaker’s pack = own SI-1 + **all** propose packets from the settled batch (verbatim SI-2 + required OS-4 bodies) + QC minimum pack.
+Critique is the **talk step** for the prior propose batch: each remaining critique speaker’s pack = own SI-1 + **all** propose packets from the settled batch (verbatim SI-2 + required OS-4 bodies) + QC minimum pack.
 
 Continue / later batches: same rule — ingest **all** settled packets from **prior** batches first. No silent drop.
 
-QC-3 pack-overflow is **that bot only**. Siblings in the batch keep running. An overflowed bot does **not** late-start in the same batch with sibling packets.
+QC-3 pack-overflow is **that bot only**. Siblings in the batch keep running. An overflowed bot still gets **no** sibling packets from this batch (DROP stands even if that bot never started).
 
 ### EB-4 SI-1 persist + talk channel
 
@@ -76,14 +74,14 @@ SI-1 / SI-2 / SI-4 **held**. **SI-3 reopened** only for Debate speakers in a bat
 - **(EB-1)** Publish at existing SI-2 moments (turn-end / consensus / Pick) **even if siblings still in flight**. Subscribe remaining-turn + implementer. **Not** fan-out to inactive / done / everyone.
 - **(EB-1)** Publish ≠ ingest. A published packet waits until EB-3 settle-then-ingest.
 - **(EB-2 / Q1)** Remaining propose speakers = one parallel `sendRequest` batch; then remaining critique = second batch. **Do not mix propose + critique.** A scheduling round = one parallel batch.
-- **(EB-2)** Full **simultaneous start** of every remaining speaker in that batch. No staggered / late-start speaker inside a batch.
+- **(EB-2)** Full **simultaneous start** of every remaining speaker in that batch.
 - **(EB-2)** Stop aborts **all** in-flight `sendRequest`. Composer locked until the batch settles. Continue = another parallel batch among remaining debate speakers of that phase (or a new Q1 propose-then-critique cycle on BR-5 Continue).
 - **(EB-2)** `@` solo. Vote / Split / implementer **one-at-a-time**. No overlap chrome for those paths (see §26).
 - **(EB-2)** Implementer: **one** JSON changeset after consensus / Pick, with the **full** packet set ingested first (EB-3 + EB-4).
-- **(EB-3) REJECT / DROP late-start sibling ingest inside a batch.** Same-batch speakers do **NOT** hear each other until the phase ends. Do **NOT** ingest sibling packets into an unstarted speaker in the same batch. **No MAY** for that path.
+- **(EB-3) No sibling packets inside the batch.** DROP stands even if a speaker has not started yet. Do **not** fold late-start ingest. Same-batch speakers do **NOT** hear each other until the phase ends. **No MAY.**
 - **(EB-3)** In-flight `sendRequest` is **never** mutated.
-- **(EB-3) SHALL:** after a batch settles, remaining-turn bots + implementer ingest **every** packet from that batch **BEFORE** the next `sendRequest` starts. Critique = all propose packets + own SI-1. Continue / later batches: ingest all settled packets from prior batches first. **No silent drop.**
-- **(EB-3)** QC-3 pack-overflow = **that bot only**; siblings in the batch keep running. Overflow does **not** authorize a late start with sibling packets in the same batch. Copy stays §17.11 `Prompt doesn't fit Copilot`.
+- **(EB-3) SHALL:** after a batch settles, remaining-turn bots + implementer ingest **every** packet from that batch **BEFORE** the next `sendRequest` starts. Critique is the talk step (all propose packets + own SI-1). Continue / later batches: ingest all settled packets from prior batches first. **No silent drop.**
+- **(EB-3)** QC-3 pack-overflow = **that bot only**; siblings in the batch keep running. Copy stays §17.11 `Prompt doesn't fit Copilot`.
 - **(EB-4)** SI-1 persists the whole run. Packets **APPEND**. Never merge `BotSession` stores. Never replace / wipe a bot’s own history when others speak. Never restuff a global Swarm transcript. Not reset between batches. Reload / run-end still clears. BR-3 is not a session store.
 - **(EB-4)** Talk = SI-2 verbatim + OS-4 spec bodies. Never lossy-summarize AC. **HV is display only**, not the talk channel. Failed drafts unpublished.
 - **(EB-4)** SI-1/2/4 held. **SI-3 reopened** for Debate speakers in a batch only. `@` / vote / Split / implementer stay sequential.
@@ -108,15 +106,15 @@ Debate phase start (propose XOR critique)          ← EB-2 / Q1
     + this bot’s SI-1 (own history + packets already ingested)
     + QC board + LSP + tab paths + extras
     + OS-4 required bodies already required for this pack
-    NOT sibling packets from this batch (they do not exist in SI-1 yet)
+    NOT sibling packets from this batch
     NOT HV articles
   TokenGovernor per bot:
     overflow → QC-3 that bot only; do not start that sendRequest
     siblings still start
   start ALL surviving sendRequest together
   in-flight sendRequest NEVER mutated
-  do NOT ingest sibling packets into anyone still in this batch
-  do NOT late-start an overflowed / unstarted speaker with sibling packets
+  no sibling packets inside the batch
+  DROP stands even if a speaker has not started yet
 
 Speaker turn-end (sibling may still be in flight)   ← EB-1 publish
   if meaningful: publish IsolationPacket at SI-2 moment
@@ -204,7 +202,7 @@ A **batch** = remaining speakers of **one** `TurnKind` (`propose` XOR `critique`
 
 A **scheduling round** = one parallel batch. Visible chrome still uses BR-4 round **n**: `ROUND {n} · PROPOSE` then, after that batch settles, `ROUND {n} · CRITIQUE`. No header that says “parallel”.
 
-**Simultaneous start:** at batch open the host packs and starts every remaining speaker of that phase together (minus QC-3 overflows, which never start). There is **no** unstarted leftover speaker who later joins the same batch.
+**Simultaneous start:** at batch open the host packs and starts every remaining speaker of that phase together. QC-3 overflow skips that bot’s `sendRequest` only. **No sibling packets inside the batch** — DROP stands even if a speaker has not started yet.
 
 **Stop:** `botrider.chat.stop` / `chat/stop` cancels **all** in-flight tokens in the batch. Existing Stop-during-stream: snapshot into Split, **never implement**. Split Stop: end, composer unlocks. Split helper stays `Resolve the split to send a new prompt.`
 
@@ -218,22 +216,15 @@ Each speaker’s `sendRequest` uses that bot’s MS-1 `modelId` via `vscode.lm` 
 
 ## 4. Ingest lock (EB-3) — PO stamped
 
-This section is the lock. Do **not** weaken it in chrome, tests, or a later MAY.
+This section is the lock. Do **not** fold late-start ingest. Do **not** add a MAY.
 
-### 4.1 DROP late-start sibling ingest
+### 4.1 No sibling packets inside the batch
 
-**REJECT / DROP** any path that lets an unstarted speaker in the **same** batch ingest packets already published by siblings in that batch.
+**No sibling packets inside the batch.** DROP stands even if a speaker has not started yet.
 
 Same-batch speakers do **NOT** hear each other until the phase ends.
 
-Full simultaneous start is the rule. In-flight `sendRequest` is never mutated.
-
-There is **no MAY** for:
-
-- unstarted speakers ingesting settled siblings in the same batch
-- staggered start (“start A, when A ends stuff B’s pack with A’s packet, then start B”)
-- mid-flight inbox splice / prompt mutation
-- overflow-then-retry inside the same batch using sibling packets
+Full simultaneous start. In-flight `sendRequest` is never mutated.
 
 ### 4.2 SHALL settle-then-ingest
 
@@ -243,7 +234,7 @@ After a batch **settles** (every `sendRequest` in that batch ended, overflowed, 
 2. Ingest **APPENDS** into each subscriber’s SI-1 (EB-4).
 3. **THEN** the next `sendRequest` may start.
 
-**Critique** is the talk moment for the propose batch: all propose packets + own SI-1. No silent drop of a sibling’s published packet.
+**Critique is the talk step** for the propose batch: all propose packets + own SI-1. No silent drop of a published packet.
 
 **Continue / later batches:** ingest all settled packets from **prior** batches first, then start.
 
@@ -258,7 +249,7 @@ If required packets + QC minimum pack cannot fit for **one** bot at the start of
 - **no** `sendRequest` for **that bot**
 - **no** silent drop of required packets to sneak a call
 - siblings in the batch **keep running**
-- that bot does **not** late-start in the same batch
+- that bot still has **no sibling packets** from this batch (DROP stands even if it never started)
 - composer stays **locked** until the **batch** settles (`@` solo overflow keeps today’s QC-3 “composer enabled” — `@` is not a parallel batch)
 
 ---
@@ -314,7 +305,7 @@ Ingest next-pack **after batch settle**, never mid-flight. Append into SI-1, nev
 
 ## 8. Out of this slice
 
-Late-start sibling ingest inside a batch (any MAY), mutating in-flight `sendRequest`, mixing propose + critique in one batch, merging `BotSession` stores, replacing / wiping a bot’s own history, restuffing a global Swarm transcript / HV articles into packs, resetting SI-1 between batches, persisting sessions to BR-3 / `globalState`, Event Bus chrome / packet rows / new sidebar / new Activity Bar icon, a header that says “parallel”, moving Approve / MCP / packets / OpenSpec onto the run board, reopening §20–§25, F3 dashboard, F4 register, leftovers 002 / 003 / 009 / 014, `vscode.EventBus`, network Event Bus, non-`vscode.lm` models, extra API keys, a new speaker cap, Graphify-as-vendor, product code in this docs PR.
+Sibling packets inside a batch (including when a speaker has not started), mutating in-flight `sendRequest`, mixing propose + critique in one batch, merging `BotSession` stores, replacing / wiping a bot’s own history, restuffing a global Swarm transcript / HV articles into packs, resetting SI-1 between batches, persisting sessions to BR-3 / `globalState`, Event Bus chrome / packet rows / new sidebar / new Activity Bar icon, a header that says “parallel”, moving Approve / MCP / packets / OpenSpec onto the run board, reopening §20–§25, F3 dashboard, F4 register, leftovers 002 / 003 / 009 / 014, `vscode.EventBus`, network Event Bus, non-`vscode.lm` models, extra API keys, a new speaker cap, Graphify-as-vendor, product code in this docs PR.
 
 ---
 
@@ -331,14 +322,13 @@ Merge bar after PO allocates, on a **new product PR**:
 - Implementer runs after consensus / Pick with the full packet set; one JSON changeset. (EB-2 / EB-4)
 - Stop cancels every in-flight `sendRequest` in the batch. (EB-2)
 - Composer locked until the batch settles. (EB-2)
-- Same-batch speakers’ packs do **not** include sibling packets from that batch. (EB-3)
-- No late-start path ingests sibling packets into an unstarted same-batch speaker. (EB-3)
+- Same-batch speakers’ packs do **not** include sibling packets from that batch, including when a speaker has not started. (EB-3)
 - In-flight `sendRequest` is not mutated when a sibling publishes. (EB-3)
 - After settle, remaining-turn + implementer packs include **every** packet from that batch before the next `sendRequest`. (EB-3)
-- Critique pack includes all propose packets + own SI-1. (EB-3 / EB-4)
+- Critique is the talk step: pack includes all propose packets + own SI-1. (EB-3 / EB-4)
 - Continue / later batch ingests all settled packets from prior batches first. (EB-3)
 - No silent drop of a published packet. (EB-3)
-- QC-3 overflow of one bot does not cancel siblings; that bot does not late-start in the same batch. (EB-3)
+- QC-3 overflow of one bot does not cancel siblings; that bot still has no sibling packets from the batch. (EB-3)
 - SI-1 still present at critique / Continue / Split / Pick; not reset between batches. (EB-4)
 - Ingest appends; subscriber’s own history is not replaced or wiped. (EB-4)
 - BotSession stores are never merged. (EB-4)
