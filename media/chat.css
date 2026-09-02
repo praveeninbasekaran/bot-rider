@@ -341,6 +341,11 @@ body.vscode-high-contrast .run-board {
   color: var(--vscode-descriptionForeground);
 }
 
+.round-header.is-argue {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
 .msg {
   display: grid;
   grid-template-columns: 22px 1fr;

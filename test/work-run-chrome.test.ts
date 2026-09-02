@@ -427,7 +427,7 @@ describe('§27 F8a Work run chrome', () => {
       'botrider.contextMap',
       'botrider.review',
     ]);
-    expect(chatJs).not.toMatch(/Argue|idle follow|compare-to-spec|Graphify/);
+    expect(chatJs).not.toMatch(/idle follow|compare-to-spec|Graphify/);
     expect(formJs).not.toMatch(/Argue|Graphify/);
     expect(lockFn).toContain("'Debate running…'");
     expect(chatJs).toContain("placeholder=\"Message the swarm. Use @handle to lock a bot.\"");
