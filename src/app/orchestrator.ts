@@ -15,7 +15,7 @@ import { PromptBuilder, turnInstruction, type HistoryTurn } from './prompt-build
 import { PatchParser } from './patch-parser';
 import type { ChangesetStore } from './changeset-store';
 import type { ThreadStore } from './thread-store';
-import { oneLine, parseMentions, parseVote, stripNeedEditTrailer } from './mentions';
+import { oneLine, parseMentions, parseVote, parseAgreeWriter, stripNeedEditTrailer } from './mentions';
 import { removeParseableTodoLines, stripArticleChrome, stripLeadingVoteToken } from './article-strip';
 import type { WorkspaceContextPort, FileSystemPort } from './ports';
 import { EmptyLspSlicePort, withSelectionFallback, type LspSlicePort, type LspSliceSnapshot } from './lsp-slice';
@@ -32,8 +32,9 @@ import {
   isTesterAssignment,
   parseDispatcherSplit,
   remainingWorkBots,
-  unionWorkerFiles,
+  workPathClaims,
   validateDispatcherSplit,
+  type CollisionClaim,
   type SplitValidate,
   type ValidatedAssignment,
 } from './work-split';
@@ -68,6 +69,8 @@ export class Orchestrator {
   private debateBatchActive = false;
   private workRunActive = false;
   private workBatchActive = false;
+  private argueActive = false;
+  private argueClaimantHandles: string[] = [];
   private baPackets: IsolationPacket[] = [];
   private workAssignments: ValidatedAssignment[] = [];
   private workerFiles = new Map<string, ChangeFile[]>();
@@ -142,7 +145,7 @@ export class Orchestrator {
       await this.answerDeliverableAsk(text);
       return;
     }
-    if (this.workBatchActive) {
+    if (this.workBatchActive || this.argueActive) {
       await this.sendDuringWorkBatch(text);
       return;
     }
@@ -323,6 +326,9 @@ export class Orchestrator {
     this.cts?.cancel();
     if (this.state.debateRunning && this.isWorkRun()) {
       this.emit({ type: 'chat/notice', text: COPY.interrupted });
+      if (this.argueActive) {
+        return;
+      }
       this.abortWorkRun();
       return;
     }
@@ -337,11 +343,12 @@ export class Orchestrator {
     }
   }
 
-  /** Work in flight (BA / dispatch / Work-batch). Not pendingReview. Not F7 Debate. */
+  /** Work in flight (BA / dispatch / Work-batch / Argue). Not pendingReview. Not F7 Debate. */
   private isWorkRun(): boolean {
     return (
       this.workRunActive ||
       this.workBatchActive ||
+      this.argueActive ||
       this.state.runType === 'work' ||
       this.state.phase === 'work'
     );
@@ -351,6 +358,8 @@ export class Orchestrator {
   private abortWorkRun(): void {
     this.workBatchActive = false;
     this.workRunActive = false;
+    this.argueActive = false;
+    this.argueClaimantHandles = [];
     this.workAssignments = [];
     this.workerFiles.clear();
     this.exitToIdle();
@@ -493,6 +502,9 @@ export class Orchestrator {
     this.contextMap?.syncRun();
     this.emitBoard();
     this.workBatchActive = false;
+    this.workRunActive = false;
+    this.argueActive = false;
+    this.argueClaimantHandles = [];
     this.state = {
       phase: 'pendingReview',
       round: this.state.round,
@@ -592,9 +604,11 @@ export class Orchestrator {
       return prepared;
     }
     if (prepared === 'overflow') {
-      this.state.debateRunning = false;
-      this.state.phase = 'error';
-      this.pushState();
+      if (!this.parallelBatchActive && !this.argueActive) {
+        this.state.debateRunning = false;
+        this.state.phase = 'error';
+        this.pushState();
+      }
       return 'error';
     }
     const result = await this.streamPrepared(prepared);
@@ -726,7 +740,7 @@ export class Orchestrator {
         }
       }
       this.emit({ type: 'error', code: 'pack-overflow', message: COPY.packOverflow });
-      if (!this.parallelBatchActive) {
+      if (!this.parallelBatchActive && !this.argueActive) {
         this.state.debateRunning = false;
         this.state.phase = 'error';
         this.pushState();
@@ -806,7 +820,7 @@ export class Orchestrator {
         if (!isAuthQuotaHung(status)) {
           this.emit({ type: 'error', code: 'copilot', message: err instanceof Error ? err.message : 'Copilot request failed.' });
         }
-        if (!this.parallelBatchActive) {
+        if (!this.parallelBatchActive && !this.argueActive) {
           this.state.debateRunning = false;
           this.state.phase = 'error';
           this.pushState();
@@ -834,6 +848,11 @@ export class Orchestrator {
       if (turn === 'consensus') {
         vote = parseVote(visible);
         visible = stripLeadingVoteToken(visible);
+      }
+      let agreeWriter: string | undefined;
+      if (turn === 'argue') {
+        vote = parseVote(visible);
+        agreeWriter = parseAgreeWriter(full, this.argueClaimantHandles);
       }
       if (turn === 'propose' || turn === 'critique' || turn === 'direct' || turn === 'spec') {
         this.board.mergeParseableTodos(visible);
@@ -865,7 +884,8 @@ export class Orchestrator {
         turn === 'direct' ||
         turn === 'spec' ||
         turn === 'dispatch' ||
-        turn === 'work'
+        turn === 'work' ||
+        turn === 'argue'
       ) {
         this.publishPacket(
           buildIsolationPacket({
@@ -873,6 +893,7 @@ export class Orchestrator {
             fromBotId: bot.id,
             board: this.board.snapshot(),
             trailer,
+            agreeWriter,
           }),
         );
       }
@@ -909,6 +930,8 @@ export class Orchestrator {
   private enterSplit(title: string, reason: string, paused: boolean): void {
     this.workBatchActive = false;
     this.workRunActive = false;
+    this.argueActive = false;
+    this.argueClaimantHandles = [];
     this.state = {
       phase: 'split',
       round: this.state.round,
@@ -1067,6 +1090,8 @@ export class Orchestrator {
     this.debateBatchActive = false;
     this.workRunActive = false;
     this.workBatchActive = false;
+    this.argueActive = false;
+    this.argueClaimantHandles = [];
     this.baPackets = [];
     this.workAssignments = [];
     this.workerFiles.clear();
@@ -1187,7 +1212,7 @@ export class Orchestrator {
       return;
     }
     this.ingestSettledBatch(this.workFreezeIds());
-    this.finishWorkUnion();
+    await this.finishWorkUnion();
   }
 
   private async runDispatch(
@@ -1319,17 +1344,191 @@ export class Orchestrator {
     return { ok: true, text: '' };
   }
 
-  private finishWorkUnion(): void {
+  private async finishWorkUnion(): Promise<void> {
     const byWorker = [...this.workerFiles.entries()].map(([botId, files]) => ({ botId, files }));
-    const union = unionWorkerFiles(byWorker);
-    for (const path of union.collisions) {
-      this.emit({ type: 'chat/notice', text: COPY.skippedCollision(path) });
+    const claims = workPathClaims(byWorker);
+    if (claims.collisions.length === 0) {
+      if (claims.remainder.length === 0) {
+        this.exitToIdle();
+        return;
+      }
+      this.enterPendingReview(claims.remainder);
+      return;
     }
-    if (union.files.length === 0) {
+    await this.runArgue(claims.remainder, claims.collisions);
+  }
+
+  private claimantsOf(collision: CollisionClaim): { bot: BotRecord; file: ChangeFile }[] {
+    const out: { bot: BotRecord; file: ChangeFile }[] = [];
+    for (const claim of collision.claimants) {
+      const bot = this.freeze.find((item) => item.id === claim.botId);
+      if (!bot) {
+        continue;
+      }
+      if ((bot.dispatcher || bot.spec) && !this.assignedPath(bot.id, collision.path)) {
+        continue;
+      }
+      out.push({ bot, file: claim.file });
+    }
+    return out.sort((a, b) => a.bot.handle.localeCompare(b.bot.handle));
+  }
+
+  private assignedPath(botId: string, path: string): boolean {
+    return this.workAssignments.some((item) => item.botId === botId && item.paths.includes(path));
+  }
+
+  private showHeldUnion(remainder: ChangeFile[], winners: Map<string, ChangeFile>): void {
+    const catalog = this.catalog.snapshot();
+    const files = [...remainder, ...winners.values()]
+      .sort((a, b) => a.path.localeCompare(b.path))
+      .map((file) => attachFileCites(file, catalog));
+    this.changesets.setPending(files, { holdApprove: true });
+    this.syncFiles(files.map((file) => file.path));
+    this.contextMap?.syncRun();
+    this.emitBoard();
+  }
+
+  private noteSkippedCollision(path: string): void {
+    this.emit({ type: 'chat/notice', text: COPY.skippedCollision(path) });
+  }
+
+  private pushArgueState(path: string | undefined, round: 1 | 2 | undefined): void {
+    this.state.argue = this.argueActive;
+    this.state.arguePath = path;
+    this.state.argueRound = round;
+    this.state.workBatch = false;
+    this.state.debateRunning = true;
+    this.state.runType = 'work';
+    this.state.phase = 'work';
+    this.state.turn = 'argue';
+    this.pushState();
+  }
+
+  private writerFromLatest(
+    latest: Map<string, IsolationPacket>,
+    claimants: { bot: BotRecord; file: ChangeFile }[],
+  ): { bot: BotRecord; file: ChangeFile } | undefined {
+    if (claimants.length === 0) {
+      return undefined;
+    }
+    const handles = claimants.map((item) => item.bot.handle);
+    const writers = new Set<string>();
+    for (const item of claimants) {
+      const packet = latest.get(item.bot.id);
+      if (!packet) {
+        return undefined;
+      }
+      const fromDecisions = [...packet.decisions]
+        .reverse()
+        .map((line) => parseAgreeWriter(line, handles))
+        .find((handle) => handle !== undefined);
+      if (!fromDecisions) {
+        return undefined;
+      }
+      writers.add(fromDecisions.toLowerCase());
+    }
+    if (writers.size !== 1) {
+      return undefined;
+    }
+    const key = [...writers][0]!;
+    return claimants.find((item) => item.bot.handle.toLowerCase() === key);
+  }
+
+  private async runArgue(remainder: ChangeFile[], collisions: CollisionClaim[]): Promise<void> {
+    this.argueActive = true;
+    this.workBatchActive = false;
+    const ordered = [...collisions].sort((a, b) => a.path.localeCompare(b.path));
+    const winners = new Map<string, ChangeFile>();
+    this.showHeldUnion(remainder, winners);
+
+    for (const collision of ordered) {
+      if (this.cancelled()) {
+        this.noteSkippedCollision(collision.path);
+        continue;
+      }
+      const outcome = await this.arguePath(collision);
+      if (outcome === 'cancelled' || this.cancelled()) {
+        this.noteSkippedCollision(collision.path);
+        continue;
+      }
+      if (outcome.winnerFile) {
+        winners.set(collision.path, outcome.winnerFile);
+        this.showHeldUnion(remainder, winners);
+      } else {
+        this.noteSkippedCollision(collision.path);
+        this.showHeldUnion(remainder, winners);
+      }
+    }
+
+    this.argueActive = false;
+    this.argueClaimantHandles = [];
+    this.state.argue = false;
+    this.state.arguePath = undefined;
+    this.state.argueRound = undefined;
+
+    const union = [...remainder, ...winners.values()].sort((a, b) => a.path.localeCompare(b.path));
+    if (union.length === 0) {
       this.exitToIdle();
       return;
     }
-    this.enterPendingReview(union.files);
+    this.enterPendingReview(union);
+  }
+
+  private async arguePath(
+    collision: CollisionClaim,
+  ): Promise<{ winnerFile?: ChangeFile } | 'cancelled'> {
+    const claimants = this.claimantsOf(collision);
+    this.argueClaimantHandles = claimants.map((item) => item.bot.handle);
+    this.pushArgueState(collision.path, 1);
+    this.emit({ type: 'chat/notice', text: COPY.argueHeader(collision.path) });
+
+    if (claimants.length === 0) {
+      return {};
+    }
+
+    const latest = new Map<string, IsolationPacket>();
+    const handlesLine = this.argueClaimantHandles.map((handle) => `@${handle}`).join(', ');
+
+    for (let round = 1; round <= 2; round++) {
+      if (this.cancelled()) {
+        return 'cancelled';
+      }
+      const argueRound = round === 2 ? 2 : 1;
+      this.pushArgueState(collision.path, argueRound);
+      this.emit({ type: 'chat/notice', text: COPY.argueRound(argueRound) });
+
+      for (const claimant of claimants) {
+        if (this.cancelled()) {
+          return 'cancelled';
+        }
+        this.remainingSlots.push({ botId: claimant.bot.id, turn: 'argue' });
+        const extra = `Path: ${collision.path}\nClaimants: ${handlesLine}`;
+        const result = await this.runTurn(
+          claimant.bot,
+          'argue',
+          argueRound,
+          turnInstruction('argue', argueRound, this.userText, extra),
+        );
+        this.ingestSettledBatch(this.workFreezeIds());
+        if (result === 'cancelled' || this.cancelled()) {
+          return 'cancelled';
+        }
+        if (!isTurnOk(result)) {
+          continue;
+        }
+        const published = this.sessions.listPublished();
+        const mine = [...published].reverse().find((packet) => packet.fromBotId === claimant.bot.id);
+        if (mine) {
+          latest.set(claimant.bot.id, mine);
+        }
+      }
+
+      const winner = this.writerFromLatest(latest, claimants);
+      if (winner) {
+        return { winnerFile: winner.file };
+      }
+    }
+    return {};
   }
 
   private async sendDuringWorkBatch(text: string): Promise<void> {
@@ -1377,7 +1576,10 @@ export class Orchestrator {
     if (this.inflightBotIds.has(botId)) {
       return true;
     }
-    return this.workBatchActive && this.remainingSlots.some((slot) => slot.botId === botId && slot.turn === 'work');
+    return (
+      (this.workBatchActive && this.remainingSlots.some((slot) => slot.botId === botId && slot.turn === 'work')) ||
+      (this.argueActive && this.remainingSlots.some((slot) => slot.botId === botId && slot.turn === 'argue'))
+    );
   }
 
   private markInflight(botId: string, on: boolean): void {

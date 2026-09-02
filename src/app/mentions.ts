@@ -39,6 +39,45 @@ export function parseVote(text: string): 'AGREE' | 'DISSENT' {
   return 'DISSENT';
 }
 
+/**
+ * SI-2 AGREE on one claimant writer handle (e.g. `AGREE @lead`).
+ * DISSENT is not a win. Multiple claimant handles are not a single writer.
+ */
+export function parseAgreeWriter(text: string, claimantHandles: string[]): string | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const first = trimmed.split(/\s+/)[0] ?? '';
+  const norm = first.replace(/[^A-Za-z]/g, '').toUpperCase();
+  if (norm !== 'AGREE') {
+    return undefined;
+  }
+  const rest = trimmed.slice(first.length);
+  const byKey = new Map(claimantHandles.map((handle) => [handle.toLowerCase(), handle]));
+  const mentioned: string[] = [];
+  const add = (raw: string): void => {
+    const canon = byKey.get(raw.toLowerCase());
+    if (canon && !mentioned.includes(canon)) {
+      mentioned.push(canon);
+    }
+  };
+  const atRe = /@([A-Za-z0-9_-]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = atRe.exec(rest)) !== null) {
+    add(match[1] ?? '');
+  }
+  if (mentioned.length === 0) {
+    for (const token of rest.split(/\s+/)) {
+      const key = token.replace(/^@/, '').replace(/[^A-Za-z0-9_-]/g, '');
+      if (key) {
+        add(key);
+      }
+    }
+  }
+  return mentioned.length === 1 ? mentioned[0] : undefined;
+}
+
 export function stripNeedEditTrailer(text: string): {
   body: string;
   token: 'NEED_EDIT' | 'NO_EDIT';

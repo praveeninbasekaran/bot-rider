@@ -87,6 +87,8 @@ export function buildIsolationPacket(args: {
   board: RunBoardDto;
   trailer?: 'NEED_EDIT' | 'NO_EDIT';
   id?: string;
+  /** SI-2 AGREE on one writer handle, e.g. `AGREE @lead`. */
+  agreeWriter?: string;
 }): IsolationPacket {
   const requirements: string[] = [];
   if (args.board.goal) {
@@ -98,6 +100,9 @@ export function buildIsolationPacket(args: {
     }
   }
   const decisions = [...args.board.decisions];
+  if (args.agreeWriter) {
+    decisions.push(`AGREE @${args.agreeWriter}`);
+  }
   const constraints: string[] = [];
   for (const file of args.board.files) {
     constraints.push(file.inChangeset ? `${file.path} (in changeset)` : file.path);

@@ -42,7 +42,7 @@ export interface PackRequest {
 }
 
 export function packKindFor(turn: TurnKind): PackKind {
-  if (turn === 'consensus') {
+  if (turn === 'consensus' || turn === 'argue') {
     return 'vote';
   }
   if (turn === 'implement' || turn === 'work') {

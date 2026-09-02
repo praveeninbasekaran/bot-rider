@@ -24,6 +24,8 @@
     workBatch: false,
     completedBots: {},
     announced: {},
+    lastArguePath: '',
+    lastArgueRoundKey: '',
   };
 
   if (document.body.classList.contains('vscode-high-contrast')) {
@@ -144,7 +146,7 @@
   }
 
   function onSendOrStop() {
-    if (state.debateRunning && !state.workBatch) {
+    if (state.debateRunning && !state.workBatch && !isArgueRun()) {
       vscode.postMessage({ type: 'chat/stop' });
       return;
     }
@@ -192,13 +194,13 @@
 
   function sendNow() {
     const text = input.value.trim();
-    if (!text || state.splitOpen || state.debateRunning && !state.workBatch || state.copilotStatus !== 'ready') {
+    if (!text || state.splitOpen || state.debateRunning && !state.workBatch && !isArgueRun() || state.copilotStatus !== 'ready') {
       return;
     }
     state.pendingSend = input.value;
     const runType = selectedRunType();
     vscode.postMessage({ type: 'chat/send', text: input.value, runType: runType });
-    if (state.workBatch) {
+    if (state.workBatch || isArgueRun()) {
       appendUser(input.value);
       input.value = '';
       state.pendingSend = '';
@@ -359,7 +361,11 @@
   }
 
   function isWorkTurn(turn) {
-    return turn === 'spec' || turn === 'dispatch' || turn === 'work';
+    return turn === 'spec' || turn === 'dispatch' || turn === 'work' || turn === 'argue';
+  }
+
+  function isArgueRun() {
+    return !!(state.run && state.run.argue);
   }
 
   function roundHeaderCopy(n, turn) {
@@ -458,7 +464,7 @@
     const seen = {};
     for (let i = 0; i < frozen.length; i++) {
       const id = frozen[i];
-      if (!id || inflight[id] || state.completedBots[id]) {
+      if (!id || inflight[id] || (!isArgueRun() && state.completedBots[id])) {
         continue;
       }
       const handle = handleForBotId(id);
@@ -478,6 +484,9 @@
     }
     const work = workInFlightHandles();
     const waiting = waitingHandles();
+    if (isArgueRun() && work.length >= 1) {
+      return work;
+    }
     if (work.length >= 2 || (work.length >= 1 && waiting.length >= 1)) {
       return work;
     }
@@ -1134,7 +1143,7 @@
   function renderPicker() {
     const match = input.value.match(/(?:^|\s)@([A-Za-z0-9_-]*)$/);
     picker.replaceChildren();
-    if (!match || state.splitOpen || state.debateRunning && !state.workBatch) {
+    if (!match || state.splitOpen || state.debateRunning && !state.workBatch && !isArgueRun()) {
       closePicker();
       return;
     }
@@ -1231,6 +1240,13 @@
       input.placeholder = 'Message the swarm. Use @handle to lock a bot.';
       helper.textContent = '';
       workStop.hidden = false;
+    } else if (isArgueRun() && ready && !state.splitOpen) {
+      input.disabled = false;
+      send.disabled = false;
+      send.textContent = 'Send';
+      input.placeholder = 'Message the swarm. Use @handle to lock a bot.';
+      helper.textContent = '';
+      workStop.hidden = false;
     } else {
       workStop.hidden = true;
     }
@@ -1312,6 +1328,65 @@
     expandBanner.classList.toggle('visible', !!state.expanded);
   }
 
+  function argueHeaderPath(text) {
+    const m = String(text || '').match(/^ARGUE · (.+)$/);
+    return m ? m[1] : '';
+  }
+
+  function argueRoundNumber(text) {
+    const m = String(text || '').match(/^Argue round ([12])$/);
+    return m ? Number(m[1]) : 0;
+  }
+
+  function paintArguePathHeader(path) {
+    const p = String(path || '');
+    if (!p || state.lastArguePath === p) {
+      return false;
+    }
+    state.lastArguePath = p;
+    const rh = document.createElement('div');
+    rh.className = 'round-header is-argue';
+    rh.textContent = 'ARGUE · ' + p;
+    thread.appendChild(rh);
+    announceOnce(rh.textContent);
+    thread.scrollTop = thread.scrollHeight;
+    return true;
+  }
+
+  function paintArgueRoundHeader(n) {
+    const round = n === 2 ? 2 : n === 1 ? 1 : 0;
+    if (!round) {
+      return false;
+    }
+    const path = (state.run && state.run.arguePath) || state.lastArguePath || '';
+    const key = path + ':' + round;
+    if (state.lastArgueRoundKey === key) {
+      return false;
+    }
+    state.lastArgueRoundKey = key;
+    const rh = document.createElement('div');
+    rh.className = 'round-header is-argue';
+    rh.textContent = 'Argue round ' + round;
+    thread.appendChild(rh);
+    announce(rh.textContent);
+    thread.scrollTop = thread.scrollHeight;
+    return true;
+  }
+
+  function paintArgueNotice(text) {
+    const path = argueHeaderPath(text);
+    if (path) {
+      paintArguePathHeader(path);
+      return true;
+    }
+    const n = argueRoundNumber(text);
+    if (n) {
+      paintArgueRoundHeader(n);
+      return true;
+    }
+    return false;
+  }
+
   function maybePhaseHeader(turn, handle, round) {
     const n = round || (state.run && state.run.round) || 0;
     if (turn === 'direct') {
@@ -1319,6 +1394,14 @@
       rh.className = 'round-header';
       rh.textContent = 'SOLO · @' + handle;
       thread.appendChild(rh);
+      return;
+    }
+    if (turn === 'argue') {
+      if (state.run && state.run.arguePath) {
+        paintArguePathHeader(state.run.arguePath);
+      }
+      const argueRound = round === 2 ? 2 : round === 1 ? 1 : (state.run && state.run.argueRound);
+      paintArgueRoundHeader(argueRound);
       return;
     }
     if (turn === 'propose' || turn === 'critique') {
@@ -1482,6 +1565,18 @@
       state.splitOpen = !!(state.run && state.run.splitOpen);
       state.debateRunning = !!(state.run && state.run.debateRunning);
       state.workBatch = !!(state.run && state.run.workBatch);
+      if (isArgueRun()) {
+        hideSplit();
+        if (state.run.arguePath) {
+          paintArguePathHeader(state.run.arguePath);
+        }
+        if (state.run.argueRound === 1 || state.run.argueRound === 2) {
+          paintArgueRoundHeader(state.run.argueRound);
+        }
+      } else {
+        state.lastArguePath = '';
+        state.lastArgueRoundKey = '';
+      }
       if (!state.debateRunning || (!wasRunning && state.debateRunning)) {
         state.completedBots = {};
       }
@@ -1585,15 +1680,25 @@
         paintBoard(state.board);
       }
     } else if (msg.type === 'chat/split') {
-      if (msg.paused) {
-        markInterrupted();
+      if (isArgueRun()) {
+        hideSplit();
+        lockComposer();
+      } else {
+        if (msg.paused) {
+          markInterrupted();
+        }
+        state.splitOpen = true;
+        lockComposer();
+        showSplit(msg);
       }
-      state.splitOpen = true;
-      lockComposer();
-      showSplit(msg);
     } else if (msg.type === 'chat/notice') {
       if (msg.text === 'Interrupted') {
         markInterrupted();
+        if (isArgueRun()) {
+          hideSplit();
+        }
+      } else if (paintArgueNotice(msg.text || '')) {
+        hideSplit();
       } else {
         hideSplit();
         appendNotice(msg.text || '');

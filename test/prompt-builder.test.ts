@@ -246,5 +246,6 @@ describe('TokenGovernor pack', () => {
     expect(packKindFor('consensus')).toBe('vote');
     expect(packKindFor('implement')).toBe('implement');
     expect(packKindFor('work')).toBe('implement');
+    expect(packKindFor('argue')).toBe('vote');
   });
 });

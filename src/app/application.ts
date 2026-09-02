@@ -133,6 +133,9 @@ export class Application {
   }
 
   async approve(mode: ApplyMode = 'initial'): Promise<boolean> {
+    if (!this.changesets.hasPending()) {
+      return false;
+    }
     const files = this.changesets.files;
     if (!files?.length) {
       return false;

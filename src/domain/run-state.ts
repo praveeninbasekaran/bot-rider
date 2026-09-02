@@ -6,7 +6,8 @@ export type TurnKind =
   | 'implement'
   | 'spec'
   | 'dispatch'
-  | 'work';
+  | 'work'
+  | 'argue';
 
 export type RunPhase =
   | 'idle'
@@ -35,6 +36,12 @@ export interface RunStateDto {
   runType?: RunType;
   /** True only while a Work-batch is in flight. Debate composer-lock ignores this. */
   workBatch?: boolean;
+  /** True while sequential Argue is in flight after Work-batch collision. */
+  argue?: boolean;
+  /** Workspace-relative path currently being argued. Header `ARGUE · {path}`. */
+  arguePath?: string;
+  /** Argue round 1 or 2 for this path. Not F7 `ROUND n · CRITIQUE`. */
+  argueRound?: 1 | 2;
 }
 
 export function idleRunState(): RunStateDto {
