@@ -262,7 +262,7 @@ export class Orchestrator {
   }
 
   async continueDebate(): Promise<void> {
-    if (!this.state.splitOpen || this.loopActive) {
+    if (!this.state.splitOpen || this.loopActive || this.isWorkRun()) {
       return;
     }
     const copilot = await this.gateway.ensureAvailable();
@@ -289,7 +289,7 @@ export class Orchestrator {
   }
 
   async pick(botId: string): Promise<void> {
-    if (!this.state.splitOpen || this.loopActive) {
+    if (!this.state.splitOpen || this.loopActive || this.isWorkRun()) {
       return;
     }
     const bot = this.freeze.find((b) => b.id === botId);
@@ -321,6 +321,11 @@ export class Orchestrator {
 
   stop(): void {
     this.cts?.cancel();
+    if (this.state.debateRunning && this.isWorkRun()) {
+      this.emit({ type: 'chat/notice', text: COPY.interrupted });
+      this.abortWorkRun();
+      return;
+    }
     if (this.state.debateRunning) {
       this.emit({ type: 'chat/notice', text: COPY.interrupted });
       this.enterSplit(COPY.splitPaused, COPY.splitPausedReason, true);
@@ -330,6 +335,25 @@ export class Orchestrator {
       this.emit({ type: 'chat/notice', text: COPY.stoppedNoImpl });
       this.exitToIdle();
     }
+  }
+
+  /** Work in flight (BA / dispatch / Work-batch). Not pendingReview. Not F7 Debate. */
+  private isWorkRun(): boolean {
+    return (
+      this.workRunActive ||
+      this.workBatchActive ||
+      this.state.runType === 'work' ||
+      this.state.phase === 'work'
+    );
+  }
+
+  /** Abort in-flight Work sendRequest. Snapshot HV already painted. Never implement. No Debate Split. */
+  private abortWorkRun(): void {
+    this.workBatchActive = false;
+    this.workRunActive = false;
+    this.workAssignments = [];
+    this.workerFiles.clear();
+    this.exitToIdle();
   }
 
   private async runDebateRounds(fromRound: number, toRound: number): Promise<void> {

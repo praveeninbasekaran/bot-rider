@@ -710,8 +710,8 @@ describe('WK-6 union Approve + Stop', () => {
     expect(fs.lastOps.some((op) => 'relativePath' in op && op.relativePath === 'src/a.ts')).toBe(false);
   });
 
-  it('Stop aborts every in-flight sendRequest in this Work-batch', async () => {
-    const { app, gw } = harness();
+  it('Stop aborts every in-flight sendRequest in this Work-batch without Debate Split', async () => {
+    const { app, gw, msgs } = harness();
     await workSwarm(app);
     let release!: () => void;
     const latch = new Promise<void>((resolve) => {
@@ -723,11 +723,97 @@ describe('WK-6 union Approve + Stop', () => {
     await vi.waitFor(() => {
       expect(gw.maxInflight).toBeGreaterThanOrEqual(2);
     });
+    const requestAtStop = gw.requestCount;
     app.stop();
     release();
     await done;
     expect(app.changesets.hasPending()).toBe(false);
-    expect(gw.turns.filter((t) => t === 'work').length).toBeGreaterThanOrEqual(0);
+    expect(app.orchestrator.getRunState().splitOpen).toBe(false);
+    expect(app.orchestrator.getRunState().debateRunning).toBe(false);
+    expect(app.orchestrator.getRunState().phase).not.toBe('split');
+    expect(app.orchestrator.getRunState().runType).toBeUndefined();
+    expect(msgs.some((m) => m.type === 'chat/split')).toBe(false);
+    expect(msgs.some((m) => m.type === 'chat/notice' && m.text === COPY.interrupted)).toBe(true);
+    expect(msgs.some((m) => m.type === 'chat/notice' && m.text === COPY.splitPaused)).toBe(false);
+    expect(gw.turns.includes('implement')).toBe(false);
+
+    const turnsAfterStop = gw.turns.slice();
+    await app.continueDebate();
+    await app.pick(app.registry.getByHandle('lead')!.id);
+    expect(gw.turns).toEqual(turnsAfterStop);
+    expect(gw.requestCount).toBe(requestAtStop);
+    expect(app.changesets.hasPending()).toBe(false);
+    expect(app.orchestrator.getRunState().splitOpen).toBe(false);
+  });
+
+  it('Work Stop during BA-phase does not enterSplit or implement', async () => {
+    const { app, gw, msgs } = harness();
+    await workSwarm(app);
+    const specId = app.registry.getByHandle('specbot')!.id;
+    let releaseSpec!: () => void;
+    const holdSpec = new Promise<void>((resolve) => {
+      releaseSpec = resolve;
+    });
+    gw.afterStart = async ({ botId }) => {
+      if (botId === specId) {
+        await holdSpec;
+      }
+    };
+    scriptWork(gw, defaultAssignments, (_h, paths) => paths.map((path) => ({ path, op: 'create', content: 'w' })));
+    const done = app.send('stop ba', 'work');
+    await vi.waitFor(() => {
+      expect(gw.requestCount).toBe(1);
+    });
+    app.stop();
+    releaseSpec();
+    await done;
+    expect(app.orchestrator.getRunState().splitOpen).toBe(false);
+    expect(app.orchestrator.getRunState().phase).not.toBe('split');
+    expect(msgs.some((m) => m.type === 'chat/split')).toBe(false);
+    expect(gw.turns.includes('dispatch')).toBe(false);
+    expect(gw.turns.includes('work')).toBe(false);
+    expect(gw.turns.includes('implement')).toBe(false);
+    expect(app.changesets.hasPending()).toBe(false);
+    await app.continueDebate();
+    await app.pick(specId);
+    expect(gw.turns.includes('propose')).toBe(false);
+    expect(app.changesets.hasPending()).toBe(false);
+  });
+
+  it('Debate Stop still enterSplit as today', async () => {
+    const { app, gw, msgs } = harness();
+    await app.createBot({ name: 'Alpha', handle: 'alpha', persona: 'a', role: 'lead', instructions: 'one' });
+    await app.createBot({ name: 'Beta', handle: 'beta', persona: 'b', role: 'review', instructions: 'two' });
+    let release!: () => void;
+    gw.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    gw.script = ({ turn }) => {
+      if (turn === 'consensus') {
+        return 'AGREE';
+      }
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'd.ts', op: 'create', content: 'd' }]);
+      }
+      return 'talk';
+    };
+    const done = app.send('debate stop');
+    await vi.waitFor(() => {
+      expect(app.orchestrator.getRunState().debateRunning).toBe(true);
+    });
+    app.stop();
+    release();
+    await done;
+    expect(app.orchestrator.getRunState().splitOpen).toBe(true);
+    expect(app.orchestrator.getRunState().phase).toBe('split');
+    const split = msgs.find((m) => m.type === 'chat/split');
+    expect(split).toMatchObject({
+      type: 'chat/split',
+      title: COPY.splitPaused,
+      reason: COPY.splitPausedReason,
+      paused: true,
+    });
+    expect(gw.turns.includes('implement')).toBe(false);
   });
 
   it('one Files list; §24 chips stay on Proposed Changes Files', async () => {
