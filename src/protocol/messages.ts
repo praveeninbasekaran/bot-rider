@@ -163,7 +163,26 @@ export type UiToHost =
   | { type: 'mcp/actions-approve' }
   | { type: 'mcp/actions-reject' }
   | { type: 'bots/attach-pick'; slot: AttachmentKind }
-  | { type: 'bots/attach-remove'; slot: AttachmentKind; path: string };
+  | { type: 'bots/attach-remove'; slot: AttachmentKind; path: string }
+  | {
+      type: 'bots/export-self';
+      /** Present when Export without saving (or New never persisted). Current form fields. */
+      draft?: {
+        name: string;
+        handle: string;
+        persona: string;
+        role: string;
+        instructions: string;
+        active: boolean;
+        modelId?: string | null;
+        attachments?: {
+          kind?: AttachmentKind;
+          path: string;
+          name: string;
+          snapshot: string;
+        }[];
+      };
+    };
 
 export interface WorkspaceContext {
   folderFsPath?: string;

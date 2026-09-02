@@ -24,7 +24,11 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.13.10",
     "@types/vscode": "^1.99.0",
     "typescript": "^5.8.2",
@@ -124,6 +128,27 @@
         "category": "Bot Rider",
         "icon": "$(discard)",
         "enablement": "botrider.hasPendingMcp"
+      },
+      {
+        "command": "botRider.bots.export",
+        "title": "Export Bot",
+        "category": "Bot Rider"
+      },
+      {
+        "command": "botRider.bots.exportSelected",
+        "title": "Export Selected",
+        "category": "Bot Rider"
+      },
+      {
+        "command": "botRider.bots.exportAll",
+        "title": "Export All",
+        "category": "Bot Rider"
+      },
+      {
+        "command": "botRider.bots.import",
+        "title": "Import",
+        "category": "Bot Rider",
+        "icon": "$(desktop-download)"
       }
     ],
     "menus": {
@@ -167,6 +192,10 @@
         {
           "command": "botrider.mcp.reject",
           "when": "botrider.hasPendingMcp"
+        },
+        {
+          "command": "botRider.bots.export",
+          "when": "false"
         }
       ],
       "view/title": [

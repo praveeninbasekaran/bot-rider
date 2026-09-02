@@ -58,6 +58,18 @@ export const COPY = {
   gettingCopilotModels: 'Getting Copilot models…',
   signInToPickModel: 'Sign in to GitHub Copilot to pick a model.',
   useExtensionDefault: 'Use extension default',
+  exported: (n: number) => `Exported ${n}.`,
+  imported: (n: number, skipped = 0) =>
+    skipped > 0 ? `Imported ${n} · skipped ${skipped}.` : `Imported ${n}.`,
+  skipHandleTaken: (handle: string) => `Skipped @${handle} · already taken.`,
+  skipNameTaken: (name: string) => `Skipped "${name}" · a bot with that name already exists.`,
+  skipInvalidHandle: (handle: string) => `Skipped @${handle} · invalid handle.`,
+  skipNameRequired: 'Skipped · name is required.',
+  unreadableBotFile: "Couldn't read this bot file.",
+  dirtyExportPrompt: 'Save before export?',
+  dirtyExportSave: 'Save',
+  dirtyExportWithoutSaving: 'Export without saving',
+  dirtyExportCancel: 'Cancel',
 };
 
 export function copilotStatusMessage(status: CopilotStatus): string | undefined {

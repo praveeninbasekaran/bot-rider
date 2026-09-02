@@ -11,6 +11,7 @@ import {
   type AttachFormFields,
 } from '../app/bot-attach';
 import { COPY } from '../app/copy';
+import { botsForExportSelf, type ExportableBot } from '../app/bot-export';
 import { attachmentsOf, isAttachmentKind, type AttachmentKind, type BotAttachment, type BotRecord } from '../domain/bot';
 import { deriveHandle } from '../domain/bot';
 import { webviewHtml } from './webview-html';
@@ -18,6 +19,7 @@ import type { HostToUi, UiToHost } from '../protocol/messages';
 
 export class BotFormPanel {
   static readonly viewType = 'botrider.botForm';
+  exportBots: (bots: ExportableBot[]) => Promise<void> = async () => undefined;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -92,6 +94,10 @@ export class BotFormPanel {
           session.attachments = removeAttachment(session.attachments, msg.slot, msg.path);
           return;
         }
+        if (msg.type === 'bots/export-self') {
+          await this.exportSelf(bot, msg.draft);
+          return;
+        }
         try {
           if (msg.type === 'bots/create') {
             await this.app.handleUi({
@@ -126,6 +132,18 @@ export class BotFormPanel {
       sub.dispose();
     });
     postFormLoad(panel, bot, this.app.registry.list(), bot?.handle ?? '');
+  }
+
+  private async exportSelf(
+    bot: BotRecord | undefined,
+    draft?: Extract<UiToHost, { type: 'bots/export-self' }>['draft'],
+  ): Promise<void> {
+    const persisted = bot ? this.app.registry.getById(bot.id) : undefined;
+    const bots = botsForExportSelf(persisted, draft);
+    if (bots.length === 0) {
+      return;
+    }
+    await this.exportBots(bots);
   }
 
   private async attachPick(

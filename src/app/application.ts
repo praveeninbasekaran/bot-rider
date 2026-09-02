@@ -240,6 +240,7 @@ export class Application {
       case 'review/open-diff':
       case 'bots/attach-pick':
       case 'bots/attach-remove':
+      case 'bots/export-self':
         break;
     }
   }
