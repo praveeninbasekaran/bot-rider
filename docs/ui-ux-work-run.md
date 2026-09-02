@@ -1,8 +1,8 @@
-# Bot Rider — UI/UX addendum: F8a Work run
+# Bot Rider — UI/UX addendum: F8a Work run + F8b sequential Argue
 
-Fold into `ui-ux-spec.md` as **§27**. Additive Swarm + New/Edit Bot chrome for the **Work** run type. Do **not** reopen §20 Attach, §22 model picker, §23 export/import, §24 OpenSpec chips, §25 Context Map, or §26 F7 Debate composer-lock. Not a new sidebar. Not a new Activity Bar icon. Not a fourth view. Not Event Bus chrome.
+Fold into `ui-ux-spec.md` as **§27** (F8a Work) and **§28** (F8b Argue). Additive Swarm + New/Edit Bot chrome. Do **not** reopen §20 Attach, §22 model picker, §23 export/import, §24 OpenSpec chips, §25 Context Map, or §26 F7 Debate composer-lock. Do **not** rewrite §27.9 (F8a Work-batch overlap). Not a new sidebar. Not a new Activity Bar icon. Not a fourth view. Not Event Bus chrome.
 
-Architecture: [architecture-work-run.md](./architecture-work-run.md). Additive. **WK-1–6 locked.** Work is a **different run type**, not Debate chrome. Host Event Bus is **not** painted. HV is **display only**. Debate lock in §26 stays Debate-only.
+Architecture: [architecture-work-run.md](./architecture-work-run.md). Additive. **WK-1–6 locked** (F8a shipped). **AG-1–4 locked** (F8b host). Work is a **different run type**, not Debate chrome. Host Event Bus is **not** painted. HV is **display only**. Debate lock in §26 stays Debate-only. Argue chrome is **§28**, never §27.9.
 
 ## 27. Work run chrome (F8a)
 
@@ -114,7 +114,7 @@ Collision paths are **absent** from the list and from Approve. Swarm note per dr
 Skipped {path} · collision
 ```
 
-`{path}` is the workspace-relative path. Disjoint remainder still Approves (host). No last-writer-wins chrome. No whole-batch fail banner. **No auto-Argue** (F8b out).
+`{path}` is the workspace-relative path. Disjoint remainder still Approves (host). No last-writer-wins chrome. No whole-batch fail banner. **No auto-Argue** (F8a). **F8b Argue chrome** lives in §28.
 
 §24 spec-id chips stay on those Files rows when cited.
 
@@ -162,7 +162,7 @@ UI never calls `vscode.lm`. UI never paints packets. UI never implies same-batch
 
 ### 27.13 Out
 
-Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourth view · per-Send role picker · reserved Dev1 / Dev2 / tester chrome · name-contains-`BA` inference · Save-time designation gate · blocking Save / New Bot for flags · F8b Argue chrome · F8c idle follow-on chrome · F8d Stop-one / compare-to-spec · N Approves · combined Files+MCP Approve · last-writer-wins · whole-batch fail on collision · changing default Send to Work · overlap restyle of §26 Debate lock · moving Approve / MCP / packets / OpenSpec onto the run board · reopening §20 / §22 / §23 / §24 / §25 / §26 · F3 dashboard · F4 register · leftovers 002/003/009/014 · Graphify vendor UI · token/quota chrome
+Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourth view · per-Send role picker · reserved Dev1 / Dev2 / tester chrome · name-contains-`BA` inference · Save-time designation gate · blocking Save / New Bot for flags · F8c idle follow-on chrome · F8d Stop-one / compare-to-spec · N Approves · combined Files+MCP Approve · last-writer-wins · whole-batch fail on collision · changing default Send to Work · overlap restyle of §26 Debate lock · moving Approve / MCP / packets / OpenSpec onto the run board · reopening §20 / §22 / §23 / §24 / §25 / §26 · F3 dashboard · F4 register · leftovers 002/003/009/014 · Graphify vendor UI · token/quota chrome. **F8b Argue chrome** lives in §28 (not out of the product forever; not §27.9).
 
 ### 27.14 Copy exact
 
@@ -174,3 +174,115 @@ Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourt
 | Toggle options | `Work` · `Debate` |
 | Form flags | `Dispatcher` · `Spec` |
 | Pack overflow | `Prompt doesn't fit Copilot` (full §17.11 block) |
+
+---
+
+## 28. Argue chrome (F8b)
+
+**Status:** Additive after §27. **AG-1–4 locked** (host). This section is chrome only. Argue chrome is **§28**, never §27.9. §27.9 stays F8a Work-batch overlap (multiple HV articles MAY stream at once). Do **not** reuse, renumber, or overwrite §27.9 for Argue. Not a fourth view. Not Event Bus chrome. Not packet rows. Not a new sidebar. Not a new Activity Bar icon. Not F3 / F4. Not leftovers 002/003/009/014. Do **not** reopen §20–§26. Do **not** rewrite §27 except the collision / Out pointer. F8a Work | Debate, designation, Work-batch unlocked composer, and one Files list stay as shipped.
+
+Architecture: [architecture-work-run.md](./architecture-work-run.md) F8b / AG-1–4. **This chrome stamp does not change the host winner lock.** Host winner unchanged: SI-2 AGREE one writer handle. Two rounds then drop. No Pick. No host auto-pick. No reserved-role tie-break.
+
+### 28.0 Chrome lock (BA, matches AG-1–4)
+
+- After Work-batch settle, collided paths Argue **one at a time**. Header exactly `ARGUE · {path}`. Workspace-relative path sort. Do not parallelize.
+- Sequential ping-pong. **Not overlapping HV** (one article at a time). Contrast §27.9 Work-batch overlap — do not reuse §27.9.
+- **Round headers stay** (Argue round 1 / 2 for this path). Not F7 `ROUND n · CRITIQUE`. Not F7 Split card.
+- Two rounds. First speaker = claimants sorted by handle.
+- Stop = existing `chat/stop`, aborts Argue, **no Split card**, no enterSplit.
+- No winner / Stop: exact copy `Skipped {path} · collision`. **Remainder still in Proposed Changes** (visible, not discarded) while Argue runs and after drop.
+- Approve **disabled** until every collision is winner or dropped, then **one** Files union (remainder + winners). Not N Approves. MCP Grain B unchanged / separate click.
+- **No Pick chrome.** No reserved Dev/tester roles.
+- Composer during Argue: Stop works; **@ stays sole respondent** (existing @ chrome, not a second Work run).
+- Work | Debate unchanged. No Event Bus chrome. No new Activity Bar.
+
+### 28.1 Header + round headers
+
+One path header at a time (current path only). Exact copy:
+
+```
+ARGUE · {path}
+```
+
+`{path}` is the workspace-relative path currently being argued. Workspace-relative path sort. Do not parallelize. After Work-batch settle, collided paths Argue **one at a time**.
+
+**Round headers stay** (Argue round 1 / 2 for this path). Not F7 `ROUND n · CRITIQUE`. Not F7 Split card. Not `chat/split`. **No Pick chrome.** No Continue. No vote chips.
+
+### 28.2 HV articles (sequential ping-pong — contrast §27.9)
+
+Sequential ping-pong. **Not overlapping HV** (one article at a time). The current claimant streams; the next waits.
+
+This **contrasts** §27.9: Work-batch overlap (multiple HV articles MAY stream at once) is unchanged for Work-batch. Argue does **not** reuse §27.9.
+
+Do **not** merge bubbles. Host-stripped article text stays source of truth (§18). Existing `chat/turn-start` / `chat/token` / `chat/turn-end`.
+
+Two rounds. First speaker = claimants sorted by handle.
+
+### 28.3 Claimants (chrome identity)
+
+Claimants painted on the board / articles are workers whose Work-batch edits touched that path. Dispatcher/spec only if assigned that path (they wrote it in the Work-batch). Not a reserved role. Not name matching. No reserved Dev/tester roles. Label `@{handle}` (never display name as the identity).
+
+### 28.4 Composer during Argue
+
+Composer during Argue: Stop works; **@ stays sole respondent** (existing @ chrome, not a second Work run).
+
+Do not add Argue as a third Send mode. Work | Debate toggle unchanged. Default **Debate**. No Event Bus chrome. No new Activity Bar.
+
+### 28.5 Stop
+
+**Stop** = existing `botrider.chat.stop` / `chat/stop` only. Aborts this Argue. **No winner.** **No Split card.** No enterSplit. No Debate-paused Split. No `split.stop`. No F8d Stop-one.
+
+No winner / Stop: exact copy `Skipped {path} · collision`. **Remainder still in Proposed Changes** (visible, not discarded) while Argue runs and after drop.
+
+### 28.6 Approve hold + one Files list
+
+Approve is **disabled** until every collision is winner or dropped.
+
+Then **one** Files union (remainder + winners). Not N Approves. Include resolved winner paths. Dropped collision paths absent (`Skipped {path} · collision`). **Remainder still in Proposed Changes** (visible, not discarded) while Argue runs and after drop.
+
+No-collision Work-batch still Approves as F8a (no Argue chrome).
+
+**MCP Grain B unchanged / separate click** (§19). Do not combine the gates.
+
+Collision drop copy — exact, unchanged F8a string:
+
+```
+Skipped {path} · collision
+```
+
+Prefer silent union include of the winner file. Do not invent extra copy for a winner toast unless a Swarm note is useful; if a note is used, keep it one line and do not contradict AGREE-only winner.
+
+### 28.7 Run board during Argue
+
+The Run board **MAY** show the current Argue speaker ● in-flight and remaining claimants ○ waiting. Clicks are a no-op. Sequential ping-pong, not parallel HV for the same path.
+
+Do **not** show Event Bus / packet rows / path lists on the chip. Do **not** move Approve, MCP, packets, or OpenSpec chips onto the board. No reserved Dev/tester roles on the board.
+
+### 28.8 Work | Debate
+
+Work | Debate toggle unchanged. Default **Debate**. Send follows the toggle. Do **not** add Argue as a third Send mode.
+
+### 28.9 Accessibility
+
+Header `ARGUE · {path}` announced politely **once** when the path starts. Round headers (Argue round 1 / 2 for this path) announced politely when the round starts. Skip notes (`Skipped {path} · collision`) polite once each.
+
+Per-article live regions. **≤ 1 announce / 2 seconds / article.** In-flight / waiting chips: text includes `@{handle}`. Glyph `aria-hidden` if a ● is decorative.
+
+### 28.10 Protocol consume
+
+No new Event Bus protocol members. Consume existing `chat/turn-start` / `chat/token` / `chat/turn-end` / `chat/stop` / `run/state` / `chat/board` / `changeset/preview` / `error`.
+
+No `chat/split`. No `split/continue`. No `split/pick`. **No Pick chrome.** No Continue. No vote UI. No Split card.
+
+UI never calls `vscode.lm`. UI never paints packets.
+
+### 28.11 Out
+
+Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourth view · Argue as a third Send mode · Pick chrome · Continue · F7 Split card · `chat/split` · enterSplit · Debate-paused Split · host auto-pick · reserved-role tie-break · reserved Dev/tester roles · vote chips · `ROUND n · CRITIQUE` header · overlapping HV during Argue · reusing or overwriting §27.9 · N Approves · combined Files+MCP Approve · last-writer-wins chrome · discarding remainder from Proposed Changes while Argue runs · F8c idle follow-on chrome · F8d Stop-one / compare-to-spec · reopening §20–§26 / F8a WK-1–6 except the collision pointer · F3 dashboard · F4 register · leftovers 002/003/009/014 · Graphify vendor UI · token/quota chrome
+
+### 28.12 Copy exact
+
+| Key | Copy |
+| --- | --- |
+| Argue header | `ARGUE · {path}` |
+| Collision drop (unchanged) | `Skipped {path} · collision` |
