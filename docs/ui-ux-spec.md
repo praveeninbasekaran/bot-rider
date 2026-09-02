@@ -337,3 +337,11 @@ Canonical addendum: [ui-ux-openspec-chips.md](./ui-ux-openspec-chips.md). Archit
 Canonical addendum: [ui-ux-context-map.md](./ui-ux-context-map.md). Architecture: [architecture-context-map.md](./architecture-context-map.md). Two layers (Workspace / This run), toggle, not merged in MVP. Click inspects label/path/kind. Never auto-Approve. Never Copilot Send. Never execute. Never dump full-file into Swarm.
 
 **Out:** second Activity Bar icon · Graphify vendor UI · merged one-graph MVP · whole-workspace crawl on open · auto-Approve · Copilot Send from the map · execute · dump full-file into Swarm · spec browser · F3 dashboard · F4 register · F7 parallel · leftovers 002/003/009/014 · reopening §20 / §22 / §23 / §24.
+
+## 26. Parallel Debate stream (F7)
+
+**Status:** Additive. **EB-1–4 locked.** Swarm chrome only. HV articles MAY overlap during a parallel Debate batch. Display only, not the talk channel. No Event Bus chrome. No packet rows. No new sidebar. No new Activity Bar icon. Do **not** reopen §20–§25. OpenSpec chips stay on Proposed Changes Files. Context Map unchanged.
+
+Canonical addendum: [ui-ux-parallel-stream.md](./ui-ux-parallel-stream.md). Architecture: [architecture-event-bus.md](./architecture-event-bus.md). `ROUND {n} · PROPOSE` then `ROUND {n} · CRITIQUE` after propose settled. No “parallel” header. `@` / vote / Split / implementer: no overlap chrome. Run board MAY show multiple in-flight speakers (one static ●/chip per handle). Composer locked until the batch settles. Stop = `botrider.chat.stop`, aborts all in-flight.
+
+**Out:** Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · “parallel” header · overlap chrome on `@` / vote / Split / implementer · Approve/MCP/packets/OpenSpec on the run board · F3 dashboard · F4 register · leftovers 002/003/009/014 · reopening §20–§25.

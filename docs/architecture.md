@@ -46,7 +46,9 @@ Additive typed bot attachments (revises IE): [architecture-bot-attachments.md](.
 
 Additive per-bot Copilot model selection: [architecture-bot-model.md](./architecture-bot-model.md). HostToUi `bots/models`. Persist `LanguageModelChat.id` only as `BotRecord.modelId` (label never persisted). Empty = host default. Missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only. Chrome: [ui-ux-bot-model.md](./ui-ux-bot-model.md) §22. BR / QC / HV / MA / SD / TA frozen.
 
-Additive F7 isolation / SI-1–4: [architecture-bot-isolation.md](./architecture-bot-isolation.md). Host-only. Zero new chrome. Sequential only. Parallel Event Bus out. BR / QC / HV / MA / SD / TA / MS frozen.
+Additive F7 isolation / SI-1–4: [architecture-bot-isolation.md](./architecture-bot-isolation.md). Host-only. Zero new chrome for isolation. SI-1/2/4 held. SI-3 reopened for Debate speakers in a batch — [architecture-event-bus.md](./architecture-event-bus.md). BR / QC / HV / MA / SD / TA / MS frozen otherwise.
+
+Additive F7 parallel / Event Bus / EB-1–4: [architecture-event-bus.md](./architecture-event-bus.md). Host in-process only. Not vscode.EventBus. Not network. SI-3 reopened for Debate speakers in a batch. Same-batch speakers do not hear each other until the phase ends. Chrome: [ui-ux-parallel-stream.md](./ui-ux-parallel-stream.md) §26. Do not reopen §20–§25.
 
 Additive F6 bot export / import: [architecture-bot-export-import.md](./architecture-bot-export-import.md). Envelope `format: 'botrider.bots.v1'`. UiToHost `bots/export-self` only (form Export). Chrome: [ui-ux-bot-export-import.md](./ui-ux-bot-export-import.md) §23. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
 
