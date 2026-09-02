@@ -30,7 +30,7 @@ describe('contribution points', () => {
       commands: { command: string; title: string; tooltip?: string; category: string; enablement?: string }[];
       menus: Record<string, { command: string; when?: string; group?: string }[]>;
       viewsContainers: { activitybar: { id: string }[] };
-      views: Record<string, { id: string; visibility?: string; type?: string }[]>;
+      views: Record<string, { id: string; name?: string; visibility?: string; type?: string }[]>;
       viewsWelcome: { view: string; when: string; contents: string }[];
       chatParticipants?: unknown;
     };
@@ -48,10 +48,13 @@ describe('contribution points', () => {
     expect(pkg.contributes.views.botrider.map((v) => v.id)).toEqual([
       'botrider.bots',
       'botrider.chat',
+      'botrider.contextMap',
       'botrider.review',
     ]);
     expect(pkg.contributes.views.botrider.find((v) => v.id === 'botrider.review')?.visibility).toBe('collapsed');
     expect(pkg.contributes.views.botrider.find((v) => v.id === 'botrider.chat')?.type).toBe('webview');
+    expect(pkg.contributes.views.botrider.find((v) => v.id === 'botrider.contextMap')?.type).toBe('webview');
+    expect(pkg.contributes.views.botrider.find((v) => v.id === 'botrider.contextMap')?.name).toBe('Context Map');
   });
 
   it('registers the required commands and hide/when rules', () => {
@@ -73,6 +76,7 @@ describe('contribution points', () => {
         'botrider.copilot.recheck',
         'botrider.mcp.approve',
         'botrider.mcp.reject',
+        'botrider.contextMap.refresh',
       ]),
     );
     expect(pkg.contributes.commands.find((c) => c.command === 'botrider.mcp.approve')?.enablement).toBe(

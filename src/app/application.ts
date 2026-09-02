@@ -20,6 +20,13 @@ import type {
   StateStore,
   WorkspaceContextPort,
 } from './ports';
+import {
+  ContextMapHost,
+  EmptyContextMapNeighborhood,
+  noopContextMapActions,
+  type ContextMapActions,
+  type ContextMapNeighborhood,
+} from './context-map';
 
 export class Application {
   readonly registry: BotRegistry;
@@ -31,6 +38,7 @@ export class Application {
   readonly board: RunBoardStore;
   readonly lsp: LspSlicePort;
   readonly mcp: McpGateway;
+  readonly contextMap: ContextMapHost;
 
   constructor(
     store: StateStore,
@@ -43,6 +51,7 @@ export class Application {
     diffs?: DiffCloser,
     mcp?: McpGateway,
     lsp?: LspSlicePort,
+    map?: { neighborhood?: ContextMapNeighborhood; actions?: ContextMapActions },
   ) {
     this.mcp = mcp ?? new McpGateway(new EmptyMcpPort(), emit, { settleMs: 0 });
     this.lsp = lsp ?? new EmptyLspSlicePort();
@@ -64,6 +73,17 @@ export class Application {
       this.lsp,
       fs,
     );
+    this.contextMap = new ContextMapHost(
+      emit,
+      map?.neighborhood ?? new EmptyContextMapNeighborhood(),
+      {
+        bots: () => this.orchestrator.getFrozenBots(),
+        published: () => this.orchestrator.sessions.listPublished(),
+        proposedFiles: () => this.changesets.files ?? [],
+      },
+      map?.actions ?? noopContextMapActions,
+    );
+    this.orchestrator.bindContextMap(this.contextMap);
   }
 
   snapshotBots(): void {
@@ -241,6 +261,15 @@ export class Application {
       case 'bots/attach-pick':
       case 'bots/attach-remove':
       case 'bots/export-self':
+        break;
+      case 'contextMap/expand-file':
+        await this.contextMap.expandFile(msg.uri);
+        break;
+      case 'contextMap/select':
+        await this.contextMap.select(msg.nodeId);
+        break;
+      case 'contextMap/open':
+        await this.contextMap.open(msg.nodeId);
         break;
     }
   }

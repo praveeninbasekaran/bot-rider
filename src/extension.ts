@@ -3,6 +3,11 @@ import { Application } from './app/application';
 import { BotsTreeProvider, BotTreeItem } from './adapters/bots-tree';
 import { ChatExpandPanel } from './adapters/chat-expand-panel';
 import { ChatHub, ChatViewProvider } from './adapters/chat-view';
+import {
+  ContextMapViewProvider,
+  VsCodeContextMapNeighborhood,
+  vscodeContextMapActions,
+} from './adapters/context-map-view';
 import { BotFormPanel } from './adapters/bot-form-panel';
 import { ContextKeys } from './adapters/context-keys';
 import {
@@ -61,8 +66,22 @@ export function activate(context: vscode.ExtensionContext): void {
     await handleUi(msg);
   });
 
+  const mapView = new ContextMapViewProvider(
+    context.extensionUri,
+    async (msg) => {
+      await handleUi(msg);
+    },
+    async () => {
+      await appRef?.contextMap.onViewVisible();
+    },
+  );
+
   const emit = (msg: HostToUi): void => {
-    hub.post(msg);
+    if (msg.type === 'contextMap/workspace' || msg.type === 'contextMap/run') {
+      mapView.post(msg);
+    } else {
+      hub.post(msg);
+    }
     if (msg.type === 'bots/snapshot') {
       botsTree?.refresh();
     }
@@ -113,6 +132,12 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     mcp,
     lsp,
+    {
+      neighborhood: new VsCodeContextMapNeighborhood(),
+      actions: vscodeContextMapActions(async (path) => {
+        await reviewTree?.revealFile(path);
+      }),
+    },
   );
   appRef = app;
 
@@ -148,6 +173,10 @@ export function activate(context: vscode.ExtensionContext): void {
       new ChatViewProvider(context.extensionUri, hub),
       { webviewOptions: { retainContextWhenHidden: true } },
     ),
+    vscode.window.registerWebviewViewProvider(ContextMapViewProvider.viewId, mapView),
+    vscode.commands.registerCommand('botrider.contextMap.refresh', () => {
+      void app.contextMap.refreshWorkspace();
+    }),
     vscode.commands.registerCommand('botrider.bots.create', () => form.open()),
     vscode.commands.registerCommand('botrider.bots.edit', (item?: BotTreeItem) => {
       const id = item?.bot.id;
@@ -210,7 +239,26 @@ export function activate(context: vscode.ExtensionContext): void {
       await runExport(app.registry.list());
     }),
     vscode.commands.registerCommand(BOT_EXPORT_COMMANDS.import, () => runImport()),
+    vscode.window.onDidChangeActiveTextEditor(() => {
+      if (mapView.visible) {
+        void app.contextMap.refreshWorkspace();
+      }
+    }),
+    vscode.window.onDidChangeTextEditorSelection(() => {
+      if (!mapView.visible) {
+        return;
+      }
+      if (selectionTimer) {
+        clearTimeout(selectionTimer);
+      }
+      selectionTimer = setTimeout(() => {
+        selectionTimer = undefined;
+        void app.contextMap.refreshWorkspace();
+      }, 200);
+    }),
   );
+
+  let selectionTimer: ReturnType<typeof setTimeout> | undefined;
 
   async function runExport(bots: ExportableBot[]): Promise<void> {
     await exportBots({ bots, dialogs: vscodeExportDialogs() });
