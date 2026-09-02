@@ -196,6 +196,14 @@
         {
           "command": "botRider.bots.export",
           "when": "false"
+        },
+        {
+          "command": "botRider.bots.exportSelected",
+          "when": "view == botrider.bots && listHasSelectionOrFocus"
+        },
+        {
+          "command": "botRider.bots.exportAll",
+          "when": "botrider.hasBots"
         }
       ],
       "view/title": [
@@ -203,6 +211,19 @@
           "command": "botrider.bots.create",
           "when": "view == botrider.bots",
           "group": "navigation"
+        },
+        {
+          "command": "botRider.bots.import",
+          "when": "view == botrider.bots",
+          "group": "navigation"
+        },
+        {
+          "command": "botRider.bots.exportAll",
+          "when": "view == botrider.bots && botrider.hasBots"
+        },
+        {
+          "command": "botRider.bots.exportSelected",
+          "when": "view == botrider.bots && listHasSelectionOrFocus"
         },
         {
           "command": "botrider.chat.expand",
@@ -241,6 +262,11 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "botRider.bots.export",
+          "when": "view == botrider.bots && viewItem == bot",
+          "group": "1_export"
+        },
         {
           "command": "botrider.bots.edit",
           "when": "view == botrider.bots && viewItem == bot",
@@ -308,7 +334,7 @@
     "viewsWelcome": [
       {
         "view": "botrider.bots",
-        "contents": "No bots yet. Create a bot with a name, persona, and role, then send a master prompt in Swarm.\n[New Bot](command:botrider.bots.create)",
+        "contents": "No bots yet. Create a bot with a name, persona, and role, then send a master prompt in Swarm.\n[New Bot](command:botrider.bots.create)\n[Import](command:botRider.bots.import)",
         "when": "!botrider.hasBots"
       },
       {
