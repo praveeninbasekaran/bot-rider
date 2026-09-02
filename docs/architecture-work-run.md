@@ -1,8 +1,8 @@
-# Bot Rider — F8a Work run / WK-1–6 (additive slice)
+# Bot Rider — F8a Work run / WK-1–6 + F8b sequential Argue / AG-1–4 (additive slice)
 
-Status: **ready for implementation.** Design only until a developer lands it. Not a host rewrite of BR, QC, HV, MA, SD, TA, MS, SI-1/2/4, EX, OS, CM, or EB-1–4. **Not** a protocol on F7 Debate. **Not** F3 dashboard / F4 register. Layers on frozen F7 isolation (SI-1/2/4 held) + F7 Event Bus (reuse in-process bus) + F6 / F2 / F1.
-Stories: **WK-1–6 is the full story set.** **WK-1** New run type **Work**. Not on F7 Debate. Reuse F7 in-process Event Bus + SI-1/2/4. Packets **APPEND**. Never merge `BotSession` stores. Never restuff a global Swarm transcript. HV is display only. `vscode.lm` only. ₹0 extra keys. **Work | Debate** toggle; default **Debate**; Send follows the toggle. Explicit Debate remains. **WK-2** `BotRecord` flags `dispatcher` and `spec`. **At most one active** of each, else Work does not run. New/Edit Bot optional checkboxes after Active. **Save is not the gate** (0 or 2 flags may persist). **Work Send is the gate:** exactly one **active** dispatcher **and** exactly one **active** spec. Else Swarm error `Work needs one Dispatcher and one Spec.` Host never invents a path partition. Spec is **not** name-contains `BA`. Not a per-Send picker. **WK-3** **BA-phase** = sequential `sendRequest` of the one active **spec** bot. Other workers **WAIT**. **WK-4** **Dispatch-phase** then **Work-batch**. Drop reserved **Dev1 / Dev2 / tester** names. Workers = handles in the dispatcher split from remaining **active** bots. Dispatcher **SHALL** assign disjoint path sets; host validates; host never invents a partition. Invalid split → re-split or Swarm note; Work-batch does **not** start. Work-batch = **parallel** `sendRequest` on those disjoint paths. Same-batch **DEAF** (stamped EB-3). QC-3 **that bot only**. **WK-5** Composer **UNLOCKED** for `@` / assign / Stop. Unlocked ≠ second orchestrator. Master Send does **not** start a second run (`Work batch still running.`). **Tester** = a worker assigned **test paths** (not a reserved role): same-batch deaf; packs **BA spec packets + assigned paths**; does not see other workers until settle. Comparing worker output to spec is **F8d, not F8a**. **WK-6** **Union Approve:** BR-6 **Files only after settle**. Collision paths **DROP** + `Skipped {path} · collision`. Approve **disabled** until settle. MCP Grain B is a **separate click**. SI-1 persists the **whole Work run**. Packets **APPEND**. Stop aborts **all** in this batch. No F8b / F8c / F8d.
-UI chrome contract: `ui-ux-spec.md` §27 (addendum `ui-ux-work-run.md`). F7 Debate composer-lock stays §26 / Debate-only. Work is a different run type.
+Status: **F8a shipped.** **F8b ready for implementation** after this docs PR merges, on a **new product PR**. This docs change is design only. Not a host rewrite of BR, QC, HV, MA, SD, TA, MS, SI-1/2/4, EX, OS, CM, or EB-1–4. **Not** a protocol on F7 Debate. **Not** F3 dashboard / F4 register. Layers on frozen F7 isolation (SI-1/2/4 held) + F7 Event Bus (reuse in-process bus) + F6 / F2 / F1. F8a WK-1–6 stays shipped; do not reopen except the collision pointer.
+Stories: **WK-1–6 is the full F8a story set.** **WK-1** New run type **Work**. Not on F7 Debate. Reuse F7 in-process Event Bus + SI-1/2/4. Packets **APPEND**. Never merge `BotSession` stores. Never restuff a global Swarm transcript. HV is display only. `vscode.lm` only. ₹0 extra keys. **Work | Debate** toggle; default **Debate**; Send follows the toggle. Explicit Debate remains. **WK-2** `BotRecord` flags `dispatcher` and `spec`. **At most one active** of each, else Work does not run. New/Edit Bot optional checkboxes after Active. **Save is not the gate** (0 or 2 flags may persist). **Work Send is the gate:** exactly one **active** dispatcher **and** exactly one **active** spec. Else Swarm error `Work needs one Dispatcher and one Spec.` Host never invents a path partition. Spec is **not** name-contains `BA`. Not a per-Send picker. **WK-3** **BA-phase** = sequential `sendRequest` of the one active **spec** bot. Other workers **WAIT**. **WK-4** **Dispatch-phase** then **Work-batch**. Drop reserved **Dev1 / Dev2 / tester** names. Workers = handles in the dispatcher split from remaining **active** bots. Dispatcher **SHALL** assign disjoint path sets; host validates; host never invents a partition. Invalid split → re-split or Swarm note; Work-batch does **not** start. Work-batch = **parallel** `sendRequest` on those disjoint paths. Same-batch **DEAF** (stamped EB-3). QC-3 **that bot only**. **WK-5** Composer **UNLOCKED** for `@` / assign / Stop. Unlocked ≠ second orchestrator. Master Send does **not** start a second run (`Work batch still running.`). **Tester** = a worker assigned **test paths** (not a reserved role): same-batch deaf; packs **BA spec packets + assigned paths**; does not see other workers until settle. Comparing worker output to spec is **F8d, not F8a**. **WK-6** **Union Approve:** BR-6 **Files only after settle**. Collision paths **DROP** + `Skipped {path} · collision`. Approve **disabled** until settle. MCP Grain B is a **separate click**. SI-1 persists the **whole Work run**. Packets **APPEND**. Stop aborts **all** in this batch. **F8b sequential Argue is this addendum (AG-1–4).** F8c / F8d stay out.
+UI chrome contract: `ui-ux-spec.md` §27 (F8a) + §28 (F8b Argue; addendum `ui-ux-work-run.md`). F7 Debate composer-lock stays §26 / Debate-only. Work is a different run type.
 Date: 2026-09-02.
 Parent: `architecture-mvp.md`. Isolation: `architecture-bot-isolation.md` (SI-1/2/4 held). Event Bus: `architecture-event-bus.md` (reuse in-process bus; Debate composer-lock is Debate-only). OpenSpec: `architecture-openspec-trace.md` (OS-4 bodies stay required talk; §24 chips stay on Proposed Changes Files). Pack: `architecture-token-save.md` (QC-3 unchanged; overflow **that bot only** in a batch). Copilot stays `vscode.lm`. ₹0 extra keys. No second runtime.
 
@@ -12,7 +12,7 @@ Split (when PO allocates; **do not allocate in this docs PR**): **Developer 1** 
 
 ## Story map (WK-1–6)
 
-WK-1–6 stay the set. No new stories. F8b Argue, F8c idle follow-on, F8d Stop-one / comparing worker output to spec are **not** this slice.
+WK-1–6 stay the F8a set. **F8b is the AG-1–4 addendum below.** F8c idle follow-on and F8d Stop-one / comparing worker output to spec are **not** this slice.
 
 ### WK-1 New run type Work
 
@@ -84,13 +84,15 @@ Overlapping paths **DROP** from the union. Visible Swarm note per dropped path:
 Skipped {path} · collision
 ```
 
-Those paths are **absent** from Approve. The **disjoint remainder** still Approves. No last-writer-wins. No whole-batch fail. **No auto-Argue** (Argue is F8b).
+Those paths are **absent** from Approve. The **disjoint remainder** still Approves. No last-writer-wins. No whole-batch fail. **No auto-Argue without the addendum; F8b Argue is in.**
+
+**Additive F8b (collision pointer):** after Work-batch settle, collision paths enter F8b Argue instead of drop-and-done. F8a remainder-with-no-collision is unchanged (no Argue, Approve after settle as today). Remainder is **NEVER** discarded. See F8b / AG-1–4 below.
 
 **MCP Grain B is a separate click.** Files Approve does not invoke MCP. MCP Approve does not `applyEdit`. Do not combine the gates. Do not move MCP onto the Files list or the run board.
 
 **SI-1 persists the whole Work run.** Packets **APPEND**. Not reset between BA-phase / dispatch / Work-batch. Reload / run-end still clears.
 
-**Stop** (`botrider.chat.stop` / `chat/stop`) aborts **all** in-flight `sendRequest` in this Work-batch. HV **MAY** overlap (display only). Run board **MAY** show multiple in-flight + waiting. **One** Files list (the union). §24 chips stay on Proposed Changes Files. No F8b / F8c / F8d.
+**Stop** (`botrider.chat.stop` / `chat/stop`) aborts **all** in-flight `sendRequest` in this Work-batch. HV **MAY** overlap (display only). Run board **MAY** show multiple in-flight + waiting. **One** Files list (the union). §24 chips stay on Proposed Changes Files. F8c/F8d out; **F8b is the addendum** (AG-1–4 / §28).
 
 ---
 
@@ -110,7 +112,7 @@ Those paths are **absent** from Approve. The **disjoint remainder** still Approv
 - **(WK-5)** **Tester** = worker on **test paths** (not a reserved role). Packs BA spec packets + assigned paths. Same-batch deaf. Does not see other workers until settle. Comparing worker output to spec is **F8d, not F8a**.
 - **(WK-5)** Composer **`@` / assign / Stop**. Unlocked ≠ second orchestrator. Master Send while in flight: `Work batch still running.` `@` not-in-flight MAY run. `@` in-flight waits.
 - **(WK-6)** **BR-6 Files only after settle.** Approve / `hasPendingChanges` false until settle. No `applyEdit` mid-batch. **MCP Grain B is a separate click.**
-- **(WK-6)** Collision = **DROP** from the union + `Skipped {path} · collision`. Disjoint remainder Approves. No last-writer-wins. No whole-batch fail. No auto-Argue. No F8b / F8c / F8d.
+- **(WK-6)** Collision = **DROP** from the F8a union + `Skipped {path} · collision`. Disjoint remainder Approves. No last-writer-wins. No whole-batch fail. **No auto-Argue without the addendum; F8b Argue is in** (AG-1–4). F8c/F8d out.
 - **(WK-6)** Stop aborts **all** in this Work-batch. One Files list. §24 chips stay on Proposed Changes Files. Do **not** reopen §20–§26.
 - BR / QC / HV / MA / SD / TA / MS / SI-1/2/4 / EX / OS / CM / EB frozen otherwise. Leftovers 002 / 003 / 009 / 014 out. F3 / F4 out. Marketplace / API keys / Settings Sync / Graphify out.
 
@@ -167,7 +169,9 @@ Batch settles
   never merge BotSession stores
   BR-6 Files ONLY after settle (WK-6)
   overlapping paths DROP + `Skipped {path} · collision`
-  then ONE BR-6 Files Approve of the remainder
+  if collisions exist, hold Approve and enter F8b flow (AG-1–4)
+  no-collision still F8a Approve of the remainder
+  remainder is never discarded
   MCP Grain B = separate click (not this Approve)
   hasPendingChanges false / Approve disabled until this settle
 
@@ -249,7 +253,7 @@ Overlap (same path claimed by more than one worker in the settled batch):
 3. path **absent** from `changeset/preview` / Approve
 4. remaining disjoint ops still stage
 
-No last-writer-wins. No whole-batch fail. No auto-Argue.
+No last-writer-wins. No whole-batch fail. No auto-Argue without the addendum; F8b Argue is in.
 
 `hasPendingChanges` stays **false** until this settle. No `applyEdit` mid-batch. **BR-6 Files only after settle.** **ONE** Files Approve. One Files list. **MCP Grain B is a separate click** (existing §19 gate; not combined with Files).
 
@@ -287,7 +291,7 @@ Do **not** reopen attach / model / export / OpenSpec chip / Context Map / §26 p
 
 ## 7. Out of this slice
 
-F8b sequential Argue, F8c idle-bot follow-on, F8d Stop-one + comparing worker output to spec / tester second pass, N staged Approves, combining Files Approve with MCP Grain B, concurrent overlap writers, last-writer-wins, whole-batch fail on collision, auto-Argue, changing default Send to Work, treating Work as a Debate protocol, host-invented path partitions, reserved **Dev1 / Dev2 / tester** roles, name-matching or name-contains-`BA` spec/dispatcher, Save-time designation gate, per-Send role picker, blocking Save / New Bot for flags, sibling ingest inside a Work-batch, mutating in-flight `sendRequest`, `applyEdit` mid-batch / BR-6 Files before settle, merging `BotSession` stores, restuffing a global Swarm transcript / HV into packs, Event Bus chrome / packet rows / new sidebar / new Activity Bar icon, reopening §20–§26 / EB-1–4, F3 dashboard, F4 register, leftovers 002 / 003 / 009 / 014, hosted / `vscode.EventBus` / network bus, extra API keys, second runtime, Graphify, product code in this docs PR.
+F8b sequential Argue is this addendum (AG-1–4 / §28), not out. F8c idle-bot follow-on, F8d Stop-one + comparing worker output to spec / tester second pass, N staged Approves, combining Files Approve with MCP Grain B, concurrent overlap writers, last-writer-wins, whole-batch fail on collision, auto-Argue without the addendum, changing default Send to Work, treating Work as a Debate protocol, host-invented path partitions, reserved **Dev1 / Dev2 / tester** roles, name-matching or name-contains-`BA` spec/dispatcher, Save-time designation gate, per-Send role picker, blocking Save / New Bot for flags, sibling ingest inside a Work-batch, mutating in-flight `sendRequest`, `applyEdit` mid-batch / BR-6 Files before settle, merging `BotSession` stores, restuffing a global Swarm transcript / HV into packs, Event Bus chrome / packet rows / new sidebar / new Activity Bar icon, reopening §20–§26 / EB-1–4, F3 dashboard, F4 register, leftovers 002 / 003 / 009 / 014, hosted / `vscode.EventBus` / network bus, extra API keys, second runtime, Graphify, product code in this docs PR.
 
 ---
 
@@ -321,3 +325,167 @@ Merge bar after PO allocates, on a **new product PR**:
 - One Files list; §24 chips stay on Proposed Changes Files. (WK-6)
 - Debate §26 composer-lock unchanged when the toggle is Debate. (WK-1 / §26)
 - WM / QC / HV / MA / SD / TA / MS / SI-1/2/4 / EX / OS / CM / EB tests conceptually still pass.
+
+---
+
+## F8b sequential Argue (AG-1–4)
+
+Status: **ready for implementation** after this docs PR merges, on a **new product PR**. This docs PR is design only. Do **not** allocate developers here. Do **not** implement host in this PR. F8a WK-1–6 stays shipped; do not reopen except the collision pointer. Do not reopen F7 EB or §20–§26.
+
+Split (when PO allocates; **do not allocate in this PR**): **Developer 1** host Argue. **Developer 2** §28 chrome. QA after both on the product PR.
+
+UI chrome contract: `ui-ux-spec.md` §28 (addendum `ui-ux-work-run.md` §28). Argue chrome is **§28**, never §27.9. §27.9 stays F8a Work-batch overlap. This chrome stamp does not change the host winner lock.
+
+AG-1–4 is the F8b set. Do **not** add AG-5.
+
+### BA freeze (verbatim)
+
+- Winner = AGREE one writer handle in SI-2. No user Pick, no host auto-pick, **no reserved-role tie-break**.
+- Two rounds: each remaining claimant speaks once, sequential, first speaker = handle sort. After two rounds no AGREE → path stays dropped (`Skipped {path} · collision`). Stop during Argue = no winner, same drop. Stop = chat/stop, no enterSplit.
+- Multiple paths: one at a time, workspace-relative path sort. Header `ARGUE · {path}`. Do not parallelize Argues.
+- Claimants = workers whose Work-batch edits touched that path. Dispatcher/spec only if assigned that path (they wrote it in the Work-batch).
+- Approve held until every collision is winner or dropped, then one BR-6 Files union (remainder + winners). MCP Grain B separate. Remainder never discarded.
+- Ping-pong: wait, ingest APPEND into SI-1, reply. SI-1 persists whole Work run. Same-batch Work deafness until settle; Argue starts after.
+- F8c/F8d out. No reserved Dev/tester roles.
+
+### INVEST story map (AG-1–4)
+
+#### AG-1 Collision trigger + one path at a time + hold Approve (claimants, path-string sort, remainder held).
+
+After Work-batch settle, colliding paths enter Argue. Multiple paths: one at a time, workspace-relative path sort. Header `ARGUE · {path}`. Do not parallelize Argues. Claimants = workers whose Work-batch edits touched that path. Dispatcher/spec only if assigned that path (they wrote it in the Work-batch). Approve held until every collision is winner or dropped, then one BR-6 Files union (remainder + winners). MCP Grain B separate. Remainder never discarded. No-collision Work-batch still Approves as F8a (no Argue).
+
+#### AG-2 Sequential ping-pong Argue (wait, ingest APPEND into SI-1, reply; handle-sort first speaker; not F7 critique batch).
+
+Ping-pong: wait, ingest APPEND into SI-1, reply. SI-1 persists whole Work run. Same-batch Work deafness until settle; Argue starts after. Two rounds: each remaining claimant speaks once, sequential, first speaker = handle sort. Not F7 critique batch. Do not reuse ROUND n · CRITIQUE. Not same-batch parallel.
+
+#### AG-3 Winner = SI-2 AGREE on one writer handle; two rounds then drop; Stop = no winner, same skip note; no Pick; no host auto-pick; no reserved-role tie-break.
+
+Winner = AGREE one writer handle in SI-2. No user Pick, no host auto-pick, **no reserved-role tie-break**. After two rounds no AGREE → path stays dropped (`Skipped {path} · collision`). Stop during Argue = no winner, same drop. Stop = chat/stop, no enterSplit.
+
+#### AG-4 After all collision paths winner or dropped: one BR-6 Files union (remainder + winners). SI-1 whole Work run including Argue. §28 header `ARGUE · {path}`. Composer @/Stop. MCP Grain B separate.
+
+Approve held until every collision is winner or dropped, then one BR-6 Files union (remainder + winners). MCP Grain B separate. Remainder never discarded. SI-1 persists whole Work run including Argue. Packets APPEND. §28 header `ARGUE · {path}`. Composer @/Stop. F8c/F8d out. No reserved Dev/tester roles.
+
+### F8b product lock (PO, 2026-09-02)
+
+Trigger: after Work-batch settles, paths that F8a would DROP as collision.
+
+Claimants of a path = Work-batch workers whose edits touched that path. Not dispatcher. Not spec-bot unless that bot also wrote the path in the Work-batch. Dispatcher/spec only if assigned that path (they wrote it in the Work-batch).
+
+Multiple collisions: **one path at a time**, path-string sort (localeCompare of the workspace-relative path). Do **not** parallelize Argues. Do not batch several paths into one Argue session.
+
+Sequential Argue: claimants of **that** path, **one sendRequest at a time**. After a packet publishes, the next claimant SHALL ingest that peer packet, then reply. Ping-pong: wait, ingest APPEND into SI-1, reply. Not F7 critique batch. Do not reuse ROUND n · CRITIQUE. Not same-batch parallel. Same-batch DEAF does not apply across Argue turns — Argue **is** the talk seam (ingest previous claimant, then speak). Same-batch Work deafness until settle; Argue starts after.
+
+A **round** = each remaining claimant speaks once, sequential. Start order = handle sort (localeCompare of handle, same as existing Files localeCompare style). First speaker = handle sort.
+
+**Round cap = 2.** After two rounds, if there is no winner, **DROP** the path. Keep Swarm note `Skipped {path} · collision`. Do not add a third round. Do not invent another cap.
+
+**Winner = SI-2 AGREE on one writer handle.** The packet (SI-2 verbatim) AGREEs a single claimant handle as the writer for this path (e.g. AGREE @lead). Winner when remaining claimants' latest packets AGREE the **same** writer handle (that handle must be a claimant of this path). Yield = AGREE on a peer handle. Do **not** treat DISSENT as a win. Winner = AGREE one writer handle in SI-2. No user Pick, no host auto-pick, **no reserved-role tie-break**.
+
+**No Pick card. No host auto-pick.** Host never picks last-settled claimant. Dispatcher does not name the winner. No reserved-role tie-break. No enterSplit. No Continue. No `botrider.split.pick`. No vote UI.
+
+**Stop** (`chat/stop` / existing Stop): abort this Argue (and any remaining Work in-flight). **No winner.** Keep `Skipped {path} · collision` for the current path and any not-yet-argued collision paths. No enterSplit. No F8d Stop-one. Remainder still Approves.
+
+**Approve:** still **ONE** BR-6 Files union. If collisions exist, **hold Approve** until **every** collision path is either a winner or dropped, then include resolved winner files in the **same** union. **Remainder never discarded.** F8a remainder-with-no-collision path unchanged (no Argue, Approve after settle as today). MCP Grain B stays a separate click.
+
+If Argue Stops or a path gets no AGREE in two rounds: that path stays dropped (`Skipped {path} · collision`); disjoint remainder + any already-won paths still go in the one union.
+
+Composer: **unlocked** during Argue for `@` / Stop. Unlocked ≠ second orchestrator. New master-prompt Send does not start a second run. `@` to a free bot may run. `@` to the in-flight Argue speaker waits until that `sendRequest` ends. Host does not start another dispatcher `sendRequest` during Argue.
+
+SI-1 persists the whole Work run including Argue. Packets APPEND. Never merge BotSession stores. HV is display only, not the bot transcript. `vscode.lm` only. ₹0 extra keys. QC-3 that bot only.
+
+F8a remainder-with-no-collision unchanged. Do not reopen F8a WK-1–6, F7 EB, or §20–§26.
+
+**Out of F8b:** F8c idle follow-on, F8d Stop-one / tester second pass / compare-to-spec, N Approves, last-writer-wins without Argue, host auto-pick, Pick card, enterSplit, reserved-role tie-break, F3 dashboard, F4 register, leftovers 002/003/009/014, Graphify, hosted, API keys.
+
+### F8b flow
+
+```
+Work-batch settles
+  remaining-turn subscribers SHALL ingest EVERY packet from this batch
+  APPEND into each subscriber’s SI-1
+  never merge BotSession stores
+  Same-batch Work deafness until settle; Argue starts after
+
+  no colliding paths
+    F8a remainder-with-no-collision unchanged
+    ONE BR-6 Files Approve of the remainder (as today)
+    MCP Grain B = separate click
+
+  colliding paths (paths F8a would DROP as collision)
+    hold Approve / hasPendingChanges false
+    hold the disjoint remainder — NEVER discarded
+    remainder still in Proposed Changes (visible, not discarded) while Argue runs
+    sort colliding paths by localeCompare of the workspace-relative path
+    Argue ONE path at a time (do not parallelize; do not batch paths)
+    header `ARGUE · {path}`
+
+    for each colliding path in that order:
+      claimants = workers whose Work-batch edits touched that path
+                 Dispatcher/spec only if assigned that path (they wrote it in the Work-batch)
+      first speaker = handle sort (localeCompare of handle)
+      header `ARGUE · {path}` (current path only)
+      for round 1 then round 2 (cap = 2; no third round):
+        each remaining claimant, one sendRequest at a time (ping-pong):
+          wait, ingest APPEND into SI-1, reply
+          Argue IS the talk seam (same-batch DEAF does not apply across Argue turns)
+          not F7 critique batch; not ROUND n · CRITIQUE; not parallel
+        winner = AGREE one writer handle in SI-2
+          (that handle MUST be a claimant of this path)
+          Yield = AGREE on a peer handle
+          DISSENT is not a win
+          No Pick card. No host auto-pick. No dispatcher-named winner.
+          No reserved-role tie-break.
+          No enterSplit. No Continue. No botrider.split.pick. No vote UI
+        if winner: include that writer’s file in the SAME union; next path
+        if no winner after two rounds: DROP; Swarm note `Skipped {path} · collision`; next path
+
+    Stop (chat/stop / existing Stop) during Argue
+      abort this Argue and any remaining Work in-flight
+      no winner
+      keep `Skipped {path} · collision` for the current path and any not-yet-argued collision paths
+      no enterSplit; no F8d Stop-one; no Split card
+      remainder still Approves (plus any already-won paths) in the one union
+
+    after every collision path is winner or dropped
+      ONE BR-6 Files Approve of the union
+        includes disjoint remainder + resolved winner files
+        dropped paths absent (`Skipped {path} · collision`)
+        remainder never discarded
+      MCP Grain B = separate click
+```
+
+### F8b non-negotiables
+
+- **(AG-1)** After Work-batch settle, colliding paths Argue one at a time. Workspace-relative path sort. Header `ARGUE · {path}`. Do not parallelize Argues. No-collision Work-batch still Approves as F8a (no Argue).
+- **(AG-1)** Claimants = workers whose Work-batch edits touched that path. Dispatcher/spec only if assigned that path (they wrote it in the Work-batch).
+- **(AG-1)** Remainder is **NEVER** discarded. Hold Approve / `hasPendingChanges` false until every collision path is winner or dropped, then **one** BR-6 Files union (remainder + winners). MCP Grain B stays a separate click.
+- **(AG-2)** Ping-pong: wait, ingest APPEND into SI-1, reply. SI-1 persists whole Work run. Same-batch Work deafness until settle; Argue starts after.
+- **(AG-2)** Sequential: claimants of **that** path, **one `sendRequest` at a time**. First speaker = handle sort. Not F7 critique batch. Not `ROUND n · CRITIQUE`. Not same-batch parallel.
+- **(AG-3)** Round cap = **2**. Each remaining claimant speaks once, sequential. No third round. After two rounds no AGREE → DROP + `Skipped {path} · collision`.
+- **(AG-3)** Winner = AGREE one writer handle in SI-2. No user Pick, no host auto-pick, **no reserved-role tie-break**. DISSENT is not a win.
+- **(AG-3)** Stop = `chat/stop`, aborts Argue, **no winner**, same skip note, no enterSplit.
+- **(AG-4)** After all collision paths winner or dropped: one BR-6 Files union (remainder + winners). MCP Grain B separate. Remainder never discarded.
+- **(AG-4)** SI-1 persists the whole Work run including Argue. Packets **APPEND**. Never merge `BotSession` stores. HV is display only. `vscode.lm` only. ₹0 extra keys. QC-3 that bot only.
+- **(AG-4)** §28 header `ARGUE · {path}`. Composer @/Stop. F8c/F8d out. No reserved Dev/tester roles.
+- No new Activity Bar. No new sidebar. No fourth view. No Event Bus chrome. No packet rows.
+
+### F8b tests (docs only — list them, do not write vitest)
+
+Merge bar after PO allocates, on a **new product PR**:
+
+- Collision after Work-batch settle starts Argue on path-string-sorted paths, one at a time. (AG-1)
+- Claimants are only Work-batch workers who touched that path. Dispatcher/spec only if assigned that path. (AG-1)
+- Sequential ping-pong sendRequest; next speaker waits, ingests APPEND into SI-1, then replies. (AG-2)
+- Start order / first speaker handle sort. (AG-2)
+- Two rounds then drop if no SI-2 AGREE on one writer handle; note `Skipped {path} · collision`. (AG-3)
+- Winner AGREE on one claimant handle; that file joins the same union. No reserved-role tie-break. (AG-3)
+- No Pick / no enterSplit / no host auto-pick / no dispatcher-named winner. (AG-3)
+- Stop during Argue: no winner, skip notes kept, remainder Approves, no enterSplit. (AG-3)
+- Approve held until all collision paths winner or dropped; remainder never discarded; one Files Approve. (AG-1 / AG-4)
+- Remainder still in Proposed Changes (visible, not discarded) while Argue runs and after drop. (AG-1 / AG-4)
+- No-collision path still Approves as F8a (no Argue). (AG-1)
+- Composer @/Stop; @ stays sole respondent; master Send does not start a second run. (AG-4)
+- §28 header `ARGUE · {path}`. Round headers stay (Argue round 1 / 2 for this path). (AG-4 / §28)
+- F8c/F8d/N Approves/Pick/last-writer-wins without Argue/reserved-role tie-break do not run. (out of F8b)
+- WM / QC / HV / MA / SD / TA / MS / SI-1/2/4 / EX / OS / CM / EB / F8a WK-1–6 tests conceptually still pass.
