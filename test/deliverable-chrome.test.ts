@@ -203,3 +203,46 @@ describe('§21 standard-deliverables Proposed Changes chrome', () => {
     expect(extension).toContain('kind?: ChangePreviewKind');
   });
 });
+
+describe('§24 OpenSpec chips on Proposed Changes Files (OS-3 chrome)', () => {
+  it('appends specIds to Files description in array order', () => {
+    expect(
+      proposedFileChrome({ path: 'src/app.ts', op: 'update', specIds: ['BR-6', 'EX-1'] }).description,
+    ).toBe('Modified · BR-6 · EX-1');
+    expect(proposedFileChrome({ path: 'new.ts', op: 'create', specIds: ['EX-1'] }).description).toBe('Added · EX-1');
+    expect(
+      proposedFileChrome({ path: 'gone.ts', op: 'delete', specIds: ['BR-6', 'EX-1', 'TA-1'] }).description,
+    ).toBe('Deleted · BR-6 · EX-1 · TA-1');
+    expect(
+      proposedFileChrome({ path: 'a.ts', op: 'update', specIds: ['EX-1', 'BR-6'] }).description,
+    ).toBe('Modified · EX-1 · BR-6');
+    expect(
+      proposedFileChrome({ path: 'src/app.ts', op: 'update', specIds: ['BR-6', 'EX-1'] }).command,
+    ).toBe('botrider.review.openDiff');
+    expect(fileItemFn).toContain('proposedFileChrome(file)');
+    expect(fileItemFn).toContain('item.description = chrome.description');
+  });
+
+  it('omits chip suffix when specIds is missing or empty', () => {
+    expect(proposedFileChrome({ path: 'src/app.ts', op: 'update' }).description).toBe('Modified');
+    expect(proposedFileChrome({ path: 'src/app.ts', op: 'update', specIds: [] }).description).toBe('Modified');
+    expect(proposedFileChrome({ path: 'new.ts', op: 'create' }).description).toBe('Added');
+    expect(proposedFileChrome({ path: 'new.ts', op: 'create', specIds: [] }).description).toBe('Added');
+    expect(proposedFileChrome({ path: 'gone.ts', op: 'delete' }).description).toBe('Deleted');
+    expect(proposedFileChrome({ path: 'gone.ts', op: 'delete', specIds: [] }).description).toBe('Deleted');
+  });
+
+  it('MCP rows never get spec ids; Files/MCP headers never chips', () => {
+    const mcpItemFn = review.slice(review.indexOf('function mcpItem'));
+    expect(mcpItemFn).not.toContain('specIds');
+    expect(mcpItemFn).not.toContain('proposedFileChrome');
+    expect(mcpItemFn).toContain('item.description = action.argsLine ? `${action.argsLine}  ${handle}` : handle');
+    expect(review).toContain("sectionItem('Files', 'filesSection', 'reviewFilesSection')");
+    expect(review).toContain("sectionItem('MCP actions', 'mcpSection', 'reviewMcpSection')");
+    const filesSection = review.slice(review.indexOf('function sectionItem'), review.indexOf('function fileItem'));
+    expect(filesSection).not.toContain('specIds');
+    expect(filesSection).not.toContain('proposedFileChrome');
+    expect(review).not.toMatch(/OpenSpec|openspec\//);
+    expect(review).not.toMatch(/cite\/filter|click-to-filter/);
+  });
+});
