@@ -321,3 +321,11 @@ CamelCase command / view ids (locked chrome): `botRider.bots.export` / `exportSe
 Tree `canSelectMany: true` (selection ≠ active checkbox). Form footer **Export**. Empty welcome adds `[Import](command:botRider.bots.import)`. Dirty form: `Save before export?` Save / Export without saving / Cancel.
 
 **Out:** overwrite · silent auto-suffix · SI session / transcript / MCP pending in the file · execute scripts/hooks · Marketplace / hosted sync · API keys · Copilot on export/import · F7 parallel · fourth sidebar · Swarm chrome · reopening §20 / §22 · leftovers 002/003/009/014.
+
+## 24. OpenSpec chips on Proposed Changes Files (F2)
+
+**Status:** Additive. **OS-1–4 locked.** Proposed Changes **Files** rows only. Chip text = catalog id as stored (`BR-6`, `EX-1`). Display only, **not click-to-filter**. Unknown ids never chips. MCP Grain B rows **never** chips. Empty/missing `openspec/` = no chips, **no banner**. Not a fourth sidebar. Not Swarm. Do **not** reopen §20 / §22 / §23. Approve/Reject still whole-changeset BR-6.
+
+Canonical addendum: [ui-ux-openspec-chips.md](./ui-ux-openspec-chips.md). Architecture: [architecture-openspec-trace.md](./architecture-openspec-trace.md). Host reads workspace `openspec/` if present (index-if-present). Cites on implementer changeset only. UI never reads `openspec/` from disk.
+
+**Out:** click-to-filter · MCP chips · Swarm chips · empty-catalog banner · Cite command · fourth sidebar · F1 Graphify · F3 dashboard · F4 register · F7 parallel · leftovers 002/003/009/014 · reopening §20 / §22 / §23.
