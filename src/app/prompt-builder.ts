@@ -47,6 +47,12 @@ export function turnInstruction(
       return `${user}${extraLine}\n\nAnswer the user directly. ${speakingVoice('After your answer, the last non-empty line MUST be exactly NEED_EDIT or NO_EDIT depending on whether workspace files must change.')}`;
     case 'implement':
       return `${user}${extraLine}\n\nEmit a JSON changeset. Use a fenced code block containing JSON with shape {"files":[{"path":"relative/path","op":"create"|"update"|"delete","content":"..."}]}. delete omits content. Paths must stay inside the workspace. Extra prose is ignored.`;
+    case 'spec':
+      return `${user}${extraLine}\n\nRole: spec. BA-phase. Write the work specification for this request. Other workers wait. ${speakingVoice('Give the spec.')}`;
+    case 'dispatch':
+      return `${user}${extraLine}\n\nRole: dispatch. Assign disjoint workspace-relative path sets to remaining worker handles. Emit a fenced JSON block with shape {"assignments":[{"handle":"worker-handle","paths":["relative/path"]}]}. Path sets MUST be pairwise disjoint. Do not invent reserved Dev1, Dev2, or tester roles. Handles only. Extra prose is ignored.`;
+    case 'work':
+      return `${user}${extraLine}\n\nRole: work. Work-batch on your assigned paths only. Emit a JSON changeset. Use a fenced code block containing JSON with shape {"files":[{"path":"relative/path","op":"create"|"update"|"delete","content":"..."}]}. delete omits content. Paths must stay inside the workspace and inside your assignment. Extra prose is ignored.`;
   }
 }
 

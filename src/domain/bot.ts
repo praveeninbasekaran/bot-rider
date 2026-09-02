@@ -31,6 +31,10 @@ export interface BotRecord {
   attachments?: BotAttachment[];
   /** LanguageModelChat.id for vendor copilot. Omit/null = host default. Label never persisted. */
   modelId?: string | null;
+  /** WK-2 Work designation. Absent = false. Not a name match. */
+  dispatcher?: boolean;
+  /** WK-2 Work designation. Absent = false. Not name-contains BA. */
+  spec?: boolean;
 }
 
 export interface BotDraft {
@@ -43,6 +47,8 @@ export interface BotDraft {
   attachments?: BotAttachment[];
   /** LanguageModelChat.id only. Empty / omit / null = host default. */
   modelId?: string | null;
+  dispatcher?: boolean;
+  spec?: boolean;
 }
 
 export const ATTACH_MAX_BYTES = 262144;
@@ -100,7 +106,18 @@ export function copyBotRecord(bot: BotRecord): BotRecord {
   if (modelId) {
     next.modelId = modelId;
   }
+  if (bot.dispatcher) {
+    next.dispatcher = true;
+  }
+  if (bot.spec) {
+    next.spec = true;
+  }
   return next;
+}
+
+/** Absent / false → not set. True persists as true. */
+export function copyDesignationFlag(value: unknown): boolean | undefined {
+  return value === true ? true : undefined;
 }
 
 export const HANDLE_PATTERN = /^[a-z0-9][a-z0-9_-]{0,31}$/;

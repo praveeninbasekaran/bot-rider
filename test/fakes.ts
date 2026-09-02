@@ -204,6 +204,15 @@ export class FakeGateway implements ICopilotGateway {
 }
 
 export function detectTurn(instruction: string): TurnKind {
+  if (instruction.includes('Role: spec')) {
+    return 'spec';
+  }
+  if (instruction.includes('Role: dispatch')) {
+    return 'dispatch';
+  }
+  if (instruction.includes('Role: work')) {
+    return 'work';
+  }
   if (instruction.includes('Emit a JSON changeset')) {
     return 'implement';
   }
@@ -217,6 +226,10 @@ export function detectTurn(instruction: string): TurnKind {
     return 'critique';
   }
   return 'propose';
+}
+
+export function assignmentFence(assignments: { handle: string; paths: string[] }[]): string {
+  return '```json\n' + JSON.stringify({ assignments }) + '\n```';
 }
 
 export const defaultWorkspace: WorkspaceContext = {

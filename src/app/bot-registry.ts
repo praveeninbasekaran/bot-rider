@@ -2,6 +2,7 @@ import {
   agentKindCount,
   attachmentsOf,
   copyBotRecord,
+  copyDesignationFlag,
   normalizeModelId,
   type BotAttachment,
   type BotDraft,
@@ -74,6 +75,7 @@ export class BotRegistry {
     if (modelId) {
       bot.modelId = modelId;
     }
+    applyDesignation(bot, draft.dispatcher, draft.spec);
     this.bots.push(bot);
     await this.persist();
     return { ...bot };
@@ -112,6 +114,7 @@ export class BotRegistry {
         delete next.modelId;
       }
     }
+    applyDesignation(next, draft.dispatcher, draft.spec);
     this.bots[index] = next;
     await this.persist();
     return { ...next };
@@ -207,4 +210,21 @@ function copyAttachments(items?: BotAttachment[]): BotAttachment[] {
 
 function copyModelId(value: unknown): string | undefined {
   return normalizeModelId(value) ?? undefined;
+}
+
+function applyDesignation(bot: BotRecord, dispatcher: unknown, spec: unknown): void {
+  if (dispatcher !== undefined) {
+    if (copyDesignationFlag(dispatcher)) {
+      bot.dispatcher = true;
+    } else {
+      delete bot.dispatcher;
+    }
+  }
+  if (spec !== undefined) {
+    if (copyDesignationFlag(spec)) {
+      bot.spec = true;
+    } else {
+      delete bot.spec;
+    }
+  }
 }

@@ -15,7 +15,7 @@ export interface FormModelsWatch extends DisposableLike {
 }
 
 export function usesPerBotModel(turn: TurnKind): boolean {
-  return turn === 'propose' || turn === 'critique' || turn === 'direct' || turn === 'implement';
+  return turn !== 'consensus';
 }
 
 export function shortIdTail(id: string): string {
