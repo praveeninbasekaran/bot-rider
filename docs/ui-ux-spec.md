@@ -48,10 +48,10 @@ New Bot, Edit Bot, Delete Bot, Toggle Active, Expand, Stop (`botrider.chat.stop`
 
 ### Views welcome
 
-**Bots** `!botrider.hasBots`:
+**Bots** `!botRider.hasBots`:
 
 > No bots yet. Create a bot with a name, persona, and role, then send a master prompt in Swarm.  
-> [New Bot](command:botrider.bots.create)
+> [New Bot](command:botRider.bots.create)
 
 **Review** `!botrider.hasPendingChanges`:
 
@@ -300,3 +300,24 @@ Canonical addendum: [ui-ux-bot-attachments.md](./ui-ux-bot-attachments.md). Arch
 Canonical addendum: [ui-ux-bot-model.md](./ui-ux-bot-model.md). Architecture: [architecture-bot-model.md](./architecture-bot-model.md). HostToUi `bots/models`. Persist `LanguageModelChat.id` only as `BotRecord.modelId` (label never persisted). Empty = host default. Missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only via `vscode.lm`.
 
 **Out:** Swarm per-message model picker · non-Copilot vendors · persisting display label as key · blocking a turn when saved id missing · token/quota chrome · fourth sidebar · F7 parallel · leftovers 002/003/009/014 · tree model subtitle · fake model list · reopening §20 Attach slots.
+
+## 23. Bot export / import (F6)
+
+**Status:** Additive. **EX-1–4 locked.** Bots tree + form footer + palette. Not a Swarm control. Not a fourth sidebar. Do **not** reopen §20 Attach or §22 model picker. F7 parallel / Event Bus out.
+
+Canonical addendum: [ui-ux-bot-export-import.md](./ui-ux-bot-export-import.md). Architecture: [architecture-bot-export-import.md](./architecture-bot-export-import.md). JSON and YAML. Envelope `format: 'botrider.bots.v1'`. Never overwrite. Never auto-suffix. Cancel rename = Skip. Copy `Skipped @{handle} · already taken.` Name-only: `Skipped "{name}" · a bot with that name already exists.` Prefer the handle line when both collide. No Copilot on export/import.
+
+### Commands (package.json stubs; match addendum §23.2)
+
+CamelCase command / view ids (locked chrome): `botRider.bots.export` / `exportSelected` / `exportAll` / `import`. Tree `botRider.bots`. Context `botRider.hasBots`.
+
+| Command | Title | Icon |
+| --- | --- | --- |
+| `botRider.bots.export` | Export Bot | — |
+| `botRider.bots.exportSelected` | Export Selected | — |
+| `botRider.bots.exportAll` | Export All | — |
+| `botRider.bots.import` | Import | `$(desktop-download)` |
+
+Tree `canSelectMany: true` (selection ≠ active checkbox). Form footer **Export**. Empty welcome adds `[Import](command:botRider.bots.import)`. Dirty form: `Save before export?` Save / Export without saving / Cancel.
+
+**Out:** overwrite · silent auto-suffix · SI session / transcript / MCP pending in the file · execute scripts/hooks · Marketplace / hosted sync · API keys · Copilot on export/import · F7 parallel · fourth sidebar · Swarm chrome · reopening §20 / §22 · leftovers 002/003/009/014.

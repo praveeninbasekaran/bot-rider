@@ -48,6 +48,8 @@ Additive per-bot Copilot model selection: [architecture-bot-model.md](./architec
 
 Additive F7 isolation / SI-1–4: [architecture-bot-isolation.md](./architecture-bot-isolation.md). Host-only. Zero new chrome. Sequential only. Parallel Event Bus out. BR / QC / HV / MA / SD / TA / MS frozen.
 
+Additive F6 bot export / import: [architecture-bot-export-import.md](./architecture-bot-export-import.md). Envelope `format: 'botrider.bots.v1'`. UiToHost `bots/export-self` only (form Export). Chrome: [ui-ux-bot-export-import.md](./ui-ux-bot-export-import.md) §23. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
+
 ### UI → host
 
 `bots/create`, `bots/update`, `bots/toggle`, `bots/delete`, `chat/send`, `chat/stop`, `split/continue`, `split/pick`, `changeset/approve`, `changeset/retry`, `changeset/reject`, `mcp/actions-approve`, `mcp/actions-reject`, `review/open-diff`, `copilot/recheck`
