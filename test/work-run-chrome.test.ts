@@ -396,7 +396,8 @@ describe('§27 F8a Work run chrome', () => {
     expect(chatJs).not.toContain('stop-one');
     expect(chatJs).not.toContain("type: 'work/stop'");
     expect(overflowFn).toContain("className = 'error system'");
-    expect(overflowFn).toContain("Prompt doesn't fit Copilot");
+    expect(chatJs).toContain("Prompt doesn't fit Copilot");
+    expect(overflowFn).toContain('message || PACK_OVERFLOW_COPY');
     expect(overflowFn).not.toMatch(/Event Bus|packet id|inbox|subscriber/i);
     expect(overflowFn).not.toContain('lockComposer()');
     expect(chrome.canAnnounceArticle(1000, 2500)).toBe(false);

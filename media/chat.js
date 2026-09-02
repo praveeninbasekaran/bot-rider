@@ -1577,11 +1577,10 @@
       if (current) {
         announceArticle(current, (current.name || 'Bot') + ' finished');
       }
-      const endedId = msg.botId || (current && current.botId);
-      if (endedId && state.run && state.run.runType === 'work') {
-        state.completedBots[endedId] = true;
+      if ((msg.botId || (current && current.botId)) && state.run && state.run.runType === 'work') {
+        state.completedBots[msg.botId || current.botId] = true;
       }
-      dropFlight(endedId);
+      dropFlight(msg.botId || (current && current.botId));
       if (isDebateTurn(msg.turn) || isWorkTurn(msg.turn) || !msg.turn) {
         paintBoard(state.board);
       }
