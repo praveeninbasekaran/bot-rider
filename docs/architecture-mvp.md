@@ -20,6 +20,8 @@ Addendum 2026-09-01: F6 bot export / import is additive — architecture-bot-exp
 
 Addendum 2026-09-02: F2 OpenSpec contract traceability is additive — architecture-openspec-trace.md + UI §24. Host reads workspace `openspec/` if present (index-if-present). Missing `openspec/` = empty catalog, no error. BR-1–6 spec files unchanged. Leftovers 002/003/009/014 out. F1 Graphify out. F7 parallel out.
 
+Addendum 2026-09-02: F1 Context Map / CM-1–4 is additive — architecture-context-map.md + UI §25. Fourth view in the existing Bot Rider container (Bots → Chat → Context Map → Proposed Changes). Bot Rider–owned webview. Graphify-as-vendor stays out. BR / QC / HV / MA / SD / TA / MS / SI / EX / OS frozen otherwise. Do not reopen §20–§24. Leftovers 002/003/009/014 out. F7 parallel out.
+
 ## Product
 
 VS Code extension: `publisher: botrider`, `name: bot-rider`, `displayName: Bot Rider`, `engines.vscode: ^1.99.0`, `activationEvents: []`.
@@ -157,6 +159,8 @@ Additive F7 isolation / SI-1–4: [architecture-bot-isolation.md](./architecture
 Additive F6 bot export / import: [architecture-bot-export-import.md](./architecture-bot-export-import.md). Envelope `format: 'botrider.bots.v1'`. UiToHost `bots/export-self` only (form Export). Chrome: [ui-ux-bot-export-import.md](./ui-ux-bot-export-import.md) §23. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
 
 Additive F2 OpenSpec / OS-1–4: [architecture-openspec-trace.md](./architecture-openspec-trace.md). Optional `specIds` on `changeset/preview` Files. Chrome: [ui-ux-openspec-chips.md](./ui-ux-openspec-chips.md) §24. Missing `openspec/` = empty catalog, no error, no chips, no banner. BR / QC / HV / MA / SD / TA / MS / SI / EX frozen otherwise. F1 Graphify out. F7 parallel out.
+
+Additive F1 Context Map / CM-1–4: [architecture-context-map.md](./architecture-context-map.md). Fourth view in the existing container (Bots → Chat → Context Map → Proposed Changes). Chrome: [ui-ux-context-map.md](./ui-ux-context-map.md) §25. Bot Rider–owned webview. Graphify-as-vendor stays out. BR / QC / HV / MA / SD / TA / MS / SI / EX / OS frozen otherwise. Do not reopen §20–§24. F7 parallel out.
 
 ### UI → host
 

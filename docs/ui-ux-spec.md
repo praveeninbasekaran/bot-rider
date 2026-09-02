@@ -329,3 +329,11 @@ Tree `canSelectMany: true` (selection ≠ active checkbox). Form footer **Export
 Canonical addendum: [ui-ux-openspec-chips.md](./ui-ux-openspec-chips.md). Architecture: [architecture-openspec-trace.md](./architecture-openspec-trace.md). Host reads workspace `openspec/` if present (index-if-present). Cites on implementer changeset only. UI never reads `openspec/` from disk.
 
 **Out:** click-to-filter · MCP chips · Swarm chips · empty-catalog banner · Cite command · fourth sidebar · F1 Graphify · F3 dashboard · F4 register · F7 parallel · leftovers 002/003/009/014 · reopening §20 / §22 / §23.
+
+## 25. Context Map (F1, Bot Rider–owned)
+
+**Status:** Additive. **CM-1–4 locked.** Fourth view in the **existing** Bot Rider container. Order: **Bots → Chat → Context Map → Proposed Changes**. View `botRider.contextMap`. Title **Context Map**. Type: Webview. **Not** a second Activity Bar icon. **Not** Graphify vendor UI. Do **not** reopen §20 / §22 / §23 / §24. OpenSpec chips stay on Proposed Changes Files rows (§24). The map is **not** a spec browser.
+
+Canonical addendum: [ui-ux-context-map.md](./ui-ux-context-map.md). Architecture: [architecture-context-map.md](./architecture-context-map.md). Two layers (Workspace / This run), toggle, not merged in MVP. Click inspects label/path/kind. Never auto-Approve. Never Copilot Send. Never execute. Never dump full-file into Swarm.
+
+**Out:** second Activity Bar icon · Graphify vendor UI · merged one-graph MVP · whole-workspace crawl on open · auto-Approve · Copilot Send from the map · execute · dump full-file into Swarm · spec browser · F3 dashboard · F4 register · F7 parallel · leftovers 002/003/009/014 · reopening §20 / §22 / §23 / §24.

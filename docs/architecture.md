@@ -52,6 +52,8 @@ Additive F6 bot export / import: [architecture-bot-export-import.md](./architect
 
 Additive F2 OpenSpec / OS-1–4: [architecture-openspec-trace.md](./architecture-openspec-trace.md). Optional `specIds` on `changeset/preview` Files. Chrome: [ui-ux-openspec-chips.md](./ui-ux-openspec-chips.md) §24. Missing `openspec/` = empty catalog, no error, no chips, no banner. BR / QC / HV / MA / SD / TA / MS / SI / EX frozen otherwise. F1 Graphify out. F7 parallel out.
 
+Additive F1 Context Map / CM-1–4: [architecture-context-map.md](./architecture-context-map.md). Fourth view in the existing container (Bots → Chat → Context Map → Proposed Changes). Chrome: [ui-ux-context-map.md](./ui-ux-context-map.md) §25. Bot Rider–owned webview. Graphify-as-vendor stays out. BR / QC / HV / MA / SD / TA / MS / SI / EX / OS frozen otherwise. Do not reopen §20–§24. F7 parallel out.
+
 ### UI → host
 
 `bots/create`, `bots/update`, `bots/toggle`, `bots/delete`, `chat/send`, `chat/stop`, `split/continue`, `split/pick`, `changeset/approve`, `changeset/retry`, `changeset/reject`, `mcp/actions-approve`, `mcp/actions-reject`, `review/open-diff`, `copilot/recheck`
