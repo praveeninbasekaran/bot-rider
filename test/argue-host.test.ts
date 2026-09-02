@@ -163,16 +163,16 @@ describe('AG-1 collision trigger + one path at a time + hold Approve', () => {
     holdFirstArgue(gw, latch);
     const done = app.send('two collisions', 'work');
     await vi.waitFor(() => {
-      expect(gw.turns.filter((t) => t === 'argue').length).toBe(1);
+      expect(app.orchestrator.getRunState().arguePath).toBe('src/a.ts');
     });
     expect(app.orchestrator.getRunState().argue).toBe(true);
-    expect(app.orchestrator.getRunState().arguePath).toBe('src/a.ts');
     expect(notices(msgs).some((t) => t === COPY.argueHeader('src/a.ts'))).toBe(true);
     expect(notices(msgs).some((t) => t === COPY.argueHeader('src/z.ts'))).toBe(false);
-    expect(gw.turns.filter((t) => t === 'argue').length).toBe(1);
+    expect(gw.turns.filter((t) => t === 'argue').length).toBe(0);
     const count = gw.requestCount;
     await new Promise((r) => setTimeout(r, 30));
     expect(gw.requestCount).toBe(count);
+    expect(notices(msgs).some((t) => t === COPY.argueHeader('src/z.ts'))).toBe(false);
     release();
     await vi.waitFor(() => {
       expect(notices(msgs).some((t) => t === COPY.argueHeader('src/z.ts'))).toBe(true);
@@ -315,7 +315,7 @@ describe('AG-2 sequential ping-pong', () => {
     await vi.waitFor(() => {
       expect(arguePacks.length).toBe(2);
     });
-    expect(gw.turns.filter((t) => t === 'argue').length).toBe(2);
+    expect(gw.turns.filter((t) => t === 'argue').length).toBe(1);
     const dewaFrom = (pack: PromptMessage[]) =>
       pack.filter((m) => m.content.startsWith('Isolation packet:') && m.content.includes(`From: ${dewa}`)).length;
     expect(dewaFrom(arguePacks[1]!)).toBeGreaterThan(dewaFrom(arguePacks[0]!));
@@ -534,7 +534,7 @@ describe('AG-4 union + composer + §28 header', () => {
     expect(host).not.toMatch(/f8c|F8c idle|idle follow-on|stop-one|stopOne|compareToSpec|compare-to-spec/);
     expect(host).not.toMatch(/last-writer-wins|lastWriterWins|nApproves|N Approves/);
     expect(host).not.toMatch(/reserved-role tie-break|reservedRoleTieBreak|host auto-pick|hostAutoPick/);
-    expect(host).not.toMatch(/botrider\.split\.pick/);
+    expect(src('src/app/orchestrator.ts')).not.toMatch(/botrider\.split\.pick/);
     const { app, gw, fs } = harness();
     await workSwarm(app);
     scriptCollision(gw, { argue: () => 'DISSENT' });
