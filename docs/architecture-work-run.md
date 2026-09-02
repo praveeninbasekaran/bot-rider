@@ -12,7 +12,7 @@ Split (when PO allocates; **do not allocate in this docs PR**): **Developer 1** 
 
 ## Story map (WK-1–6)
 
-WK-1–6 stay the set. No new stories. F8b Argue, F8c idle follow-on, F8d Stop-one / comparing worker output to spec are **not** this slice.
+WK-1–6 stay the F8a set. **F8b is the AG-1–4 addendum below.** F8c idle follow-on and F8d Stop-one / comparing worker output to spec are **not** this slice.
 
 ### WK-1 New run type Work
 
@@ -84,7 +84,7 @@ Overlapping paths **DROP** from the union. Visible Swarm note per dropped path:
 Skipped {path} · collision
 ```
 
-Those paths are **absent** from Approve. The **disjoint remainder** still Approves. No last-writer-wins. No whole-batch fail. **No auto-Argue** (Argue is F8b).
+Those paths are **absent** from Approve. The **disjoint remainder** still Approves. No last-writer-wins. No whole-batch fail. **No auto-Argue without the addendum; F8b Argue is in.**
 
 **Additive F8b (collision pointer):** after Work-batch settle, collision paths enter F8b Argue instead of drop-and-done. F8a remainder-with-no-collision is unchanged (no Argue, Approve after settle as today). Remainder is **NEVER** discarded. See F8b / AG-1–4 below.
 
@@ -92,7 +92,7 @@ Those paths are **absent** from Approve. The **disjoint remainder** still Approv
 
 **SI-1 persists the whole Work run.** Packets **APPEND**. Not reset between BA-phase / dispatch / Work-batch. Reload / run-end still clears.
 
-**Stop** (`botrider.chat.stop` / `chat/stop`) aborts **all** in-flight `sendRequest` in this Work-batch. HV **MAY** overlap (display only). Run board **MAY** show multiple in-flight + waiting. **One** Files list (the union). §24 chips stay on Proposed Changes Files. No F8b / F8c / F8d.
+**Stop** (`botrider.chat.stop` / `chat/stop`) aborts **all** in-flight `sendRequest` in this Work-batch. HV **MAY** overlap (display only). Run board **MAY** show multiple in-flight + waiting. **One** Files list (the union). §24 chips stay on Proposed Changes Files. F8c/F8d out; **F8b is the addendum** (AG-1–4 / §28).
 
 ---
 
@@ -112,7 +112,7 @@ Those paths are **absent** from Approve. The **disjoint remainder** still Approv
 - **(WK-5)** **Tester** = worker on **test paths** (not a reserved role). Packs BA spec packets + assigned paths. Same-batch deaf. Does not see other workers until settle. Comparing worker output to spec is **F8d, not F8a**.
 - **(WK-5)** Composer **`@` / assign / Stop**. Unlocked ≠ second orchestrator. Master Send while in flight: `Work batch still running.` `@` not-in-flight MAY run. `@` in-flight waits.
 - **(WK-6)** **BR-6 Files only after settle.** Approve / `hasPendingChanges` false until settle. No `applyEdit` mid-batch. **MCP Grain B is a separate click.**
-- **(WK-6)** Collision = **DROP** from the union + `Skipped {path} · collision`. Disjoint remainder Approves. No last-writer-wins. No whole-batch fail. No auto-Argue. No F8b / F8c / F8d.
+- **(WK-6)** Collision = **DROP** from the F8a union + `Skipped {path} · collision`. Disjoint remainder Approves. No last-writer-wins. No whole-batch fail. **No auto-Argue without the addendum; F8b Argue is in** (AG-1–4). F8c/F8d out.
 - **(WK-6)** Stop aborts **all** in this Work-batch. One Files list. §24 chips stay on Proposed Changes Files. Do **not** reopen §20–§26.
 - BR / QC / HV / MA / SD / TA / MS / SI-1/2/4 / EX / OS / CM / EB frozen otherwise. Leftovers 002 / 003 / 009 / 014 out. F3 / F4 out. Marketplace / API keys / Settings Sync / Graphify out.
 
@@ -169,7 +169,9 @@ Batch settles
   never merge BotSession stores
   BR-6 Files ONLY after settle (WK-6)
   overlapping paths DROP + `Skipped {path} · collision`
-  then ONE BR-6 Files Approve of the remainder
+  if collisions exist, hold Approve and enter F8b flow (AG-1–4)
+  no-collision still F8a Approve of the remainder
+  remainder is never discarded
   MCP Grain B = separate click (not this Approve)
   hasPendingChanges false / Approve disabled until this settle
 
@@ -251,7 +253,7 @@ Overlap (same path claimed by more than one worker in the settled batch):
 3. path **absent** from `changeset/preview` / Approve
 4. remaining disjoint ops still stage
 
-No last-writer-wins. No whole-batch fail. No auto-Argue.
+No last-writer-wins. No whole-batch fail. No auto-Argue without the addendum; F8b Argue is in.
 
 `hasPendingChanges` stays **false** until this settle. No `applyEdit` mid-batch. **BR-6 Files only after settle.** **ONE** Files Approve. One Files list. **MCP Grain B is a separate click** (existing §19 gate; not combined with Files).
 
@@ -289,7 +291,7 @@ Do **not** reopen attach / model / export / OpenSpec chip / Context Map / §26 p
 
 ## 7. Out of this slice
 
-F8b sequential Argue, F8c idle-bot follow-on, F8d Stop-one + comparing worker output to spec / tester second pass, N staged Approves, combining Files Approve with MCP Grain B, concurrent overlap writers, last-writer-wins, whole-batch fail on collision, auto-Argue, changing default Send to Work, treating Work as a Debate protocol, host-invented path partitions, reserved **Dev1 / Dev2 / tester** roles, name-matching or name-contains-`BA` spec/dispatcher, Save-time designation gate, per-Send role picker, blocking Save / New Bot for flags, sibling ingest inside a Work-batch, mutating in-flight `sendRequest`, `applyEdit` mid-batch / BR-6 Files before settle, merging `BotSession` stores, restuffing a global Swarm transcript / HV into packs, Event Bus chrome / packet rows / new sidebar / new Activity Bar icon, reopening §20–§26 / EB-1–4, F3 dashboard, F4 register, leftovers 002 / 003 / 009 / 014, hosted / `vscode.EventBus` / network bus, extra API keys, second runtime, Graphify, product code in this docs PR.
+F8b sequential Argue is this addendum (AG-1–4 / §28), not out. F8c idle-bot follow-on, F8d Stop-one + comparing worker output to spec / tester second pass, N staged Approves, combining Files Approve with MCP Grain B, concurrent overlap writers, last-writer-wins, whole-batch fail on collision, auto-Argue without the addendum, changing default Send to Work, treating Work as a Debate protocol, host-invented path partitions, reserved **Dev1 / Dev2 / tester** roles, name-matching or name-contains-`BA` spec/dispatcher, Save-time designation gate, per-Send role picker, blocking Save / New Bot for flags, sibling ingest inside a Work-batch, mutating in-flight `sendRequest`, `applyEdit` mid-batch / BR-6 Files before settle, merging `BotSession` stores, restuffing a global Swarm transcript / HV into packs, Event Bus chrome / packet rows / new sidebar / new Activity Bar icon, reopening §20–§26 / EB-1–4, F3 dashboard, F4 register, leftovers 002 / 003 / 009 / 014, hosted / `vscode.EventBus` / network bus, extra API keys, second runtime, Graphify, product code in this docs PR.
 
 ---
 
