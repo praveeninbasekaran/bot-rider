@@ -116,8 +116,8 @@ export class Application {
     this.snapshotBots();
   }
 
-  async send(text: string): Promise<void> {
-    await this.orchestrator.send(text);
+  async send(text: string, runType: 'work' | 'debate' = 'debate'): Promise<void> {
+    await this.orchestrator.send(text, runType);
   }
 
   stop(): void {
@@ -201,6 +201,8 @@ export class Application {
           active: msg.draft.active,
           attachments: msg.draft.attachments,
           modelId: msg.draft.modelId,
+          dispatcher: msg.draft.dispatcher,
+          spec: msg.draft.spec,
         });
         break;
       case 'bots/update': {
@@ -218,6 +220,8 @@ export class Application {
           active: msg.active ?? existing.active,
           attachments: patch.attachments ?? existing.attachments,
           modelId: patch.modelId !== undefined ? patch.modelId : existing.modelId,
+          dispatcher: patch.dispatcher !== undefined ? patch.dispatcher : existing.dispatcher,
+          spec: patch.spec !== undefined ? patch.spec : existing.spec,
         });
         break;
       }
@@ -228,7 +232,7 @@ export class Application {
         await this.deleteBot(msg.id);
         break;
       case 'chat/send':
-        await this.send(msg.text);
+        await this.send(msg.text, msg.runType === 'work' ? 'work' : 'debate');
         break;
       case 'chat/stop':
         this.stop();

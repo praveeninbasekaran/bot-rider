@@ -116,6 +116,8 @@ export class BotFormPanel {
                 active: msg.draft.active,
                 attachments: resolveFormAttachments(msg.draft.attachments, session.attachments),
                 modelId: msg.draft.modelId,
+                dispatcher: msg.draft.dispatcher,
+                spec: msg.draft.spec,
               });
               currentBot = this.app.registry.getByHandle(created.handle) ?? created;
               return currentBot;

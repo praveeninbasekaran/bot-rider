@@ -70,6 +70,8 @@ function loadBotForm() {
     'model',
     'model-hint',
     'active',
+    'dispatcher',
+    'spec',
     'err',
     'delete-btn',
     'cancel',

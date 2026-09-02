@@ -241,7 +241,10 @@ describe('TokenGovernor pack', () => {
     expect(packKindFor('propose')).toBe('debate');
     expect(packKindFor('critique')).toBe('debate');
     expect(packKindFor('direct')).toBe('debate');
+    expect(packKindFor('spec')).toBe('debate');
+    expect(packKindFor('dispatch')).toBe('debate');
     expect(packKindFor('consensus')).toBe('vote');
     expect(packKindFor('implement')).toBe('implement');
+    expect(packKindFor('work')).toBe('implement');
   });
 });

@@ -21,7 +21,9 @@ export type ErrorCode =
   | 'parse-failed'
   | 'validate-failed'
   | 'copilot'
-  | 'pack-overflow';
+  | 'pack-overflow'
+  | 'work-gate'
+  | 'work-running';
 
 export interface SplitPosition {
   botId: string;
@@ -40,7 +42,10 @@ export interface RunBoardDto {
 export type BotCreateDraft = Omit<BotRecord, 'id' | 'createdAt' | 'updatedAt'>;
 
 export type BotPatch = Partial<
-  Pick<BotRecord, 'name' | 'handle' | 'persona' | 'role' | 'instructions' | 'attachments' | 'modelId'>
+  Pick<
+    BotRecord,
+    'name' | 'handle' | 'persona' | 'role' | 'instructions' | 'attachments' | 'modelId' | 'dispatcher' | 'spec'
+  >
 >;
 
 export type AttachSkipReason = 'unreadable' | 'binary' | 'too-large' | 'outside-workspace';
@@ -159,7 +164,7 @@ export type UiToHost =
     }
   | { type: 'bots/toggle'; id: string; active: boolean }
   | { type: 'bots/delete'; id: string }
-  | { type: 'chat/send'; text: string }
+  | { type: 'chat/send'; text: string; runType?: 'work' | 'debate' }
   | { type: 'chat/stop' }
   | { type: 'split/continue' }
   | { type: 'split/pick'; botId: string }

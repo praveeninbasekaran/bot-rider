@@ -45,7 +45,7 @@ export function packKindFor(turn: TurnKind): PackKind {
   if (turn === 'consensus') {
     return 'vote';
   }
-  if (turn === 'implement') {
+  if (turn === 'implement' || turn === 'work') {
     return 'implement';
   }
   return 'debate';
