@@ -1,3 +1,190 @@
 body.context-map {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.cm-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--vscode-sideBar-background);
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size, 13px);
+}
+
+.cm-toggle {
+  display: flex;
+  flex-shrink: 0;
+  margin: 8px 8px 0;
+  border: 1px solid var(--vscode-panel-border, var(--vscode-foreground));
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cm-seg {
+  flex: 1;
+  margin: 0;
+  padding: 4px 8px;
+  border: 0;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cm-seg + .cm-seg {
+  border-left: 1px solid var(--vscode-panel-border, var(--vscode-foreground));
+}
+
+.cm-seg.is-active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.cm-seg:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.cm-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 8px 8px 0;
+  border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+  background: var(--vscode-editor-background);
+  overflow: hidden;
+}
+
+.cm-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.cm-canvas:active {
+  cursor: grabbing;
+}
+
+.cm-edge {
+  fill: none;
+  stroke: var(--vscode-editorLineNumber-foreground, var(--vscode-descriptionForeground));
+  stroke-width: 1.25;
+}
+
+.cm-node-rect {
+  fill: var(--vscode-sideBar-background);
+  stroke: var(--vscode-panel-border, var(--vscode-foreground));
+  stroke-width: 1;
+}
+
+.cm-node.is-selected .cm-node-rect {
+  stroke: var(--vscode-focusBorder);
+  stroke-width: 2;
+}
+
+.cm-node-label,
+.cm-node-expand {
+  fill: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.cm-node-expand {
+  pointer-events: auto;
+  cursor: pointer;
+  fill: var(--vscode-descriptionForeground);
+}
+
+.cm-node[data-kind='symbol'] .cm-node-rect {
+  stroke: var(--cm-symbol-tint, var(--vscode-symbolIcon-functionForeground, var(--vscode-charts-blue)));
+}
+
+.cm-node[data-symbol-kind='Class'] {
+  --cm-symbol-tint: var(--vscode-symbolIcon-classForeground, var(--vscode-charts-orange));
+}
+.cm-node[data-symbol-kind='Method'],
+.cm-node[data-symbol-kind='Function'] {
+  --cm-symbol-tint: var(--vscode-symbolIcon-methodForeground, var(--vscode-charts-blue));
+}
+.cm-node[data-symbol-kind='Interface'] {
+  --cm-symbol-tint: var(--vscode-symbolIcon-interfaceForeground, var(--vscode-charts-blue));
+}
+.cm-node[data-symbol-kind='Property'],
+.cm-node[data-symbol-kind='Field'],
+.cm-node[data-symbol-kind='Variable'] {
+  --cm-symbol-tint: var(--vscode-symbolIcon-variableForeground, var(--vscode-charts-green));
+}
+.cm-node[data-symbol-kind='Constant'],
+.cm-node[data-symbol-kind='Enum'],
+.cm-node[data-symbol-kind='EnumMember'] {
+  --cm-symbol-tint: var(--vscode-symbolIcon-enumeratorForeground, var(--vscode-charts-purple));
+}
+.cm-node[data-kind='bot'] .cm-node-rect {
+  stroke: var(--vscode-charts-blue, var(--vscode-focusBorder));
+}
+.cm-node[data-kind='packet'] .cm-node-rect {
+  stroke: var(--vscode-charts-purple, var(--vscode-focusBorder));
+}
+.cm-node[data-kind='proposedFile'] .cm-node-rect {
+  stroke: var(--vscode-gitDecoration-modifiedResourceForeground, var(--vscode-charts-green));
+}
+
+.cm-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+  pointer-events: none;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.cm-empty[hidden] {
+  display: none;
+}
+
+.cm-strip {
+  flex-shrink: 0;
+  margin: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+  background: var(--vscode-sideBar-background);
+  color: var(--vscode-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.cm-strip[hidden] {
+  display: none;
+}
+
+.cm-strip-label {
+  font-weight: 600;
+}
+
+.cm-strip-path,
+.cm-strip-kind {
+  color: var(--vscode-descriptionForeground);
+}
+
+body.vscode-high-contrast .cm-toggle,
+body.high-contrast .cm-toggle,
+body.vscode-high-contrast .cm-stage,
+body.high-contrast .cm-stage {
+  border-color: var(--vscode-contrastBorder, var(--vscode-foreground));
+}
+
+body.vscode-high-contrast .cm-node-rect,
+body.high-contrast .cm-node-rect {
+  stroke: var(--vscode-contrastBorder, var(--vscode-foreground));
 }
