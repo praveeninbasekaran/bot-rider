@@ -117,7 +117,7 @@ export class CopilotGateway implements ICopilotGateway {
   private model: LmModel | undefined;
   /** Resolved for the current pack+send. Captured locally at send start; not swapped mid-stream. */
   private turnModel: LmModel | undefined;
-  private inflight = false;
+  private inflight = 0;
   private modelsSettled = false;
   private accessSettled = false;
   private knownModelIds: string[] = [];
@@ -225,20 +225,10 @@ export class CopilotGateway implements ICopilotGateway {
     onText: (chunk: string) => void,
     opts: CopilotSendOpts = {},
   ): Promise<'ok' | 'cancelled'> {
-    if (this.inflight) {
-      throw new OverlapError();
-    }
-    this.inflight = true;
+    this.inflight += 1;
     this.requestCount += 1;
     try {
-      let model = this.turnModel ?? this.model;
-      if (!model) {
-        const status = await this.ensureAvailable();
-        if (status !== 'ready' || !this.model) {
-          throw Object.assign(new Error(status), { code: status });
-        }
-        model = this.model;
-      }
+      const model = await this.resolveSendModel(opts.modelId);
       const can = this.lm.canSendRequest(model);
       if (can === false) {
         this.setStatus('noPermissions');
@@ -306,9 +296,35 @@ export class CopilotGateway implements ICopilotGateway {
       this.setStatus(status);
       throw err;
     } finally {
-      this.turnModel = undefined;
-      this.inflight = false;
+      this.inflight -= 1;
+      if (this.inflight === 0) {
+        this.turnModel = undefined;
+      }
     }
+  }
+
+  private async resolveSendModel(modelId?: string | null): Promise<LmModel> {
+    const wanted = normalizeModelId(modelId);
+    if (wanted) {
+      const copilot = await discoverCopilotModels(this.lm);
+      this.knownModelIds = copilot.map((item) => item.id);
+      const found = copilot.find((item) => item.id === wanted);
+      if (found) {
+        return found;
+      }
+      if (copilot[0]) {
+        return copilot[0];
+      }
+    }
+    const existing = this.turnModel ?? this.model;
+    if (existing) {
+      return existing;
+    }
+    const status = await this.ensureAvailable();
+    if (status !== 'ready' || !this.model) {
+      throw Object.assign(new Error(status), { code: status });
+    }
+    return this.turnModel ?? this.model;
   }
 
   private toolsFor(mode: CopilotSendOpts['tools']): LmChatTool[] | undefined {

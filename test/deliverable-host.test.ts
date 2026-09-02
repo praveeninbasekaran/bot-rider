@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Application } from '../src/app/application';
 import { COPY } from '../src/app/copy';
 import { resolveProposedOpen } from '../src/app/deliverable-open';
@@ -336,25 +336,23 @@ describe('SD-1–4 host emit', () => {
   it('Vote / Split / Stop never build a deliverable', async () => {
     const { app, gw } = harness();
     await twoBots(app);
-    let started = 0;
     gw.script = ({ turn }) => {
       if (turn === 'propose') {
-        started += 1;
-        if (started === 1) {
-          return 'talking';
-        }
+        return 'talking';
       }
       return 'talk';
     };
-    const original = gw.stream.bind(gw);
-    gw.stream = async (messages, token, onText) => {
-      if (gw.turns.length >= 1) {
-        app.stop();
-        return 'cancelled';
-      }
-      return original(messages, token, onText);
-    };
-    await app.send('write a report');
+    let release!: () => void;
+    gw.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const done = app.send('write a report');
+    await vi.waitFor(() => {
+      expect(gw.requestCount).toBeGreaterThan(1);
+    });
+    app.stop();
+    release();
+    await done;
     expect(app.changesets.hasPending()).toBe(false);
     expect(app.orchestrator.getRunState().splitOpen).toBe(true);
     expect(gw.turns.includes('implement')).toBe(false);

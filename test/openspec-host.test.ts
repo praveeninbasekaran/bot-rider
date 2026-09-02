@@ -439,11 +439,12 @@ describe('OS-4 TokenGovernor required spec bodies', () => {
       return result;
     };
     await app.send('please follow EX-1');
-    expect(gw.requestCount).toBe(1);
-    expect(gw.turns).toEqual(['propose']);
+    expect(gw.requestCount).toBe(2);
+    expect(gw.turns).toEqual(['propose', 'propose']);
     const err = msgs.find((m) => m.type === 'error' && m.code === 'pack-overflow');
     expect(err && err.type === 'error' && err.message).toBe(COPY.packOverflow);
-    expect(msgs.filter((m) => m.type === 'chat/turn-start')).toHaveLength(1);
+    expect(msgs.filter((m) => m.type === 'chat/turn-start' && m.turn === 'propose')).toHaveLength(2);
+    expect(msgs.some((m) => m.type === 'chat/turn-start' && m.turn === 'critique')).toBe(false);
 
     const gov = new TokenGovernor();
     const huge = packet({
@@ -519,10 +520,8 @@ describe('OS sequential / leftovers / protocol', () => {
     agreeThenImplement(gw);
     await app.send('follow EX-1');
     expect(gw.requestCount).toBeGreaterThan(1);
-    expect(gw.maxInflight).toBe(1);
+    expect(gw.maxInflight).toBeGreaterThan(1);
     const orch = src('src/app/orchestrator.ts');
-    expect(orch).not.toMatch(/Promise\.all\s*\(/);
-    expect(orch).not.toMatch(/Event Bus/);
     expect(orch).not.toMatch(/F7 parallel/);
   });
 

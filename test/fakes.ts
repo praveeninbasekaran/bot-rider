@@ -101,6 +101,7 @@ export class FakeGateway implements ICopilotGateway {
   lastSendOpts: CopilotSendOpts[] = [];
   turns: TurnKind[] = [];
   maxInflight = 0;
+  afterStart?: (info: { botId?: string; messages: PromptMessage[] }) => Promise<void> | void;
   private inflight = 0;
   private preparedModelId: string | null = null;
   script: (info: { turn: TurnKind; instruction: string; messages: PromptMessage[] }) => string = () =>
@@ -163,9 +164,20 @@ export class FakeGateway implements ICopilotGateway {
     this.lastMessages.push(messages);
     this.inflight += 1;
     this.maxInflight = Math.max(this.maxInflight, this.inflight);
+    const botId = this.lastSendOpts[this.lastSendOpts.length - 1]?.botId;
     try {
+      await Promise.resolve();
+      if (this.afterStart) {
+        await this.afterStart({
+          botId,
+          messages,
+        });
+      }
       if (this.gate) {
         await this.gate;
+      }
+      if (token.isCancellationRequested) {
+        return 'cancelled';
       }
       if (this.hang) {
         return await new Promise<'ok' | 'cancelled'>((resolve, reject) => {

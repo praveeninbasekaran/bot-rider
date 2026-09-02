@@ -492,9 +492,7 @@ describe('CM sequential / leftovers / protocol', () => {
     agreeThenImplement(gw);
     await app.send('build');
     expect(gw.requestCount).toBeGreaterThan(1);
-    expect(gw.maxInflight).toBe(1);
-    expect(src('src/app/orchestrator.ts')).not.toMatch(/Promise\.all\s*\(/);
-    expect(src('src/app/orchestrator.ts')).not.toMatch(/Event Bus/);
+    expect(gw.maxInflight).toBeGreaterThan(1);
     expect(src('src/app/orchestrator.ts')).not.toMatch(/F7 parallel/);
   });
 
