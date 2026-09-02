@@ -29,6 +29,7 @@ import {
   exportSaveFilters,
   importBotEntries,
   importedToast,
+  knownModelIdsForImport,
   parseBotExportText,
   type ExportableBot,
   type ExportDialogs,
@@ -236,7 +237,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const result = await importBotEntries({
       entries: parsed.entries,
       existing: app.registry.list(),
-      knownModelIds: [],
+      knownModelIds: knownModelIdsForImport(app.gateway),
       create: (draft) => app.createBot(draft),
       ui: vscodeImportUi(),
     });

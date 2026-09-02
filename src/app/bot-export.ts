@@ -158,6 +158,118 @@ export function botsForExportSelf(
   return persisted ? [persisted] : [];
 }
 
+export type ScheduleMacrotask = (fn: () => void) => { cancel(): void };
+
+export function scheduleMacrotask(fn: () => void): { cancel(): void } {
+  const timer = setTimeout(fn, 0);
+  return {
+    cancel() {
+      clearTimeout(timer);
+    },
+  };
+}
+
+export function knownModelIdsForImport(gateway: { cachedCopilotModelIds: readonly string[] }): readonly string[] {
+  return gateway.cachedCopilotModelIds;
+}
+
+/**
+ * Form hub persist → export-self without draft.
+ * Save defers dispose so a same-click export-self can run first.
+ * Draft export (Export without saving) does not persist and does not dispose.
+ */
+export class FormExportSession {
+  currentBot: BotRecord | undefined;
+  private persistTail: Promise<void> = Promise.resolve();
+  private persistFailed = false;
+  private pendingSaveDispose = false;
+  private deferred: { cancel(): void } | undefined;
+
+  constructor(
+    initial: BotRecord | undefined,
+    private readonly disposePanel: () => void,
+    private readonly schedule: ScheduleMacrotask = scheduleMacrotask,
+  ) {
+    this.currentBot = initial;
+  }
+
+  async runPersist(work: () => Promise<BotRecord | undefined>): Promise<BotRecord | undefined> {
+    this.persistFailed = false;
+    let created: BotRecord | undefined;
+    const run = this.persistTail.then(async () => {
+      try {
+        created = await work();
+        if (created) {
+          this.currentBot = created;
+          this.deferDispose();
+        }
+      } catch (err) {
+        this.persistFailed = true;
+        throw err;
+      }
+    });
+    this.persistTail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    await run;
+    return created;
+  }
+
+  async exportSelf(args: {
+    draft?: ExportableBot;
+    lookup: (bot: BotRecord | undefined) => BotRecord | undefined;
+    exportBots: (bots: ExportableBot[]) => Promise<void>;
+  }): Promise<void> {
+    if (args.draft) {
+      const bots = botsForExportSelf(undefined, args.draft);
+      if (bots.length > 0) {
+        await args.exportBots(bots);
+      }
+      return;
+    }
+    await this.persistTail;
+    if (this.persistFailed) {
+      return;
+    }
+    const closeAfter = this.pendingSaveDispose;
+    this.cancelDeferred();
+    const persisted = args.lookup(this.currentBot);
+    const bots = botsForExportSelf(persisted, undefined);
+    if (bots.length > 0) {
+      await args.exportBots(bots);
+    }
+    if (closeAfter) {
+      this.disposePanel();
+    }
+  }
+
+  cancelImmediate(): void {
+    this.cancelDeferred();
+    this.disposePanel();
+  }
+
+  dropDeferred(): void {
+    this.cancelDeferred();
+  }
+
+  private deferDispose(): void {
+    this.cancelDeferred();
+    this.pendingSaveDispose = true;
+    this.deferred = this.schedule(() => {
+      this.pendingSaveDispose = false;
+      this.deferred = undefined;
+      this.disposePanel();
+    });
+  }
+
+  private cancelDeferred(): void {
+    this.deferred?.cancel();
+    this.deferred = undefined;
+    this.pendingSaveDispose = false;
+  }
+}
+
 export type ParseBotExportResult =
   | { ok: true; entries: unknown[] }
   | { ok: false; error: 'unreadable' };

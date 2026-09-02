@@ -18,9 +18,11 @@ import {
   exportBots,
   exportEntryFromBot,
   exportSaveFilters,
+  FormExportSession,
   importBotEntries,
   importedToast,
   interpretDirtyExportPick,
+  knownModelIdsForImport,
   parseBotExportText,
   resolveImportModelId,
   serializeBots,
@@ -533,6 +535,8 @@ describe('EX-4 safety, modelId, attachments, protocol', () => {
     expect(src('src/app/bot-export.ts')).not.toMatch(/selectChatModels/);
     expect(src('src/app/bot-export.ts')).not.toMatch(/sendRequest/);
     expect(src('src/app/bot-export.ts')).not.toMatch(/discoverCopilotModels/);
+    expect(src('src/extension.ts')).toMatch(/knownModelIdsForImport\(app\.gateway\)/);
+    expect(src('src/extension.ts')).not.toMatch(/knownModelIds:\s*\[\s*\]/);
   });
 
   it('attachments keep kind + path label + snapshot; never fs.readFile; never execute; extras dropped', () => {
@@ -738,5 +742,214 @@ describe('import create uses explicit handle (BR-3 create path)', () => {
     expect(app.registry.getByHandle('gamma')?.active).toBe(false);
     expect(src('src/app/bot-export.ts')).not.toMatch(/\.update\(/);
     expect(src('src/extension.ts')).toMatch(/app\.createBot/);
+  });
+});
+
+describe('FAIL: persist then export-self without draft', () => {
+  function queuedSchedule() {
+    const ticks: Array<() => void> = [];
+    return {
+      ticks,
+      schedule: (fn: () => void) => {
+        ticks.push(fn);
+        return {
+          cancel() {
+            const i = ticks.indexOf(fn);
+            if (i >= 0) {
+              ticks.splice(i, 1);
+            }
+          },
+        };
+      },
+      flush() {
+        const pending = ticks.splice(0, ticks.length);
+        for (const tick of pending) {
+          tick();
+        }
+      },
+    };
+  }
+
+  it('Dirty New Save-then-export writes the new persisted bot, not an empty envelope', async () => {
+    const { app } = harness();
+    const exported: ReturnType<typeof serializeBots>[] = [];
+    let disposed = 0;
+    const q = queuedSchedule();
+    const hub = new FormExportSession(undefined, () => {
+      disposed += 1;
+    }, q.schedule);
+    expect(src('src/adapters/bot-form-panel.ts')).toMatch(/let currentBot = bot/);
+
+    const persist = hub.runPersist(async () => {
+      const created = await app.createBot({
+        name: 'Newbie',
+        handle: 'newbie',
+        persona: 'fresh',
+        role: 'lead',
+        instructions: 'go',
+      });
+      return app.registry.getByHandle(created.handle) ?? created;
+    });
+    const exportP = hub.exportSelf({
+      lookup: (held) => (held ? app.registry.getById(held.id) : undefined),
+      exportBots: async (bots) => {
+        exported.push(serializeBots(bots));
+      },
+    });
+    await persist;
+    await exportP;
+    expect(exported).toHaveLength(1);
+    expect(exported[0]!.format).toBe('botrider.bots.v1');
+    expect(exported[0]!.bots).toHaveLength(1);
+    expect(exported[0]!.bots[0]).toMatchObject({ name: 'Newbie', handle: 'newbie', persona: 'fresh' });
+    expect(exported[0]!.bots[0]).not.toHaveProperty('id');
+    expect(app.registry.getByHandle('newbie')?.id).not.toBe('FILE-ID');
+    expect(disposed).toBe(1);
+    expect(q.ticks).toEqual([]);
+  });
+
+  it('Dirty Edit Save-then-export writes the updated persisted bot, not the open() snapshot', async () => {
+    const { app } = harness();
+    const opened = await app.createBot({
+      name: 'Old',
+      handle: 'oldie',
+      persona: 'before',
+      role: 'lead',
+      instructions: 'v1',
+    });
+    const exported: ReturnType<typeof serializeBots>[] = [];
+    const q = queuedSchedule();
+    const hub = new FormExportSession(opened, () => undefined, q.schedule);
+    await hub.runPersist(async () => {
+      await app.updateBot(opened.id, {
+        name: 'Old',
+        handle: 'oldie',
+        persona: 'after',
+        role: 'lead',
+        instructions: 'v2',
+        active: true,
+      });
+      return app.registry.getById(opened.id);
+    });
+    await hub.exportSelf({
+      lookup: (held) => (held ? app.registry.getById(held.id) : undefined),
+      exportBots: async (bots) => {
+        exported.push(serializeBots(bots));
+      },
+    });
+    expect(exported[0]!.bots[0]).toMatchObject({ persona: 'after', instructions: 'v2', handle: 'oldie' });
+    expect(exported[0]!.bots[0]?.persona).not.toBe('before');
+    expect(hub.currentBot?.persona).toBe('after');
+  });
+
+  it('persist that would dispose still yields a file when export-self follows in the same turn', async () => {
+    const { app } = harness();
+    const exported: number[] = [];
+    let disposed = 0;
+    const q = queuedSchedule();
+    const hub = new FormExportSession(undefined, () => {
+      disposed += 1;
+    }, q.schedule);
+    const persist = hub.runPersist(async () =>
+      app.createBot({ name: 'Same', handle: 'same', persona: 'p', role: 'r', instructions: 'i' }),
+    );
+    expect(disposed).toBe(0);
+    const exportP = hub.exportSelf({
+      lookup: (held) => (held ? app.registry.getById(held.id) : undefined),
+      exportBots: async (bots) => {
+        exported.push(bots.length);
+      },
+    });
+    await persist;
+    await exportP;
+    expect(exported).toEqual([1]);
+    expect(disposed).toBe(1);
+    q.flush();
+    expect(disposed).toBe(1);
+  });
+
+  it('Export without saving (draft) does not persist and does not dispose', async () => {
+    const { app } = harness();
+    let disposed = 0;
+    const hub = new FormExportSession(undefined, () => {
+      disposed += 1;
+    });
+    const files: string[] = [];
+    await hub.exportSelf({
+      draft: { name: 'Drafty', handle: 'drafty', persona: 'p', role: 'r', instructions: 'i', active: true },
+      lookup: () => undefined,
+      exportBots: async (bots) => {
+        files.push(bots[0]!.handle);
+      },
+    });
+    expect(files).toEqual(['drafty']);
+    expect(app.registry.list()).toEqual([]);
+    expect(disposed).toBe(0);
+  });
+
+  it('invalid persist posts no export and does not dispose', async () => {
+    const { app } = harness();
+    let disposed = 0;
+    const exported: unknown[] = [];
+    const hub = new FormExportSession(undefined, () => {
+      disposed += 1;
+    });
+    const persist = hub.runPersist(async () => {
+      await app.createBot({ name: '', handle: 'x', persona: 'p', role: 'r', instructions: 'i' });
+      return undefined;
+    });
+    const exportP = hub.exportSelf({
+      lookup: (held) => (held ? app.registry.getById(held.id) : undefined),
+      exportBots: async (bots) => {
+        exported.push(bots);
+      },
+    });
+    await expect(persist).rejects.toThrow(/name/i);
+    await exportP;
+    expect(exported).toEqual([]);
+    expect(disposed).toBe(0);
+    expect(app.registry.list()).toEqual([]);
+  });
+
+  it('import keeps known modelId from host cache and unsets unknown; runImport is not hardcoded []', async () => {
+    const { app, gw } = harness();
+    gw.cachedCopilotModelIds = ['copilot/gpt-4.1', 'copilot/gpt-5'];
+    const known = knownModelIdsForImport(gw);
+    expect(known).toEqual(['copilot/gpt-4.1', 'copilot/gpt-5']);
+    const ui = new RecordingUi();
+    await importBotEntries({
+      entries: [
+        {
+          name: 'Keep',
+          handle: 'keep2',
+          persona: 'p',
+          role: 'r',
+          instructions: 'i',
+          active: true,
+          modelId: 'copilot/gpt-5',
+        },
+        {
+          name: 'Gone',
+          handle: 'gone2',
+          persona: 'p',
+          role: 'r',
+          instructions: 'i',
+          active: true,
+          modelId: 'copilot/missing',
+        },
+      ],
+      existing: [],
+      knownModelIds: known,
+      create: (draft) => app.createBot(draft),
+      ui,
+    });
+    expect(app.registry.getByHandle('keep2')?.modelId).toBe('copilot/gpt-5');
+    expect(app.registry.getByHandle('gone2')?.modelId).toBeUndefined();
+    expect(gw.requestCount).toBe(0);
+    expect(gw.ensureCalls).toBe(0);
+    expect(src('src/extension.ts')).toContain('knownModelIdsForImport(app.gateway)');
+    expect(src('src/extension.ts')).not.toMatch(/knownModelIds:\s*\[\s*\]/);
+    expect(src('src/extension.ts')).not.toMatch(/selectChatModels/);
+    expect(src('src/app/bot-export.ts')).not.toMatch(/selectChatModels|sendRequest/);
   });
 });
