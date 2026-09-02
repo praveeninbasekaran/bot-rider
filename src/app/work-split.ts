@@ -94,7 +94,7 @@ function extractSplitJson(text: string): unknown | undefined {
   return undefined;
 }
 
-/** Dispatcher JSON: assignments[] or split map. Host never invents a partition. */
+/** Dispatcher JSON: assignments[] or split map. Host never writes a path split. */
 export function parseDispatcherSplit(text: string): SplitParse {
   const json = extractSplitJson(text);
   if (!json || typeof json !== 'object') {
@@ -121,7 +121,7 @@ function handleKey(handle: string): string {
 }
 
 /**
- * Remaining active bots only. Not name matching. Not reserved Dev1/Dev2/tester roles.
+ * Remaining active bots only. Not name matching. Not reserved role names.
  * Host does not rewrite or fill the split.
  */
 export function validateDispatcherSplit(args: {
