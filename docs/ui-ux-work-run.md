@@ -52,6 +52,8 @@ Spec
 
 Work Send (host) is the gate: exactly one **active** dispatcher and exactly one **active** spec. Chrome shows the Swarm error when Work cannot run — it does **not** rewrite the form.
 
+**Not name-contains `BA`.** Do not infer Spec or Dispatcher from handle / name / role. No reserved **Dev1 / Dev2 / tester** labels on the tree or form.
+
 ### 27.4 Work cannot run (visible error)
 
 When Work is selected and Send fails the designation gate (0 or >1 active dispatcher, or 0 or >1 active spec), Swarm error — exact copy:
@@ -64,7 +66,7 @@ No Work-batch. No silent Debate. No form modal. No per-Send picker.
 
 ### 27.5 Composer during Work-batch (unlocked ≠ second orchestrator)
 
-While a Work-batch is in flight, the composer is **unlocked** (`@` / assign / Stop). This **contrasts** §26: Debate-batch composer stays **locked** until that Debate batch settles.
+While a Work-batch is in flight, the composer is **unlocked** for **`@` / assign / Stop**. This **contrasts** §26: Debate-batch composer stays **locked** until that Debate batch settles.
 
 Unlocked ≠ second orchestrator:
 
@@ -100,9 +102,11 @@ Board anatomy otherwise unchanged (§17). Clicking a chip is a no-op.
 
 ### 27.8 One Files list + collision note
 
-**One** Proposed Changes Files list: the host **union**. Not per-worker Files. Not N Approves.
+**One** Proposed Changes Files list: the host **union**. **BR-6 Files only after settle.** Not per-worker Files. Not N Approves.
 
 Approve is **disabled** until the Work-batch settles (`hasPendingChanges` false until then).
+
+**MCP Grain B is a separate click** (§19). Files Approve does not invoke MCP. MCP Approve does not apply Files. Do not combine the gates. Do not move MCP onto the Files list.
 
 Collision paths are **absent** from the list and from Approve. Swarm note per dropped path — exact copy:
 
@@ -113,6 +117,8 @@ Skipped {path} · collision
 `{path}` is the workspace-relative path. Disjoint remainder still Approves (host). No last-writer-wins chrome. No whole-batch fail banner. **No auto-Argue** (F8b out).
 
 §24 spec-id chips stay on those Files rows when cited.
+
+Do **not** paint a reserved tester / Dev1 / Dev2 chip. A worker on test paths is just `@{handle}`. Comparing worker output to spec is **F8d chrome, not F8a**.
 
 ### 27.9 Overlap (Work-batch)
 
@@ -156,7 +162,7 @@ UI never calls `vscode.lm`. UI never paints packets. UI never implies same-batch
 
 ### 27.13 Out
 
-Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourth view · per-Send role picker · Save-time designation gate · blocking Save / New Bot for flags · F8b Argue chrome · F8c idle follow-on chrome · F8d Stop-one · N Approves · last-writer-wins · whole-batch fail on collision · changing default Send to Work · overlap restyle of §26 Debate lock · moving Approve / MCP / packets / OpenSpec onto the run board · reopening §20 / §22 / §23 / §24 / §25 / §26 · F3 dashboard · F4 register · leftovers 002/003/009/014 · Graphify vendor UI · token/quota chrome
+Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourth view · per-Send role picker · reserved Dev1 / Dev2 / tester chrome · name-contains-`BA` inference · Save-time designation gate · blocking Save / New Bot for flags · F8b Argue chrome · F8c idle follow-on chrome · F8d Stop-one / compare-to-spec · N Approves · combined Files+MCP Approve · last-writer-wins · whole-batch fail on collision · changing default Send to Work · overlap restyle of §26 Debate lock · moving Approve / MCP / packets / OpenSpec onto the run board · reopening §20 / §22 / §23 / §24 / §25 / §26 · F3 dashboard · F4 register · leftovers 002/003/009/014 · Graphify vendor UI · token/quota chrome
 
 ### 27.14 Copy exact
 
