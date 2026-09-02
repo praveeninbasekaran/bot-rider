@@ -303,6 +303,35 @@ body.vscode-high-contrast .run-board {
   border-bottom-color: var(--vscode-contrastBorder, var(--vscode-foreground));
 }
 
+.run-board-inflight {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.run-board-inflight-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--vscode-foreground);
+  cursor: default;
+  animation: none;
+}
+
+.run-board-inflight-glyph {
+  color: var(--vscode-progressBar-background);
+  line-height: 1;
+  animation: none;
+}
+
+.run-board-inflight-handle {
+  min-width: 0;
+}
+
 .round-header {
   margin: 10px 0 6px;
   font-size: 11px;
