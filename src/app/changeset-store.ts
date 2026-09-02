@@ -13,6 +13,8 @@ export class ChangesetStore {
   leftoverCreates: string[] = [];
   leftoverDeletes: string[] = [];
   applyFailed = false;
+  /** Visible remainder during Argue; Approve stays off until collisions resolve. */
+  private holdApprove = false;
 
   constructor(
     private readonly applyPort: ApplyEditPort,
@@ -32,14 +34,15 @@ export class ChangesetStore {
   }
 
   hasPending(): boolean {
-    return !!this.pending;
+    return !!this.pending && !this.holdApprove;
   }
 
-  setPending(files: ChangeFile[]): void {
+  setPending(files: ChangeFile[], opts?: { holdApprove?: boolean }): void {
     this.pending = files.map((f) => ({
       ...f,
       binary: f.binary ? new Uint8Array(f.binary) : undefined,
     }));
+    this.holdApprove = opts?.holdApprove === true;
     this.applyFailed = false;
     this.leftoverCreates = [];
     this.leftoverDeletes = [];
@@ -93,7 +96,7 @@ export class ChangesetStore {
   }
 
   async approve(mode: ApplyMode = 'initial'): Promise<boolean> {
-    if (!this.pending) {
+    if (!this.hasPending()) {
       return false;
     }
     const ops = this.buildEdit(mode);
@@ -115,6 +118,7 @@ export class ChangesetStore {
 
   async reject(): Promise<void> {
     this.pending = undefined;
+    this.holdApprove = false;
     this.applyFailed = false;
     this.leftoverCreates = [];
     this.leftoverDeletes = [];
@@ -125,6 +129,7 @@ export class ChangesetStore {
 
   private async clearSucceeded(): Promise<void> {
     this.pending = undefined;
+    this.holdApprove = false;
     this.applyFailed = false;
     this.leftoverCreates = [];
     this.leftoverDeletes = [];

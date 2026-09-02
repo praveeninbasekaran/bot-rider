@@ -210,6 +210,9 @@ export function detectTurn(instruction: string): TurnKind {
   if (instruction.includes('Role: dispatch')) {
     return 'dispatch';
   }
+  if (instruction.includes('Role: argue')) {
+    return 'argue';
+  }
   if (instruction.includes('Role: work')) {
     return 'work';
   }

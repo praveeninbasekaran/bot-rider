@@ -53,6 +53,8 @@ export function turnInstruction(
       return `${user}${extraLine}\n\nRole: dispatch. Assign disjoint workspace-relative path sets to remaining worker handles. Emit a fenced JSON block with shape {"assignments":[{"handle":"worker-handle","paths":["relative/path"]}]}. Path sets MUST be pairwise disjoint. Do not invent reserved Dev1, Dev2, or tester roles. Handles only. Extra prose is ignored.`;
     case 'work':
       return `${user}${extraLine}\n\nRole: work. Work-batch on your assigned paths only. Emit a JSON changeset. Use a fenced code block containing JSON with shape {"files":[{"path":"relative/path","op":"create"|"update"|"delete","content":"..."}]}. delete omits content. Paths must stay inside the workspace and inside your assignment. Extra prose is ignored.`;
+    case 'argue':
+      return `${user}${extraLine}\n\nArgue round ${round}. Role: argue. Sequential ping-pong for this path. The first token of your reply MUST be AGREE @handle or DISSENT. AGREE names exactly one claimant handle as the writer for this path. Yield is AGREE on a peer handle. DISSENT is not a win. Do not emit file bodies, diffs, or JSON changesets. ${speakingVoice()}`;
   }
 }
 

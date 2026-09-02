@@ -91,4 +91,19 @@ describe('ChangesetStore', () => {
     expect(ok).toBe(false);
     expect(msgs.filter((m) => m.type === 'changeset/cleared')).toHaveLength(0);
   });
+
+  it('holdApprove keeps files visible while hasPending is false', async () => {
+    const fs = new MemoryFs();
+    const msgs: HostToUi[] = [];
+    const store = new ChangesetStore(fs, fs, (m) => msgs.push(m));
+    store.setPending([{ path: 'src/keep.ts', op: 'create', content: 'k' }], { holdApprove: true });
+    expect(store.hasPending()).toBe(false);
+    expect(store.files?.map((f) => f.path)).toEqual(['src/keep.ts']);
+    expect(await store.approve('initial')).toBe(false);
+    expect(fs.applyCalls).toBe(0);
+    store.setPending([{ path: 'src/keep.ts', op: 'create', content: 'k' }]);
+    expect(store.hasPending()).toBe(true);
+    expect(await store.approve('initial')).toBe(true);
+    expect(fs.applyCalls).toBe(1);
+  });
 });

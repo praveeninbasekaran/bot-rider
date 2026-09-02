@@ -68,6 +68,8 @@ export const COPY = {
   workNeedsRoles: 'Work needs one Dispatcher and one Spec.',
   workBatchRunning: 'Work batch still running.',
   skippedCollision: (path: string) => `Skipped ${path} · collision`,
+  argueHeader: (path: string) => `ARGUE · ${path}`,
+  argueRound: (round: 1 | 2) => `Argue round ${round}`,
   invalidSplit: 'Dispatcher split is not disjoint.',
   unreadableBotFile: "Couldn't read this bot file.",
   dirtyExportPrompt: 'Save before export?',

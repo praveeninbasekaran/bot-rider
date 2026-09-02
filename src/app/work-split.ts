@@ -241,5 +241,41 @@ export function unionWorkerFiles(byWorker: { botId: string; files: ChangeFile[] 
     }
   }
   const files = [...kept.values()].filter((file) => !collisions.has(file.path));
-  return { files, collisions: [...collisions].sort() };
+  return { files, collisions: [...collisions].sort((a, b) => a.localeCompare(b)) };
+}
+
+export type PathClaimant = {
+  botId: string;
+  file: ChangeFile;
+};
+
+export type CollisionClaim = {
+  path: string;
+  claimants: PathClaimant[];
+};
+
+/** Remainder (disjoint) + collision paths with the workers who wrote them. */
+export function workPathClaims(byWorker: { botId: string; files: ChangeFile[] }[]): {
+  remainder: ChangeFile[];
+  collisions: CollisionClaim[];
+} {
+  const union = unionWorkerFiles(byWorker);
+  const byPath = new Map<string, PathClaimant[]>();
+  for (const worker of byWorker) {
+    const seen = new Set<string>();
+    for (const file of worker.files) {
+      if (seen.has(file.path)) {
+        continue;
+      }
+      seen.add(file.path);
+      const list = byPath.get(file.path) ?? [];
+      list.push({ botId: worker.botId, file });
+      byPath.set(file.path, list);
+    }
+  }
+  const collisions: CollisionClaim[] = union.collisions.map((path) => ({
+    path,
+    claimants: byPath.get(path) ?? [],
+  }));
+  return { remainder: union.files, collisions };
 }
