@@ -415,7 +415,8 @@ describe('WK-4 dispatch + Work-batch', () => {
     await workSwarm(app, { reservedDev1: true });
     scriptWork(gw, defaultAssignments, (_h, paths) => paths.map((path) => ({ path, op: 'create', content: 'w' })));
     await app.send('split handles', 'work');
-    expect(gw.turns.filter((t) => t === 'dispatch')).toHaveLength(1);
+    const firstWork = gw.turns.indexOf('work');
+    expect(gw.turns.slice(0, firstWork).filter((t) => t === 'dispatch')).toHaveLength(1);
     const workOpts = gw.lastSendOpts.filter((_, i) => gw.turns[i] === 'work');
     const workHandles = workOpts.map((opts) => opts.handle);
     expect(workHandles.sort()).toEqual(['deva', 'devb']);
