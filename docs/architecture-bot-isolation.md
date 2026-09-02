@@ -140,7 +140,7 @@ On a bot’s next pack, ingest inbox packets into that bot’s session as struct
 
 ## 5. Pack / TokenGovernor (SI-4 + QC)
 
-Minimum pack unchanged from QC-2 except: ingested **required** isolation packets for this turn join the required set (not silent-trim extras).
+Minimum pack unchanged from QC-2 except: ingested **required** isolation packets for this turn join the required set (not silent-trim extras). Required OpenSpec spec bodies (OS-4, [architecture-openspec-trace.md](./architecture-openspec-trace.md)) join that required set like published packets.
 
 Trim order on overflow:
 

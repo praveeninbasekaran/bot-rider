@@ -18,6 +18,8 @@ Addendum 2026-09-01: F7 isolation / SI-1–4 is additive — architecture-bot-is
 
 Addendum 2026-09-01: F6 bot export / import is additive — architecture-bot-export-import.md + UI §23. Envelope `format: 'botrider.bots.v1'`. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
 
+Addendum 2026-09-02: F2 OpenSpec contract traceability is additive — architecture-openspec-trace.md + UI §24. Host reads workspace `openspec/` if present (index-if-present). Missing `openspec/` = empty catalog, no error. BR-1–6 spec files unchanged. Leftovers 002/003/009/014 out. F1 Graphify out. F7 parallel out.
+
 ## Product
 
 VS Code extension: `publisher: botrider`, `name: bot-rider`, `displayName: Bot Rider`, `engines.vscode: ^1.99.0`, `activationEvents: []`.
@@ -153,6 +155,8 @@ Additive per-bot Copilot model selection: [architecture-bot-model.md](./architec
 Additive F7 isolation / SI-1–4: [architecture-bot-isolation.md](./architecture-bot-isolation.md). Host-only. Zero new chrome. Sequential only. Parallel Event Bus out. BR / QC / HV / MA / SD / TA / MS frozen.
 
 Additive F6 bot export / import: [architecture-bot-export-import.md](./architecture-bot-export-import.md). Envelope `format: 'botrider.bots.v1'`. UiToHost `bots/export-self` only (form Export). Chrome: [ui-ux-bot-export-import.md](./ui-ux-bot-export-import.md) §23. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
+
+Additive F2 OpenSpec / OS-1–4: [architecture-openspec-trace.md](./architecture-openspec-trace.md). Optional `specIds` on `changeset/preview` Files. Chrome: [ui-ux-openspec-chips.md](./ui-ux-openspec-chips.md) §24. Missing `openspec/` = empty catalog, no error, no chips, no banner. BR / QC / HV / MA / SD / TA / MS / SI / EX frozen otherwise. F1 Graphify out. F7 parallel out.
 
 ### UI → host
 
