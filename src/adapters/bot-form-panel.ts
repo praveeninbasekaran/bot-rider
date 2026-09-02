@@ -11,6 +11,7 @@ import {
   type AttachFormFields,
 } from '../app/bot-attach';
 import { COPY } from '../app/copy';
+import { FormExportSession, type ExportableBot } from '../app/bot-export';
 import { attachmentsOf, isAttachmentKind, type AttachmentKind, type BotAttachment, type BotRecord } from '../domain/bot';
 import { deriveHandle } from '../domain/bot';
 import { webviewHtml } from './webview-html';
@@ -18,6 +19,7 @@ import type { HostToUi, UiToHost } from '../protocol/messages';
 
 export class BotFormPanel {
   static readonly viewType = 'botrider.botForm';
+  exportBots: (bots: ExportableBot[]) => Promise<void> = async () => undefined;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -49,6 +51,8 @@ export class BotFormPanel {
       extra: `<form id="bot-form"></form>`,
     });
     const session = newFormSession(bot);
+    let currentBot = bot;
+    const exportHub = new FormExportSession(bot, () => panel.dispose());
     const emit = (msg: HostToUi): void => {
       void panel.webview.postMessage(msg);
     };
@@ -63,18 +67,18 @@ export class BotFormPanel {
           return;
         }
         if (msg.type === 'form/cancel') {
-          panel.dispose();
+          exportHub.cancelImmediate();
           return;
         }
-        if (msg.type === 'bots/delete' && bot) {
+        if (msg.type === 'bots/delete' && currentBot) {
           const pick = await vscode.window.showWarningMessage(
-            `Delete bot "${bot.name}"?`,
+            `Delete bot "${currentBot.name}"?`,
             { modal: true },
             'Delete',
           );
           if (pick === 'Delete') {
-            await this.app.deleteBot(bot.id);
-            panel.dispose();
+            await this.app.deleteBot(currentBot.id);
+            exportHub.cancelImmediate();
           }
           return;
         }
@@ -92,26 +96,45 @@ export class BotFormPanel {
           session.attachments = removeAttachment(session.attachments, msg.slot, msg.path);
           return;
         }
+        if (msg.type === 'bots/export-self') {
+          await exportHub.exportSelf({
+            draft: msg.draft,
+            lookup: (held) => (held ? this.app.registry.getById(held.id) : undefined),
+            exportBots: (bots) => this.exportBots(bots),
+          });
+          return;
+        }
         try {
           if (msg.type === 'bots/create') {
-            await this.app.handleUi({
-              ...msg,
-              draft: {
-                ...msg.draft,
+            await exportHub.runPersist(async () => {
+              const created = await this.app.createBot({
+                name: msg.draft.name,
+                handle: msg.draft.handle,
+                persona: msg.draft.persona,
+                role: msg.draft.role,
+                instructions: msg.draft.instructions,
+                active: msg.draft.active,
                 attachments: resolveFormAttachments(msg.draft.attachments, session.attachments),
-              },
+                modelId: msg.draft.modelId,
+              });
+              currentBot = this.app.registry.getByHandle(created.handle) ?? created;
+              return currentBot;
             });
-            panel.dispose();
           } else if (msg.type === 'bots/update') {
-            const patch = msg.patch ?? {};
-            await this.app.handleUi({
-              ...msg,
-              patch: {
-                ...patch,
-                attachments: resolveFormAttachments(patch.attachments, session.attachments),
-              },
+            await exportHub.runPersist(async () => {
+              const patch = msg.patch ?? {};
+              await this.app.handleUi({
+                ...msg,
+                patch: {
+                  ...patch,
+                  attachments: resolveFormAttachments(patch.attachments, session.attachments),
+                },
+              });
+              if (currentBot) {
+                currentBot = this.app.registry.getById(currentBot.id) ?? currentBot;
+              }
+              return currentBot;
             });
-            panel.dispose();
           }
         } catch (err) {
           void panel.webview.postMessage({
@@ -122,6 +145,7 @@ export class BotFormPanel {
       },
     );
     panel.onDidDispose(() => {
+      exportHub.dropDeferred();
       modelsWatch.dispose();
       sub.dispose();
     });

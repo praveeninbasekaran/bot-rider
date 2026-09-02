@@ -91,6 +91,7 @@ export class FakeGateway implements ICopilotGateway {
   resolvedModelIds: Array<string | null> = [];
   unavailableModelIds = new Set<string>();
   formModels: { id: string; label: string }[] = [];
+  cachedCopilotModelIds: string[] = [];
   maxInputTokens = 16_000;
   status: CopilotStatus | 'settling' = 'ready';
   settled = true;
@@ -134,6 +135,9 @@ export class FakeGateway implements ICopilotGateway {
     const refresh = (): void => {
       emit(botsModelsMessage([], savedModelId, 'loading'));
       const status = this.formModels.length > 0 ? 'ready' : 'unavailable';
+      if (status === 'ready') {
+        this.cachedCopilotModelIds = this.formModels.map((model) => model.id);
+      }
       emit(botsModelsMessage(this.formModels, savedModelId, status));
     };
     refresh();

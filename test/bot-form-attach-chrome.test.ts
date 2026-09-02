@@ -73,6 +73,11 @@ function loadBotForm() {
     'err',
     'delete-btn',
     'cancel',
+    'export-btn',
+    'export-dirty-modal',
+    'export-dirty-save',
+    'export-dirty-without',
+    'export-dirty-cancel',
     'attach-hint',
     'attach-skips',
     'attach-untyped-list',
@@ -90,6 +95,7 @@ function loadBotForm() {
     );
     el.id = id;
     if (id === 'active') el.checked = true;
+    if (id === 'export-dirty-modal') el.hidden = true;
     if (id === 'attach-hint') {
       el.textContent = 'Open a folder to attach files.';
       el.hidden = true;

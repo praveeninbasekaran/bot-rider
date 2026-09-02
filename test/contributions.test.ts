@@ -189,8 +189,11 @@ describe('contribution points', () => {
     const bots = pkg.contributes.viewsWelcome.find((v) => v.view === 'botrider.bots');
     const review = pkg.contributes.viewsWelcome.find((v) => v.view === 'botrider.review');
     expect(bots?.when).toBe('!botrider.hasBots');
-    expect(bots?.contents).toContain('No bots yet. Create a bot with a name, persona, and role');
+    expect(bots?.contents).toBe(
+      'No bots yet. Create a bot with a name, persona, and role, then send a master prompt in Swarm.\n[New Bot](command:botrider.bots.create)\n[Import](command:botRider.bots.import)',
+    );
     expect(bots?.contents).toContain('command:botrider.bots.create');
+    expect(bots?.contents).toContain('command:botRider.bots.import');
     expect(review?.when).toBe('!botrider.hasPendingChanges && !botrider.hasPendingMcp');
     expect(review?.contents).toContain('Approve applies the whole batch. Reject discards it.');
   });

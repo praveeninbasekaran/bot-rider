@@ -19,6 +19,22 @@ import type { HostToUi, UiToHost } from './protocol/messages';
 import type { ChangePreviewKind, FileOp } from './domain/changeset';
 import { COPY, copilotStatusMessage } from './app/copy';
 import { MCP_SETTLE_MS, McpGateway } from './app/mcp-gateway';
+import {
+  BOT_EXPORT_COMMANDS,
+  EXPORT_FORMAT_PICKS,
+  IMPORT_OPEN_DIALOG_OPTIONS,
+  botsFromTreeSelection,
+  collisionChoicePrompt,
+  exportBots,
+  exportSaveFilters,
+  importBotEntries,
+  importedToast,
+  knownModelIdsForImport,
+  parseBotExportText,
+  type ExportableBot,
+  type ExportDialogs,
+  type ImportUi,
+} from './app/bot-export';
 
 class MementoStore {
   constructor(private readonly memento: vscode.Memento) {}
@@ -103,6 +119,7 @@ export function activate(context: vscode.ExtensionContext): void {
   botsTree = new BotsTreeProvider(app);
   reviewTree = new ReviewTreeProvider(app);
   const form = new BotFormPanel(context.extensionUri, app);
+  form.exportBots = (bots) => runExport(bots);
   const expand = new ChatExpandPanel(context.extensionUri, hub, keys, (open) => {
     chatExpanded = open;
     void syncKeys();
@@ -111,6 +128,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const botsView = vscode.window.createTreeView('botrider.bots', {
     treeDataProvider: botsTree,
     manageCheckboxStateManually: true,
+    canSelectMany: true,
   });
   botsTree.attach(botsView);
 
@@ -180,7 +198,115 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('botrider.split.continue', () => app.continueDebate()),
     vscode.commands.registerCommand('botrider.split.pick', () => pickBot()),
     vscode.commands.registerCommand('botrider.copilot.recheck', () => app.recheck()),
+    vscode.commands.registerCommand(BOT_EXPORT_COMMANDS.export, async (item?: BotTreeItem) => {
+      if (item?.bot) {
+        await runExport([item.bot]);
+      }
+    }),
+    vscode.commands.registerCommand(BOT_EXPORT_COMMANDS.exportSelected, async () => {
+      await runExport(botsFromTreeSelection(botsView.selection));
+    }),
+    vscode.commands.registerCommand(BOT_EXPORT_COMMANDS.exportAll, async () => {
+      await runExport(app.registry.list());
+    }),
+    vscode.commands.registerCommand(BOT_EXPORT_COMMANDS.import, () => runImport()),
   );
+
+  async function runExport(bots: ExportableBot[]): Promise<void> {
+    await exportBots({ bots, dialogs: vscodeExportDialogs() });
+  }
+
+  async function runImport(): Promise<void> {
+    const uris = await vscode.window.showOpenDialog({ ...IMPORT_OPEN_DIALOG_OPTIONS });
+    if (!uris?.[0]) {
+      return;
+    }
+    let text: string;
+    try {
+      const bytes = await vscode.workspace.fs.readFile(uris[0]);
+      text = Buffer.from(bytes).toString('utf8');
+    } catch {
+      void vscode.window.showErrorMessage(COPY.unreadableBotFile);
+      return;
+    }
+    const parsed = parseBotExportText(text);
+    if (!parsed.ok) {
+      void vscode.window.showErrorMessage(COPY.unreadableBotFile);
+      return;
+    }
+    const result = await importBotEntries({
+      entries: parsed.entries,
+      existing: app.registry.list(),
+      knownModelIds: knownModelIdsForImport(app.gateway),
+      create: (draft) => app.createBot(draft),
+      ui: vscodeImportUi(),
+    });
+    const toast = importedToast(result.imported, result.skipped);
+    if (toast) {
+      void vscode.window.showInformationMessage(toast);
+    }
+  }
+
+  function vscodeExportDialogs(): ExportDialogs {
+    return {
+      async pickFormat() {
+        const picked = await vscode.window.showQuickPick(EXPORT_FORMAT_PICKS, {
+          placeHolder: 'Export format',
+          title: 'Export bots',
+        });
+        return picked?.format;
+      },
+      async saveFile(opts) {
+        const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+        const defaultUri = folder
+          ? vscode.Uri.joinPath(folder, opts.defaultName)
+          : vscode.Uri.file(opts.defaultName);
+        const uri = await vscode.window.showSaveDialog({
+          defaultUri,
+          filters: exportSaveFilters(opts.format),
+        });
+        if (!uri) {
+          return false;
+        }
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(opts.content, 'utf8'));
+        return true;
+      },
+      showExported(n) {
+        void vscode.window.showInformationMessage(COPY.exported(n));
+      },
+    };
+  }
+
+  function vscodeImportUi(): ImportUi {
+    return {
+      async chooseSkipOrRename(gate) {
+        const pick = await vscode.window.showInformationMessage(
+          collisionChoicePrompt(gate),
+          { modal: true },
+          'Skip',
+          'Rename',
+        );
+        return pick === 'Rename' ? 'rename' : 'skip';
+      },
+      async promptHandle(current, validate) {
+        return vscode.window.showInputBox({
+          prompt: 'New handle',
+          value: current,
+          validateInput: validate,
+        });
+      },
+      async promptName(current, validate) {
+        return vscode.window.showInputBox({
+          prompt: 'New name',
+          value: current,
+          validateInput: validate,
+        });
+      },
+      notifySkip(message) {
+        void vscode.window.showInformationMessage(message);
+      },
+    };
+  }
 
   async function approveChanges(mode: 'initial' | 'retry' = 'initial'): Promise<void> {
     const n = app.changesets.files?.length ?? 0;

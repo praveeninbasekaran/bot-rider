@@ -30,6 +30,8 @@ export interface ICopilotGateway {
   maxInputTokens: number;
   status: CopilotStatus | 'settling';
   readonly settled: boolean;
+  /** Last Copilot discovery ids already on the host. Import reads this; never discovers. */
+  readonly cachedCopilotModelIds: readonly string[];
   countTokens(messages: PromptMessage[]): Promise<number>;
   ensureAvailable(): Promise<CopilotStatus>;
   prepareTurn(modelId?: string | null): Promise<{ usedFallback: boolean }>;
@@ -118,7 +120,12 @@ export class CopilotGateway implements ICopilotGateway {
   private inflight = false;
   private modelsSettled = false;
   private accessSettled = false;
+  private knownModelIds: string[] = [];
   private readonly hangMs: number;
+
+  get cachedCopilotModelIds(): readonly string[] {
+    return this.knownModelIds;
+  }
 
   constructor(
     private readonly lm: LanguageModelPort,
@@ -154,11 +161,21 @@ export class CopilotGateway implements ICopilotGateway {
   }
 
   watchFormModels(savedModelId: string | null | undefined, emit: (msg: HostToUi) => void): FormModelsWatch {
-    return watchFormCopilotModels({ lm: this.lm, savedModelId, emit });
+    return watchFormCopilotModels({
+      lm: this.lm,
+      savedModelId,
+      emit: (msg) => {
+        if (msg.type === 'bots/models' && msg.status === 'ready') {
+          this.knownModelIds = msg.models.map((model) => model.id);
+        }
+        emit(msg);
+      },
+    });
   }
 
   async prepareTurn(modelId?: string | null): Promise<{ usedFallback: boolean }> {
     const copilot = await discoverCopilotModels(this.lm);
+    this.knownModelIds = copilot.map((model) => model.id);
     const hostDefault = copilot[0];
     const wanted = normalizeModelId(modelId);
     if (!wanted) {
@@ -176,6 +193,7 @@ export class CopilotGateway implements ICopilotGateway {
 
   async ensureAvailable(): Promise<CopilotStatus> {
     const copilot = await discoverCopilotModels(this.lm);
+    this.knownModelIds = copilot.map((model) => model.id);
     const model = copilot[0];
     if (!model) {
       this.model = undefined;

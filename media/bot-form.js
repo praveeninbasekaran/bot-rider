@@ -62,7 +62,8 @@
     '</div>' +
     '<label class="row"><input id="active" type="checkbox" checked /> Active in swarm</label>' +
     '<div id="err" class="error" role="alert"></div>' +
-    '<div class="footer"><button type="button" class="link grow" id="delete-btn" hidden>Delete</button><button type="button" class="secondary" id="cancel">Cancel</button><button type="submit">Save</button></div>';
+    '<div class="footer"><button type="button" class="link grow" id="delete-btn" hidden>Delete</button><button type="button" class="secondary" id="cancel">Cancel</button><button type="button" class="secondary" id="export-btn">Export</button><button type="submit">Save</button></div>' +
+    '<div id="export-dirty-modal" class="export-dirty-modal" hidden><div class="export-dirty-card" role="dialog" aria-modal="true" aria-labelledby="export-dirty-title"><p id="export-dirty-title">Save before export?</p><div class="export-dirty-actions"><button type="button" id="export-dirty-save">Save</button><button type="button" class="secondary" id="export-dirty-without">Export without saving</button><button type="button" class="secondary" id="export-dirty-cancel">Cancel</button></div></div></div>';
 
   const name = document.getElementById('name');
   const handle = document.getElementById('handle');
@@ -74,6 +75,11 @@
   const active = document.getElementById('active');
   const err = document.getElementById('err');
   const deleteBtn = document.getElementById('delete-btn');
+  const exportBtn = document.getElementById('export-btn');
+  const exportDirtyModal = document.getElementById('export-dirty-modal');
+  const exportDirtySave = document.getElementById('export-dirty-save');
+  const exportDirtyWithout = document.getElementById('export-dirty-without');
+  const exportDirtyCancel = document.getElementById('export-dirty-cancel');
   const attachHint = document.getElementById('attach-hint');
   const attachSkips = document.getElementById('attach-skips');
   const attachUntypedList = document.getElementById('attach-untyped-list');
@@ -81,6 +87,7 @@
   let userTouchedModel = false;
   let savedMissing = false;
   let lastModelsMsg = null;
+  let cleanEdit = null;
 
   handle.addEventListener('input', function () {
     handleTouched = true;
@@ -369,14 +376,52 @@
     return '';
   }
 
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    const message = validate();
-    err.textContent = message;
-    if (message) {
+  function captureClean() {
+    if (!editingId) {
+      cleanEdit = null;
       return;
     }
-    const draft = {
+    cleanEdit = {
+      name: name.value,
+      handle: handle.value,
+      persona: persona.value,
+      role: role.value,
+      instructions: instructions.value,
+      active: active.checked,
+      modelId: wantedModelId,
+      attachments: JSON.stringify(formAttachments()),
+    };
+  }
+
+  function isDirty() {
+    if (!editingId || !cleanEdit) return true;
+    if (name.value !== cleanEdit.name) return true;
+    if (handle.value !== cleanEdit.handle) return true;
+    if (persona.value !== cleanEdit.persona) return true;
+    if (role.value !== cleanEdit.role) return true;
+    if (instructions.value !== cleanEdit.instructions) return true;
+    if (active.checked !== cleanEdit.active) return true;
+    if (JSON.stringify(formAttachments()) !== cleanEdit.attachments) return true;
+    if (userTouchedModel && formModelId() !== cleanEdit.modelId) return true;
+    return false;
+  }
+
+  function showDirtyModal() {
+    exportDirtyModal.hidden = false;
+  }
+
+  function hideDirtyModal() {
+    exportDirtyModal.hidden = true;
+  }
+
+  function tryValidate() {
+    const message = validate();
+    err.textContent = message;
+    return !message;
+  }
+
+  function collectPersistDraft() {
+    return {
       name: name.value.trim(),
       handle: handle.value.trim().toLowerCase(),
       persona: persona.value.trim(),
@@ -387,6 +432,31 @@
       attachments: formAttachments(),
       modelId: formModelId(),
     };
+  }
+
+  function collectExportDraft() {
+    var draft = {
+      name: name.value.trim(),
+      handle: handle.value.trim().toLowerCase(),
+      persona: persona.value.trim(),
+      role: role.value.trim(),
+      instructions: instructions.value,
+      active: active.checked,
+    };
+    var modelId = formModelId();
+    if (modelId) draft.modelId = modelId;
+    var atts = attachments.map(function (file) {
+      var item = { path: file.path, name: file.name, snapshot: file.snapshot || '' };
+      if (file.slot) item.kind = file.slot;
+      else if (file.kind) item.kind = file.kind;
+      return item;
+    });
+    if (atts.length) draft.attachments = atts;
+    return draft;
+  }
+
+  function postPersist() {
+    const draft = collectPersistDraft();
     if (editingId) {
       vscode.postMessage({
         type: 'bots/update',
@@ -410,6 +480,48 @@
     } else {
       vscode.postMessage({ type: 'bots/create', draft: draft });
     }
+  }
+
+  function postExportSelf(withDraft) {
+    if (withDraft) {
+      vscode.postMessage({ type: 'bots/export-self', draft: collectExportDraft() });
+      return;
+    }
+    vscode.postMessage({ type: 'bots/export-self' });
+  }
+
+  exportBtn.addEventListener('click', function () {
+    if (!tryValidate()) {
+      hideDirtyModal();
+      return;
+    }
+    if (!isDirty()) {
+      postExportSelf(false);
+      return;
+    }
+    showDirtyModal();
+  });
+  exportDirtySave.addEventListener('click', function () {
+    hideDirtyModal();
+    if (!tryValidate()) return;
+    postPersist();
+    postExportSelf(false);
+  });
+  exportDirtyWithout.addEventListener('click', function () {
+    hideDirtyModal();
+    if (!tryValidate()) return;
+    postExportSelf(true);
+  });
+  exportDirtyCancel.addEventListener('click', function () {
+    hideDirtyModal();
+  });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!tryValidate()) {
+      return;
+    }
+    postPersist();
   });
 
   window.addEventListener('message', function (event) {
@@ -454,6 +566,8 @@
       if (lastModelsMsg) {
         applyBotsModels(lastModelsMsg);
       }
+      hideDirtyModal();
+      captureClean();
       if (msg.workspaceEmpty === true) {
         setNoFolder(true);
       } else if (msg.workspaceEmpty === false) {
