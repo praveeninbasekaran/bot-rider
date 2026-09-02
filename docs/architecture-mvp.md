@@ -18,6 +18,8 @@ Addendum 2026-09-01: F7 isolation / SI-1–4 is additive — architecture-bot-is
 
 Addendum 2026-09-02: F7 parallel / Event Bus / EB-1–4 is additive — architecture-event-bus.md + UI §26. Host in-process Event Bus. Not vscode.EventBus. Not network. SI-3 reopened for Debate speakers in a batch. Same-batch speakers do not hear each other until the phase ends. Chrome: ui-ux-parallel-stream.md §26. Do not reopen §20–§25. Leftovers 002/003/009/014 out. F3 / F4 out.
 
+Addendum 2026-09-02: F8a Work run / WK-1–6 is additive — architecture-work-run.md + UI §27. New run type, not a protocol on F7 Debate. Default Send stays Debate. Chrome: ui-ux-work-run.md §27. Do not reopen §20–§26. Leftovers 002/003/009/014 out. F3 / F4 out.
+
 Addendum 2026-09-01: F6 bot export / import is additive — architecture-bot-export-import.md + UI §23. Envelope `format: 'botrider.bots.v1'`. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
 
 Addendum 2026-09-02: F2 OpenSpec contract traceability is additive — architecture-openspec-trace.md + UI §24. Host reads workspace `openspec/` if present (index-if-present). Missing `openspec/` = empty catalog, no error. BR-1–6 spec files unchanged. Leftovers 002/003/009/014 out. F1 Graphify out. F7 parallel out.
@@ -159,6 +161,8 @@ Additive per-bot Copilot model selection: [architecture-bot-model.md](./architec
 Additive F7 isolation / SI-1–4: [architecture-bot-isolation.md](./architecture-bot-isolation.md). Host-only. Zero new chrome for isolation. SI-1/2/4 held. SI-3 reopened for Debate speakers in a batch — [architecture-event-bus.md](./architecture-event-bus.md). BR / QC / HV / MA / SD / TA / MS frozen otherwise.
 
 Additive F7 parallel / Event Bus / EB-1–4: [architecture-event-bus.md](./architecture-event-bus.md). Host in-process only. Not vscode.EventBus. Not network. SI-3 reopened for Debate speakers in a batch. Same-batch speakers do not hear each other until the phase ends. Chrome: [ui-ux-parallel-stream.md](./ui-ux-parallel-stream.md) §26. Do not reopen §20–§25.
+
+Additive F8a Work run / WK-1–6: [architecture-work-run.md](./architecture-work-run.md). New run type, not a protocol on F7 Debate. Default Send stays Debate. Chrome: [ui-ux-work-run.md](./ui-ux-work-run.md) §27. Do not reopen §20–§26.
 
 Additive F6 bot export / import: [architecture-bot-export-import.md](./architecture-bot-export-import.md). Envelope `format: 'botrider.bots.v1'`. UiToHost `bots/export-self` only (form Export). Chrome: [ui-ux-bot-export-import.md](./ui-ux-bot-export-import.md) §23. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
 
