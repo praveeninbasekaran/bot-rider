@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="media/logo.svg" alt="Bot Rider — retro pixel bots debating together" width="520" />
+</p>
+
 # Bot Rider
 
 **Turn one prompt into a team debate—then ship code you actually approved.**
@@ -12,12 +16,14 @@ No extra API keys. No mystery writes. Just Copilot, a room full of specialists, 
 
 Most coding agents treat disagreement as noise. Bot Rider treats it as the product.
 
-| The usual agent | Bot Rider |
-| --- | --- |
-| One model, one shot at the answer | Multiple personas with roles, instructions, and @mentions |
+
+| The usual agent                                 | Bot Rider                                                     |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| One model, one shot at the answer               | Multiple personas with roles, instructions, and @mentions     |
 | Patches appear before you've seen the reasoning | Language-only debate first; implementation is a separate pass |
-| "Trust me" apply | **You** pick files, inspect hunks, and Approve or Reject |
-| Side effects can pile up silently | File edits and MCP actions are **separate review gates** |
+| "Trust me" apply                                | **You** pick files, inspect hunks, and Approve or Reject      |
+| Side effects can pile up silently               | File edits and MCP actions are **separate review gates**      |
+
 
 You get the speed of AI collaboration with the safety of a code review—inside the editor you already use.
 
@@ -81,12 +87,14 @@ Workspace updates — honestly reported if anything fails
 
 ## Requirements
 
-| | |
-| --- | --- |
-| **Editor** | Visual Studio Code `^1.99.0` |
-| **AI** | [GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot) — required to **Send**, **Continue**, **Pick**, and **Recheck** |
-| **API keys** | None. Copilot sign-in is enough. |
-| **Bot management** | Create, edit, toggle, and delete bots **without** Copilot |
+
+|                    |                                                                                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Editor**         | Visual Studio Code `^1.99.0`                                                                                                                         |
+| **AI**             | [GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot) — required to **Send**, **Continue**, **Pick**, and **Recheck** |
+| **API keys**       | None. Copilot sign-in is enough.                                                                                                                     |
+| **Bot management** | Create, edit, toggle, and delete bots **without** Copilot                                                                                            |
+
 
 ---
 
@@ -112,14 +120,16 @@ See **[docs/INSTALL.md](docs/INSTALL.md)** for contributor details.
 
 ## Documentation
 
-| Doc | What's inside |
-| --- | --- |
-| [docs/INSTALL.md](docs/INSTALL.md) | VSIX install, Copilot setup, recovery |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Exact error messages and fixes |
-| [docs/architecture-mvp.md](docs/architecture-mvp.md) | Architecture blueprint |
-| [docs/ui-ux-spec.md](docs/ui-ux-spec.md) | UI/UX specification |
-| [docs/master_product_requirement_document.md](docs/master_product_requirement_document.md) | Product roadmap and constraints |
-| [openspec/specs.md](openspec/specs.md) | OpenSpec requirement index |
+
+| Doc                                                                                        | What's inside                         |
+| ------------------------------------------------------------------------------------------ | ------------------------------------- |
+| [docs/INSTALL.md](docs/INSTALL.md)                                                         | VSIX install, Copilot setup, recovery |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)                                         | Exact error messages and fixes        |
+| [docs/architecture-mvp.md](docs/architecture-mvp.md)                                       | Architecture blueprint                |
+| [docs/ui-ux-spec.md](docs/ui-ux-spec.md)                                                   | UI/UX specification                   |
+| [docs/master_product_requirement_document.md](docs/master_product_requirement_document.md) | Product roadmap and constraints       |
+| [openspec/specs.md](openspec/specs.md)                                                     | OpenSpec requirement index            |
+
 
 ---
 
@@ -129,6 +139,4 @@ See **[docs/INSTALL.md](docs/INSTALL.md)** for contributor details.
 
 ---
 
-<p align="center">
-  <strong>Debate first. Review always. Ship with confidence.</strong>
-</p>
+**Debate first. Review always. Ship with confidence.**
