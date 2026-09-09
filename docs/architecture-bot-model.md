@@ -1,6 +1,6 @@
 # Bot Rider — Per-bot Copilot model selection (additive slice)
 
-Status: **ready for implementation.** Design only until a developer lands it. Not a host rewrite of BR, QC, HV, MA, SD, or TA. **Not** F7 parallel / Event Bus.
+Status: **shipped (MS-1–MS-3).** Verified by `test/bot-model.test.ts` and `test/bot-form-model-chrome.test.ts`. Implementation-allocation notes below are historical.
 Stories: **MS-1–3 is the full story set.** **MS-1** discover `vscode.lm.selectChatModels({ vendor: 'copilot' })` on New/Edit; select key = `LanguageModelChat.id`; labels are display only. **MS-2** persist `LanguageModelChat.id` only as `modelId` on `BotRecord` (label never persisted); empty = host default (today’s path). **MS-3** that bot’s propose / critique / `@` / implementer uses the pick; missing id = host default that turn + visible copy; do not block the turn. Copilot vendor only. No API keys.
 UI chrome contract: `ui-ux-spec.md` §22 (addendum `ui-ux-bot-model.md`).
 Date: 2026-09-01.

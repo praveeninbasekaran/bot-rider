@@ -56,7 +56,7 @@ New Bot, Edit Bot, Delete Bot, Toggle Active, Expand, Stop (`botrider.chat.stop`
 **Review** `!botrider.hasPendingChanges`:
 
 > No proposed edits. After the swarm agrees, proposed WorkspaceEdits appear here for review.  
-> Approve applies the whole batch. Reject discards it.
+> Approve applies **included** selected files. Reject discards the pending batch.
 
 ### Context keys
 
@@ -124,6 +124,8 @@ Composer **locked** while `splitOpen`. Send ignored. Only:
 ## Proposed Changes
 
 SCM-like groups: **Modified** / **Added** / **Deleted**. Open Diff on `proposedFile`.
+
+Each Files row has an **inclusion checkbox** (EDIT-1). Approve applies only included rows in one atomic `WorkspaceEdit`. Excluded rows stay pending until included or Reject clears the batch. Stale text hunks show a **Stale** label; Approve is blocked until the user regenerates or excludes them.
 
 Diff titles:
 
@@ -271,8 +273,8 @@ Do not invent extra protocol members. Do not use a combined Approve.
 §16 `mutating-blocked` copy (`Writes through {server} aren't available in Bot Rider.`) **only when the host cannot stage**.
 Staged mutations do not use that copy. Missing MCP: visible skip. Unauth: visible error, no silent retry.
 
-### 19.7 Session-only
-Pending MCP batch is session-only (reload clears, like changeset/board). File pending store unchanged. Reject / reload emit `mcp/actions-cleared`; files untouched.
+### 19.7 PU-7 recovery
+Pending MCP batch metadata is restorable from PU-7 workspace recovery snapshots. Restored MCP actions **never** auto-execute. **Discard** or explicit Reject emits `mcp/actions-cleared`; files untouched. File pending store follows the same recovery snapshot rules.
 
 ## 20. Bot form attachments (typed slots, locked)
 
@@ -303,7 +305,7 @@ Canonical addendum: [ui-ux-bot-model.md](./ui-ux-bot-model.md). Architecture: [a
 
 ## 23. Bot export / import (F6)
 
-**Status:** Additive. **EX-1–4 locked.** Bots tree + form footer + palette. Not a Swarm control. Not a fourth sidebar. Do **not** reopen §20 Attach or §22 model picker. F7 parallel / Event Bus out.
+**Status:** Additive. **EX-1–4 shipped.** Bots tree + form footer + palette. Not a Swarm control. Not a fourth sidebar. Do **not** reopen §20 Attach or §22 model picker. Export/import does not participate in the shipped F7 Event Bus.
 
 Canonical addendum: [ui-ux-bot-export-import.md](./ui-ux-bot-export-import.md). Architecture: [architecture-bot-export-import.md](./architecture-bot-export-import.md). JSON and YAML. Envelope `format: 'botrider.bots.v1'`. Never overwrite. Never auto-suffix. Cancel rename = Skip. Copy `Skipped @{handle} · already taken.` Name-only: `Skipped "{name}" · a bot with that name already exists.` Prefer the handle line when both collide. No Copilot on export/import.
 
@@ -324,7 +326,7 @@ Tree `canSelectMany: true` (selection ≠ active checkbox). Form footer **Export
 
 ## 24. OpenSpec chips on Proposed Changes Files (F2)
 
-**Status:** Additive. **OS-1–4 locked.** Proposed Changes **Files** rows only. Chip text = catalog id as stored (`BR-6`, `EX-1`). Display only, **not click-to-filter**. Unknown ids never chips. MCP Grain B rows **never** chips. Empty/missing `openspec/` = no chips, **no banner**. Not a fourth sidebar. Not Swarm. Do **not** reopen §20 / §22 / §23. Approve/Reject still whole-changeset BR-6.
+**Status:** Additive. **OS-1–4 locked.** Proposed Changes **Files** rows only. Chip text = catalog id as stored (`BR-6`, `EX-1`). Display only, **not click-to-filter**. Unknown ids never chips. MCP Grain B rows **never** chips. Empty/missing `openspec/` = no chips, **no banner**. Not a fourth sidebar. Not Swarm. Do **not** reopen §20 / §22 / §23. Approve/Reject apply EDIT-1 selected included files (BR-6).
 
 Canonical addendum: [ui-ux-openspec-chips.md](./ui-ux-openspec-chips.md). Architecture: [architecture-openspec-trace.md](./architecture-openspec-trace.md). Host reads workspace `openspec/` if present (index-if-present). Cites on implementer changeset only. UI never reads `openspec/` from disk.
 
@@ -340,9 +342,9 @@ Canonical addendum: [ui-ux-context-map.md](./ui-ux-context-map.md). Architecture
 
 ## 26. Parallel Debate stream (F7)
 
-**Status:** Additive. **EB-1–4 locked.** Swarm chrome only. HV articles MAY overlap during a parallel Debate batch. Display only, not the talk channel. No Event Bus chrome. No packet rows. No new sidebar. No new Activity Bar icon. Do **not** reopen §20–§25. OpenSpec chips stay on Proposed Changes Files. Context Map unchanged.
+**Status:** Additive. **EB-1–4 and PU-5 shipped.** Swarm chrome only. Parallel prose defaults to keyboard-operable collapsed disclosures beneath one compact, keyed activity timeline. No Event Bus chrome, packet rows, new sidebar, or new Activity Bar icon.
 
-Canonical addendum: [ui-ux-parallel-stream.md](./ui-ux-parallel-stream.md). Architecture: [architecture-event-bus.md](./architecture-event-bus.md). `ROUND {n} · PROPOSE` then `ROUND {n} · CRITIQUE` after propose settled. No “parallel” header. `@` / vote / Split / implementer: no overlap chrome. Run board MAY show multiple in-flight speakers (one static ●/chip per handle). Composer locked until the batch settles. Stop = `botrider.chat.stop`, aborts all in-flight.
+Canonical addendum: [ui-ux-parallel-stream.md](./ui-ux-parallel-stream.md). Architecture: [architecture-event-bus.md](./architecture-event-bus.md). `ROUND {n} · PROPOSE` is followed by one synthesis card, targeted `ROUND {n} · OBJECTION` disclosures, and one terminal decision card. The activity timeline distinguishes blocked, queued, in-flight, completed, and failed work without duplicate per-bot chips. Expanded responses obey `botrider.maxVisibleArticles` without deleting transcript entries. One serialized, deduplicated live-region queue replaces concurrent article chatter. Composer and Stop safety behavior are unchanged.
 
 **Out:** Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · “parallel” header · overlap chrome on `@` / vote / Split / implementer · Approve/MCP/packets/OpenSpec on the run board · F3 dashboard · F4 register · leftovers 002/003/009/014 · reopening §20–§25.
 
@@ -362,9 +364,17 @@ Canonical addendum: [ui-ux-work-run.md](./ui-ux-work-run.md) §28. Architecture:
 
 **Out:** F8d Stop-one / compare-to-spec · N Approves · Pick chrome · host auto-pick · reserved-role tie-break · enterSplit · Split card · last-writer-wins without Argue · overlapping HV during Argue · reusing §27.9 · Argue as a third Send mode · new sidebar · new Activity Bar icon · Event Bus chrome · packet rows · reopening §20–§26 / F8a WK-1–6 except the collision pointer. **F8c idle follow-on chrome** is this addendum (§29), not out of the product forever.
 
+## 30. Reload recovery (PU-7)
+
+**Status:** Additive. **PU-7 locked.** Swarm chrome only when a versioned workspace recovery snapshot exists after reload.
+
+When `recovery/state` reports a pending snapshot, Swarm shows a card with **Resume**, **Review pending**, and **Discard**. Resume restores transcript, run board, pending files (with EDIT-1 inclusion state), and staged MCP metadata. Restored MCP actions never auto-execute. Review pending opens Proposed Changes without resuming the full thread. Discard clears the snapshot and starts fresh. Interrupted turns are labeled in the transcript.
+
+HostToUi: `recovery/state`. UiToHost: `recovery/resume`, `recovery/review`, `recovery/discard`. See [docs/INSTALL.md](./INSTALL.md).
+
 ## 29. Idle follow-on (F8c)
 
-**Status:** Additive. **FO-1–4 locked.** Swarm chrome only after first Work-batch + Argue settle. Follow-on Work-batch **after Argue**. No third Send mode. Work | Debate and `ARGUE · {path}` unchanged. Reuse §27 run-board in-flight+waiting. Not a fourth view. Not Event Bus chrome. Not a new Activity Bar. Do **not** rewrite §20–§28 except the §27/§28 Out pointer. F8a Work | Debate, designation, Work-batch unlocked composer, F8b Argue header, and one Files list stay as shipped.
+**Status:** **Planned.** FO-1–FO-4 host and §29 chrome are not implemented. Target behavior: Swarm chrome only after first Work-batch + Argue settle. Follow-on Work-batch **after Argue**. No third Send mode. Work | Debate and `ARGUE · {path}` unchanged. Reuse §27 run-board in-flight+waiting. Not a fourth view. Not Event Bus chrome. Not a new Activity Bar. Do **not** rewrite §20–§28 except the §27/§28 Out pointer. F8a Work | Debate, designation, Work-batch unlocked composer, F8b Argue header, and one Files list stay as shipped.
 
 Canonical addendum: [ui-ux-work-run.md](./ui-ux-work-run.md) §29. Architecture: [architecture-work-run.md](./architecture-work-run.md) F8c / FO-1–4. Follow-on only after first Work-batch + Argue settle. Not during BA, first batch, or Argue. Cap one per Send. **No idle bots:** silent, Approve first union. No banner. **Invalid split:** exact `Follow-on work skipped.` then first union Approves. **Follow-on collisions:** `Skipped {path} · collision`. No second Argue. No ARGUE header for follow-on. Approve **disabled** until follow-on settles or skipped. One union. Not N Approves. MCP unchanged / separate click. Spec/Dispatcher never follow-on workers. Workers = idle-bot handles from the follow-on dispatch split (not reserved roles). Composer `@` / assign / Stop as WK-6. Stop aborts this follow-on batch. Reuse §27 run-board in-flight+waiting chips. Master Send reuses `Work batch still running.` No Follow-on Send mode. No new Activity Bar.
 

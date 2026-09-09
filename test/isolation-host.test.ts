@@ -307,7 +307,7 @@ describe('SI-2 controlled ingest', () => {
     expect(isolation).toContain('Isolation packet:');
     expect(isolation).toContain('At: consensus');
     expect(isolation).toContain('build the feature');
-    expect(isolation).toContain('Consensus');
+    expect(isolation).toContain('Decision:');
   });
 
   it('@ solo inactive bot is the downstream for its own implement pack', async () => {

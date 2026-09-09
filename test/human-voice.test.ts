@@ -247,17 +247,17 @@ describe('HV-2 host strip on turn-end / Split / board', () => {
       if (turn === 'propose') {
         return '## Cache the layer now.';
       }
-      if (turn === 'critique') {
+      if (turn === 'objection') {
         return '## Cache is the right cut.';
       }
       return 'DISSENT we differ';
     };
     await app.send('fix the bug');
     const split = msgs.find((m) => m.type === 'chat/split');
-    expect(split && split.type === 'chat/split' && split.positions[0]?.text).toBe('we differ');
+    expect(split && split.type === 'chat/split' && split.positions[0]?.text).toBe('Cache the layer now.');
     expect(split && split.type === 'chat/split' && split.positions.every((p) => !p.text.includes('##'))).toBe(true);
     const board = lastBoard(msgs);
-    expect(board && board.type === 'chat/board' && board.board.dissents[0]?.text).toBe('we differ');
+    expect(board && board.type === 'chat/board' && board.board.dissents[0]?.text).toBe('Cache the layer now.');
     expect(
       board && board.type === 'chat/board' && board.board.dissents.every((d) => !/^DISSENT\b/i.test(d.text)),
     ).toBe(true);

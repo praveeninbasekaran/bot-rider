@@ -1,7 +1,7 @@
 # Bot Rider — F2 OpenSpec / contract traceability (additive slice)
 
-Status: **ready for implementation.** Design only until a developer lands it. Not a host rewrite of BR, QC, HV, MA, SD, TA, MS, SI, or EX. **Not** F1 Graphify. **Not** F3 dashboard / F4 register. **Not** F7 parallel / Event Bus / concurrent `sendRequest`.
-Stories: **OS-1–4 is the full story set.** **OS-1** Catalog: host reads workspace `openspec/` if present. Index-if-present. Never write or invent later-slice files at **runtime**. Missing `openspec/` = empty catalog, **no error**. Missing slice file = id absent, not an error. **OS-2** Cite: implementer file changes may include catalog spec ids. Unknown id **ignored, not a block**. No cite command. Never invent ids. Debate / `@` do **not** write cites. Cites on implementer changeset **only**. **OS-3** Review / §24: Proposed Changes **Files** rows show spec-id chips when cited. Chip text = catalog id as stored (`BR-6`, `EX-1`). Display only, **not click-to-filter**. No extra tooltip required. MCP Grain B rows **never** chips. Empty/missing `openspec/` = no chips, **no banner**. Not a fourth sidebar. Not Swarm. §20 / §22 / §23 / round headers / Split / Run board unchanged. Approve/Reject still whole-changeset BR-6. Unknown cited ids never appear as chips. **OS-4** Ingest: F7 isolation packets for implementer + bots with a remaining turn include matching spec **bodies verbatim** when ids are cited **or** the master prompt contains **exact** catalog ids (`BR-6`, `EX-1`), not fuzzy titles. Never lossy-summarize AC. Inactive bots no packets. Sequential unchanged. TokenGovernor: required spec bodies like published packets; QC-3 pack-overflow if they cannot fit; **no silent drop**.
+Status: **shipped (OS-1–OS-4).** Verified by `test/openspec-host.test.ts`. Implementation-allocation notes below are historical.
+Stories: **OS-1–4 is the full story set.** **OS-1** Catalog: host reads workspace `openspec/` if present. Index-if-present. Never write or invent later-slice files at **runtime**. Missing `openspec/` = empty catalog, **no error**. Missing slice file = id absent, not an error. **OS-2** Cite: implementer file changes may include catalog spec ids. Unknown id **ignored, not a block**. No cite command. Never invent ids. Debate / `@` do **not** write cites. Cites on implementer changeset **only**. **OS-3** Review / §24: Proposed Changes **Files** rows show spec-id chips when cited. Chip text = catalog id as stored (`BR-6`, `EX-1`). Display only, **not click-to-filter**. No extra tooltip required. MCP Grain B rows **never** chips. Empty/missing `openspec/` = no chips, **no banner**. Not a fourth sidebar. Not Swarm. §20 / §22 / §23 / round headers / Split / Run board unchanged. Approve/Reject apply EDIT-1 selected included files (BR-6). Unknown cited ids never appear as chips. **OS-4** Ingest: F7 isolation packets for implementer + bots with a remaining turn include matching spec **bodies verbatim** when ids are cited **or** the master prompt contains **exact** catalog ids (`BR-6`, `EX-1`), not fuzzy titles. Never lossy-summarize AC. Inactive bots no packets. Sequential unchanged. TokenGovernor: required spec bodies like published packets; QC-3 pack-overflow if they cannot fit; **no silent drop**.
 UI chrome contract: `ui-ux-spec.md` §24 (addendum `ui-ux-openspec-chips.md`).
 Date: 2026-09-02.
 Parent: `architecture-mvp.md`. Isolation: `architecture-bot-isolation.md` (SI sequential + required packets). Pack: `architecture-token-save.md` (QC minimum pack unchanged except required published packets **and** required spec bodies must not be silently trimmed). Copilot stays `vscode.lm`. Sequential Debate unchanged. ₹0 extra keys. No second runtime.
@@ -24,7 +24,7 @@ Implementer file changes may include catalog spec ids. Unknown id **ignored, not
 
 ### OS-3 Review / §24
 
-Proposed Changes **Files** rows show spec-id chips when cited. Chip text = catalog id as stored (`BR-6`, `EX-1`). Display only, **not click-to-filter**. No extra tooltip required. MCP Grain B rows **never** chips. Empty/missing `openspec/` = no chips, **no banner**. Not a fourth sidebar. Not Swarm. §20 / §22 / §23 / round headers / Split / Run board unchanged. Approve/Reject still whole-changeset BR-6. Unknown cited ids never appear as chips (host already ignores them). Only catalog ids that survived OS-2 show.
+Proposed Changes **Files** rows show spec-id chips when cited. Chip text = catalog id as stored (`BR-6`, `EX-1`). Display only, **not click-to-filter**. No extra tooltip required. MCP Grain B rows **never** chips. Empty/missing `openspec/` = no chips, **no banner**. Not a fourth sidebar. Not Swarm. §20 / §22 / §23 / round headers / Split / Run board unchanged. Approve/Reject apply EDIT-1 selected included files (BR-6). Unknown cited ids never appear as chips (host already ignores them). Only catalog ids that survived OS-2 show.
 
 ### OS-4 Ingest
 
@@ -42,7 +42,7 @@ F7 isolation packets for implementer + bots with a remaining turn include matchi
 - **(OS-2)** No Cite command, no Cite picker, no Swarm cite chrome. Host **never invents** ids.
 - **(OS-2)** Cites attach to **implementer changeset files only**. Debate / `@` / vote / Split SHALL NOT write cites. PatchParser still drops file bodies on debate/@.
 - **(OS-2)** Unknown cited ids are **ignored**, not a parse/validate block, not `parse-failed` / `validate-failed`.
-- **(OS-3)** Chips are Proposed Changes **Files** rows only. MCP Grain B rows **never** chips. Not a fourth sidebar. Not Swarm. Do **not** reopen §20 / §22 / §23. Round headers, Split, Run board unchanged. Approve/Reject still whole-changeset BR-6.
+- **(OS-3)** Chips are Proposed Changes **Files** rows only. MCP Grain B rows **never** chips. Not a fourth sidebar. Not Swarm. Do **not** reopen §20 / §22 / §23. Round headers, Split, Run board unchanged. Approve/Reject apply EDIT-1 selected included files (BR-6).
 - **(OS-3)** Chip text = catalog id as stored. Display only. **Not click-to-filter.** No extra tooltip required. Unknown ids **never** appear as chips.
 - **(OS-3)** Empty / missing `openspec/` → no chips, **no banner**.
 - **(OS-4)** Spec **bodies** (full `spec.md` text) ingest **verbatim** into F7 isolation packets for the implementer and bots with a remaining turn in this sequential run. Never lossy-summarize acceptance criteria. Inactive bots: no packets. Sequential orchestrator unchanged.
@@ -136,7 +136,7 @@ No new HostToUi / UiToHost message types. Additive field only:
 
 `changeset/preview { files: ProposedFileDto[] }` where each file may include `specIds`.
 
-No UiToHost for chips (display only, not click-to-filter). Clicking a Files row still Open Diff (`botrider.review.openDiff`). Approve / Reject / Retry stay BR-6 whole-changeset.
+No UiToHost for chips (display only, not click-to-filter). Clicking a Files row still Open Diff (`botrider.review.openDiff`). Approve / Reject / Retry apply EDIT-1 selected included files (BR-6).
 
 MCP `mcp/actions-preview` is unchanged. MCP rows **never** grow `specIds` and **never** show chips.
 
@@ -209,7 +209,7 @@ Merge bar after PO allocates, on a **new product PR**:
 - Files row with surviving ids shows chips with catalog id as stored (`BR-6`, `EX-1`). (OS-3)
 - Unknown ids never appear as chips. (OS-3)
 - MCP Grain B rows never chips. (OS-3)
-- Chip click is not filter; row click still Open Diff. Approve still whole-changeset. (OS-3)
+- Chip click is not filter; row click still Open Diff. Approve applies included selected files only. (OS-3)
 - Master prompt containing exact `EX-1` ingests that spec body verbatim into remaining-turn + implementer packets. Fuzzy title does not. (OS-4)
 - Inactive bots do not receive spec-body packets. (OS-4)
 - Required spec bodies that cannot fit → pack-overflow; no Copilot call; no silent drop. (OS-4)

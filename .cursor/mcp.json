@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "serena": {
+      "command": "C:\\Users\\iprav\\.local\\bin\\serena.exe",
+      "args": [
+        "start-mcp-server",
+        "--context",
+        "ide",
+        "--project",
+        "d:\\AI-Project\\BotRiders\\bot-rider",
+        "--open-web-dashboard",
+        "false"
+      ]
+    },
+    "graphify": {
+      "command": "C:\\Users\\iprav\\.local\\bin\\graphify-mcp.exe",
+      "args": [
+        "d:\\AI-Project\\BotRiders\\bot-rider\\graphify-out\\graph.json"
+      ]
+    }
+  }
+}

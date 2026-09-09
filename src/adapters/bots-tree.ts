@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
 import type { BotRecord } from '../domain/bot';
 import { avatarSvg } from '../domain/bot';
+import { isCoreBot } from '../domain/core-bot';
 import type { Application } from '../app/application';
 
 export class BotTreeItem extends vscode.TreeItem {
   constructor(public readonly bot: BotRecord) {
     super(bot.name, vscode.TreeItemCollapsibleState.None);
     this.id = bot.id;
-    this.description = bot.active ? bot.role : `${bot.role} · Inactive`;
+    this.description = isCoreBot(bot) ? `${bot.role} · Core` : bot.active ? bot.role : `${bot.role} · Inactive`;
     this.contextValue = 'bot';
     this.tooltip = `${bot.name} (@${bot.handle})\n${bot.role}`;
     this.accessibilityInformation = {
@@ -18,10 +19,12 @@ export class BotTreeItem extends vscode.TreeItem {
       title: 'Edit Bot',
       arguments: [this],
     };
-    this.checkboxState = {
-      state: bot.active ? vscode.TreeItemCheckboxState.Checked : vscode.TreeItemCheckboxState.Unchecked,
-      tooltip: bot.active ? 'Active in swarm' : 'Inactive',
-    };
+    if (!isCoreBot(bot)) {
+      this.checkboxState = {
+        state: bot.active ? vscode.TreeItemCheckboxState.Checked : vscode.TreeItemCheckboxState.Unchecked,
+        tooltip: bot.active ? 'Active in swarm' : 'Inactive',
+      };
+    }
     const svg = avatarSvg(bot.name, bot.colorIndex);
     this.iconPath = vscode.Uri.from({
       scheme: 'data',

@@ -2,15 +2,15 @@
 
 ## Purpose
 
-Default Send freezes active bots and runs a capped language debate: sequential propose then critique for two rounds, then `AGREE` \| `DISSENT`. No auto round 3. Acceptance follows architecture blueprint **revision 7**.
+Default Debate freezes active bots and runs a capped language debate: one parallel proposal batch followed by one parallel critique batch, then `AGREE` \| `DISSENT`. No auto round 3. EB-1–EB-4 supersede revision-7 sequential speakers. PU-3, PU-4, and PU-5 supersede scheduling and convergence rules where implemented.
 
 ## SHALL requirements
 
-1. One orchestrator run SHALL never overlap `sendRequest`. One CTS per run.
+1. Orchestrator runs SHALL NOT overlap. Concurrent `sendRequest` calls are allowed only inside host-owned EB Debate batches and Work batches. One cancellation scope SHALL own each run.
 2. At RunStarted the host SHALL freeze active bots (`frozenBotIds`) in stable list order and SHALL keep that freeze on split and Continue.
-3. Rounds 1–2 SHALL each: Propose each frozen bot, Critique each, then vote (`TurnKind` `propose` \| `critique` \| `consensus`).
+3. Rounds 1–2 SHALL each run one settled Propose batch, then one settled Critique batch, then vote (`TurnKind` `propose` \| `critique` \| `consensus`). No batch mixes Propose and Critique.
 4. Vote: the first token SHALL be `AGREE` or `DISSENT` (case-insensitive); the rest is reason; unparseable SHALL count as `DISSENT`.
-5. If all votes are `AGREE`, the implementer SHALL be the first frozen bot (then BR-5 / BR-6). Else the host SHALL open a split. There SHALL be no automatic round 3.
+5. Shipped baseline: if all votes are `AGREE`, the implementer SHALL be the first frozen bot (then BR-5 / BR-6). Else the host SHALL open a split. There SHALL be no automatic round 3. **Superseded by PU-5:** configurable debate decision policies replace unanimity-only convergence.
 6. Continue (`botrider.split.continue`) SHALL run one more propose/critique/vote round on the **same freeze**.
 7. Debate turns SHALL be language-only. PatchParser SHALL drop file bodies on debate. Stop SHALL never implement.
 8. Workspace context SHALL include the full active editor + selection and **paths only** of other tabs.

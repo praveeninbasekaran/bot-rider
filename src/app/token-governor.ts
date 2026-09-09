@@ -1,4 +1,5 @@
 import { attachmentsOf, type BotAttachment, type BotRecord } from '../domain/bot';
+import { coreResponsibility } from '../domain/core-bot';
 import type { TurnKind } from '../domain/run-state';
 import type { PromptMessage, RunBoardDto, WorkspaceContext } from '../protocol/messages';
 import { packetToMessage, type IsolationPacket } from './bot-session-store';
@@ -6,12 +7,17 @@ import { formatLspSlice, withSelectionFallback, type LspSliceSnapshot } from './
 import { boardPackText } from './run-board';
 
 export function personaBlock(bot: BotRecord): string {
-  return [
+  const lines = [
     `You are ${bot.name} (@${bot.handle}).`,
     `Role: ${bot.role}`,
     `Persona: ${bot.persona}`,
     `Instructions: ${bot.instructions}`,
-  ].join('\n');
+  ];
+  const responsibility = coreResponsibility(bot);
+  if (responsibility) {
+    lines.push(responsibility);
+  }
+  return lines.join('\n');
 }
 
 export interface TokenCounter {
@@ -35,6 +41,7 @@ export interface PackRequest {
   lspSlice?: LspSliceSnapshot;
   implementerFiles?: { path: string; content: string }[];
   mcpContext?: string[];
+  repositoryContext?: string;
   /** This bot's prior session messages only. Not the global Swarm transcript. */
   sessionMessages?: PromptMessage[];
   /** Required published packets for this turn. Not silent-trim extras. */
@@ -161,6 +168,7 @@ export class TokenGovernor {
 
     const allowMcp = args.kind === 'debate';
     let mcpNotes = allowMcp ? [...(args.mcpContext ?? [])] : [];
+    let repositoryContext = args.repositoryContext;
     const allowAttach = args.kind === 'debate' || args.kind === 'implement';
     let extras = allowAttach ? attachmentsOf(args.bot) : [];
 
@@ -171,6 +179,7 @@ export class TokenGovernor {
         ...packets,
         board,
         fileMsg,
+        repositoryContext ? { role: 'user', content: repositoryContext } : undefined,
         tabs,
         mcpMessage(mcpNotes),
         extrasMessage(extras),
@@ -179,6 +188,11 @@ export class TokenGovernor {
 
     let messages = build();
     while ((await args.counter.countTokens(messages)) > args.counter.maxInputTokens) {
+      if (repositoryContext) {
+        repositoryContext = undefined;
+        messages = build();
+        continue;
+      }
       if (mcpNotes.length > 0) {
         mcpNotes = [];
         messages = build();

@@ -31,6 +31,7 @@ export function proposedFileLabel(path: string): string {
 export type ProposedFileChrome = {
   label: string;
   description: string;
+  actionLabel: 'Open diff' | 'Preview' | 'Inspect';
   contextValue: 'proposedFile';
   command: 'botrider.review.openDiff';
   resourcePath: string;
@@ -38,13 +39,15 @@ export type ProposedFileChrome = {
 };
 
 /** Files-row chrome. Chip suffix is catalog ids as stored, array order, no re-sort. */
-export function proposedFileChrome(file: Pick<ChangeFile, 'path' | 'op' | 'specIds'>): ProposedFileChrome {
+export function proposedFileChrome(file: Pick<ChangeFile, 'path' | 'op' | 'kind' | 'specIds'>): ProposedFileChrome {
   const label = proposedFileLabel(file.path);
   const description = file.op === 'create' ? 'Added' : file.op === 'delete' ? 'Deleted' : 'Modified';
   const specIds = file.specIds;
+  const kind = inferChangeKind(file);
   return {
     label,
     description: specIds && specIds.length > 0 ? `${description} · ${specIds.join(' · ')}` : description,
+    actionLabel: kind === 'html-preview' ? 'Preview' : kind === 'office-binary' ? 'Inspect' : 'Open diff',
     contextValue: 'proposedFile',
     command: 'botrider.review.openDiff',
     resourcePath: label,

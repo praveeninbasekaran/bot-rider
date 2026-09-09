@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import type { HostToUi, UiToHost } from '../protocol/messages';
 import { TOKEN_FLUSH_MS } from '../app/copy';
+import type { ThreadStore } from '../app/thread-store';
 import { webviewHtml } from './webview-html';
 
 type ChatUiMsg =
   | UiToHost
   | { type: 'ui/pick' }
   | { type: 'ui/focus-expanded' }
+  | { type: 'ui/focus-review-files' }
   | { type: 'ui/focus-review-mcp' };
 
 export class ChatHub {
@@ -16,12 +18,22 @@ export class ChatHub {
   private tokenTimer: ReturnType<typeof setTimeout> | undefined;
   private lastRun: HostToUi | undefined;
   private lastCopilot: HostToUi | undefined;
+  private lastScheduler: HostToUi | undefined;
+  private lastPreferences: HostToUi | undefined;
   private lastSnapshot: HostToUi | undefined;
   private lastExpanded: HostToUi | undefined;
   private lastBoard: HostToUi | undefined;
   private lastMcp: HostToUi | undefined;
+  private lastOnboarding: HostToUi | undefined;
+  private lastRecovery: HostToUi | undefined;
+  private lastContextStatus: HostToUi | undefined;
+  private thread: ThreadStore | undefined;
 
   constructor(private readonly onUi: (msg: ChatUiMsg) => Promise<void>) {}
+
+  bindThread(thread: ThreadStore): void {
+    this.thread = thread;
+  }
 
   attach(webview: vscode.Webview): vscode.Disposable {
     this.views.add(webview);
@@ -59,6 +71,12 @@ export class ChatHub {
     if (msg.type === 'copilot/status') {
       this.lastCopilot = msg;
     }
+    if (msg.type === 'copilot/scheduler') {
+      this.lastScheduler = msg;
+    }
+    if (msg.type === 'ui/preferences') {
+      this.lastPreferences = msg;
+    }
     if (msg.type === 'ui/expanded') {
       this.lastExpanded = msg;
     }
@@ -67,6 +85,22 @@ export class ChatHub {
     }
     if (msg.type === 'mcp/actions-preview' || msg.type === 'mcp/actions-cleared') {
       this.lastMcp = msg;
+    }
+    if (msg.type === 'onboarding/state') {
+      this.lastOnboarding = msg;
+    }
+    if (msg.type === 'recovery/state') {
+      this.lastRecovery = msg;
+    }
+    if (msg.type === 'context/status') {
+      this.lastContextStatus = msg;
+    }
+    if (
+      msg.type === 'mcp/actions-preview' ||
+      msg.type === 'mcp/actions-cleared' ||
+      msg.type === 'mcp/actions-failed'
+    ) {
+      this.thread?.recordHostMessage(msg);
     }
     if (msg.type === 'chat/turn-start') {
       this.flushTokens();
@@ -128,11 +162,30 @@ export class ChatHub {
     if (this.lastCopilot) {
       void webview.postMessage(this.lastCopilot);
     }
+    if (this.lastScheduler) {
+      void webview.postMessage(this.lastScheduler);
+    }
+    if (this.lastPreferences) {
+      void webview.postMessage(this.lastPreferences);
+    }
     if (this.lastRun) {
       void webview.postMessage(this.lastRun);
     }
     if (this.lastExpanded) {
       void webview.postMessage(this.lastExpanded);
+    }
+    if (this.lastOnboarding) {
+      void webview.postMessage(this.lastOnboarding);
+    }
+    if (this.lastRecovery) {
+      void webview.postMessage(this.lastRecovery);
+    }
+    if (this.lastContextStatus) {
+      void webview.postMessage(this.lastContextStatus);
+    }
+    if (this.thread) {
+      void webview.postMessage({ type: 'chat/transcript-snapshot', snapshot: this.thread.snapshot() } satisfies HostToUi);
+      return;
     }
     if (this.lastBoard) {
       void webview.postMessage(this.lastBoard);

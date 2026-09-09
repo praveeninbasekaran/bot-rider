@@ -1,6 +1,6 @@
 # Bot Rider — Standard deliverables (additive slice)
 
-Status: **ready for implementation.** Design only until a developer lands it. Not a host rewrite of BR-1–BR-6, QC, HV, MA, or IE.
+Status: **shipped (SD-1–SD-4).** Verified by `test/deliverable-host.test.ts`, `test/deliverable-builder.test.ts`, and `test/deliverable-chrome.test.ts`. Implementation-allocation notes below are historical.
 Stories: **SD-1–4 is the full story set.** **SD-1** Swarm ask when format or outline is missing, **SD-2** one primary real file (keyword inference only when a format is named), **SD-3** host-built Office/HTML from board + MCP + decisions, **SD-4** Proposed Changes open (HTML preview / Office inspect).
 UI chrome contract: `ui-ux-spec.md` §21 (addendum `ui-ux-deliverables.md`). Chrome pointer remains §21.
 Date: 2026-08-30.

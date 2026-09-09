@@ -222,6 +222,12 @@ export function detectTurn(instruction: string): TurnKind {
   if (instruction.includes('NEED_EDIT')) {
     return 'direct';
   }
+  if (instruction.includes('Role: synthesis')) {
+    return 'synthesis';
+  }
+  if (instruction.includes('Role: targeted objection')) {
+    return 'objection';
+  }
   if (instruction.includes('Role: vote')) {
     return 'consensus';
   }

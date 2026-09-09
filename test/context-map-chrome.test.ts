@@ -223,7 +223,7 @@ describe('Context Map chrome (§25 CM-2/3)', () => {
     expect(js).not.toMatch(/TreeView|createTreeView/);
   });
 
-  it('leaves MCP, Swarm, and §24 OpenSpec chips untouched', () => {
+  it('leaves MCP, Swarm review, and §24 OpenSpec chips independent of Context Map', () => {
     expect(proposedFileChrome({ path: 'src/app.ts', op: 'update', specIds: ['BR-6', 'EX-1'] }).description).toBe(
       'Modified · BR-6 · EX-1',
     );
@@ -234,7 +234,7 @@ describe('Context Map chrome (§25 CM-2/3)', () => {
     expect(css).not.toMatch(/specIds|OpenSpec|chip/);
     expect(chatJs).toContain("type: 'chat/send'");
     expect(chatJs).toContain("id=\"run-board\"");
-    expect(chatJs).toContain("'MCP actions · ' + list.length");
+    expect(chatJs).toContain("label.textContent = 'Review · ' + counts.join(' · ')");
     expect(js).not.toContain('run-board');
     expect(js).not.toContain('mcp/actions');
     expect(host).toContain("type: 'contextMap/workspace'");

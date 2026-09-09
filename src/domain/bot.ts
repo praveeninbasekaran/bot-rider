@@ -35,6 +35,8 @@ export interface BotRecord {
   dispatcher?: boolean;
   /** WK-2 Work designation. Absent = false. Not name-contains BA. */
   spec?: boolean;
+  /** PU-1 host-owned identity. Users cannot clear or change this value. */
+  coreKind?: 'spec' | 'dispatcher';
 }
 
 export interface BotDraft {
@@ -111,6 +113,9 @@ export function copyBotRecord(bot: BotRecord): BotRecord {
   }
   if (bot.spec) {
     next.spec = true;
+  }
+  if (bot.coreKind === 'spec' || bot.coreKind === 'dispatcher') {
+    next.coreKind = bot.coreKind;
   }
   return next;
 }

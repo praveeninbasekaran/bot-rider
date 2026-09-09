@@ -360,10 +360,8 @@ describe('MS-3 per-turn resolve', () => {
       'copilot/picked',
       'copilot/other',
     ]);
-    expect(byTurn.filter((t) => t.turn === 'critique').map((t) => t.modelId)).toEqual([
-      'copilot/picked',
-      'copilot/other',
-    ]);
+    expect(byTurn.filter((t) => t.turn === 'synthesis').map((t) => t.modelId)).toEqual(['copilot/picked']);
+    expect(byTurn.filter((t) => t.turn === 'objection').map((t) => t.modelId)).toEqual(['copilot/other']);
     expect(byTurn.filter((t) => t.turn === 'implement').map((t) => t.modelId)).toEqual(['copilot/picked']);
     expect(byTurn.filter((t) => t.turn === 'consensus').every((t) => t.modelId === undefined)).toBe(true);
     expect(usesPerBotModel('consensus')).toBe(false);
@@ -448,7 +446,8 @@ describe('MS-3 per-turn resolve', () => {
     await app.continueDebate();
     const continued = gw.turns.map((turn, i) => ({ turn, modelId: gw.lastSendOpts[i]?.modelId }));
     expect(continued.filter((t) => t.turn === 'propose').map((t) => t.modelId)).toEqual(['copilot/a', 'copilot/b']);
-    expect(continued.filter((t) => t.turn === 'critique').map((t) => t.modelId)).toEqual(['copilot/a', 'copilot/b']);
+    expect(continued.filter((t) => t.turn === 'synthesis').map((t) => t.modelId)).toEqual(['copilot/a']);
+    expect(continued.filter((t) => t.turn === 'objection').map((t) => t.modelId)).toEqual(['copilot/b']);
   });
 
   it('mid-run Edit of modelId does not hot-swap the in-flight stream', async () => {

@@ -1,6 +1,6 @@
 # Bot Rider — Token-save (additive slice)
 
-Status: **locked for implementation.** Not a host rewrite of BR-1–BR-6. Do not change WM-1–4.
+Status: **shipped (QC-1–QC-3).** Verified by `test/prompt-builder.test.ts`, `test/run-board.test.ts`, and `test/lsp-slice.test.ts`. Implementation-allocation notes below are historical.
 Date: 2026-08-28.
 Parent: architecture-mvp.md. Workspace MCP unchanged (additive HostToUi in architecture-mvp.md + Swarm MCP-read consume). Chrome: `docs/ui-ux-run-board.md` §17 (fold into ui-ux-spec.md §17).
 
@@ -8,7 +8,9 @@ No Dev 1 / Dev 2 until this file is on the repo.
 
 Story map: **QC-1, QC-2, QC-3** (this file). No new stories.
 
-Addendum 2026-09-01: published isolation packets ([architecture-bot-isolation.md](./architecture-bot-isolation.md)) are **required** for the receiving bot’s pack (not silent-trim extras); if they miss with the rest of the minimum pack → pack-overflow. QC-1–QC-3 packs otherwise unchanged.
+Addendum 2026-09-08: CTX-1–3 repository context trim tier is additive — openspec/specs/ctx-1-repository-context/spec.md. `RepositoryContextService.buildContext` is trimmed after MCP extras and before dropping the LSP slice or implementer file bodies.
+
+Addendum 2026-09-08: PU-7 reload recovery restores run-board state from workspace snapshots. Without recovery, reload still clears the board with the transcript.
 
 ## 0. Non-negotiables (PO 2026-08-28 + §17 + BA + QC)
 
@@ -19,7 +21,7 @@ Addendum 2026-09-01: published isolation packets ([architecture-bot-isolation.md
 - **TokenGovernor is HOST deterministic** (pack / trim / MCP loop cap / vote compact). Not a bot. Not vscode.lm. Not a Copilot skill. Steal i-have-adhd rule 5 only (host restates state onto the board). Do not install that skill into prompts.
 - **No Graphify vendor.** LSP first. Optional later: WM may read Graphify MCP if the user already has it. Skip Graphify LLM/PDF/video pass.
 - **Call-budget** = sendRequest count × size. Separate from maxInputTokens trim. Internal meter. Do not show it in chrome.
-- Three stores: ThreadStore (full prose), RunBoard (Copilot pack + Swarm chrome), ChangesetStore (Approve still the only disk write). Board **dies with the session / reload**.
+- Three stores: ThreadStore (full prose), RunBoard (Copilot pack + Swarm chrome), ChangesetStore (Approve still the only disk write). Board is session-scoped; PU-7 may restore it from workspace recovery snapshots.
 - Additive HostToUi. **BR-1–BR-6 protocol frozen.** Copilot-only. ₹0 extra keys.
 - After **Approve**, invalidate LSP / file-hash slice. Hide board when the run clears (Approve/Reject).
 - **No per-bot long memory across runs in v1.**
@@ -50,7 +52,7 @@ Host-owned facts only. Full prose remains in the thread. Reload clears the board
 - **AC6.** Swarm still streams **full prose** for every active bot. The webview does **not** parse the board from bot markdown.
 - **AC7.** Board is the sticky Run board **inside** Swarm. Not a fourth sidebar, not a pre-Send surface.
 - **AC8.** Empty board (no goal, todos, decisions, files in play, or dissents) → Run board **hidden** when Swarm is shown.
-- **AC9.** Session-only: reload clears the board with the transcript.
+- **AC9.** Without PU-7 recovery: reload clears the board with the transcript. With PU-7 Resume: board state MAY restore from the workspace snapshot.
 
 ### QC-2 Compact Copilot pack
 
@@ -120,7 +122,7 @@ Implement to `docs/ui-ux-run-board.md` §17 in full. Highlights the architecture
 - Label `Run`. Todos ○ pending / ● current / ✓ done. Click todo = no-op. No Approve on the board. No checkboxes.
 - Dissents: `@{handle} — {reason}` from **Split-card positions only** when Split opens. **Vote does NOT update Dissents** (superseded: not vote remainder). Empty region omitted. See QC-1 AC2.
 - Files: names only. `inChangeset` chip may `review/open-diff`; else tooltip `Not proposed yet`.
-- Collapse: `Goal · {done}/{total}` session-only. Reload hides board.
+- Collapse: `Goal · {done}/{total}` session-only collapse preference. Reload without recovery hides the board; PU-7 Resume may restore it.
 - Board is not parsed from bot markdown by the webview.
 - Implementer may mark files inChangeset after changeset/preview. Implementer never MCP. Vote no MCP.
 
@@ -134,7 +136,7 @@ Each sendRequest:
 3. LSP slice of **active** editor only: diagnostics + document symbols + enclosing range around selection — **replaces** the full buffer (**not both**)
 4. open tab **paths** only
 5. turn instruction
-6. current-turn MCP reads only if WM already produced them (WM-2; WM-Q7: drop MCP first, then extra-tab *bodies* if any remain, never selection / never the slice)
+6. current-turn MCP reads only if WM already produced them (WM-2; WM-Q7: drop MCP first, then repository-context neighborhood, then extra-tab *bodies* if any remain, never selection / never the slice)
 
 **Implementer (QC-2):**
 1. persona / this prompt
@@ -151,7 +153,7 @@ Vote compact: tools none (already). Pack = board + instruction (no file body, no
 
 MCP loop cap: do not raise MAX_MCP_TOOL_ROUNDS (today 8). TokenGovernor does not add Copilot calls to summarize the board.
 
-maxInputTokens: trim extras first (MCP payload size, vote compactness). **Never** restuff transcript. **Never** drop persona, goal, selection/enclosing-range slice, tab paths, or implementer file(s) to force a fit. If the **minimum** pack still does not fit → pack-overflow: Swarm **thread** error, do not start the turn, do **not** drop the LSP slice and still call.
+maxInputTokens: trim extras first (MCP payload size, repository-context neighborhood, vote compactness). **Never** restuff transcript. **Never** drop persona, goal, selection/enclosing-range slice, tab paths, or implementer file(s) to force a fit. If the **minimum** pack still does not fit → pack-overflow: Swarm **thread** error, do not start the turn, do **not** drop the LSP slice and still call.
 
 Call-budget: count sendRequest × packed size this run. Internal. Never a Send gate.
 

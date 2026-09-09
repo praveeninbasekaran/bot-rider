@@ -188,24 +188,24 @@ describe('EB-1 host-in-process bus', () => {
 });
 
 describe('EB-2 parallel debate batches', () => {
-  it('remaining propose speakers share one batch; critique starts only after propose settled; no mixed batch', async () => {
+  it('remaining propose speakers share one batch; objection starts only after propose settled; no mixed batch', async () => {
     const { app, gw, msgs } = harness();
     await twoBots(app);
     agreeThenImplement(gw);
     await app.send('build the feature');
     const starts = msgs.filter((m) => m.type === 'chat/turn-start');
     const round1 = starts.filter((m) => m.type === 'chat/turn-start' && m.round === 1);
-    const firstCritique = round1.findIndex((m) => m.type === 'chat/turn-start' && m.turn === 'critique');
+    const firstCritique = round1.findIndex((m) => m.type === 'chat/turn-start' && m.turn === 'objection');
     const lastPropose = [...round1].map((m, i) => ({ m, i })).filter((x) => x.m.type === 'chat/turn-start' && x.m.turn === 'propose').pop();
     expect(firstCritique).toBeGreaterThan(0);
     expect(lastPropose && lastPropose.i).toBeLessThan(firstCritique);
     const beforeCritique = round1.slice(0, firstCritique);
-    expect(beforeCritique.every((m) => m.type === 'chat/turn-start' && m.turn === 'propose')).toBe(true);
+    expect(beforeCritique.some((m) => m.type === 'chat/turn-start' && m.turn === 'synthesis')).toBe(true);
     const proposeStarts = starts.filter((m) => m.type === 'chat/turn-start' && m.turn === 'propose' && m.round === 1);
     expect(proposeStarts).toHaveLength(2);
     expect(gw.maxInflight).toBeGreaterThan(1);
     expect(gw.turns.filter((t) => t === 'propose')).toHaveLength(4);
-    expect(gw.turns.filter((t) => t === 'critique')).toHaveLength(4);
+    expect(gw.turns.filter((t) => t === 'objection')).toHaveLength(2);
   });
 
   it('full simultaneous start: no speaker is packed after a sibling in that batch has already published', async () => {
@@ -336,7 +336,7 @@ describe('EB-2 parallel debate batches', () => {
     release();
     await done;
     expect(gw.turns.includes('implement')).toBe(false);
-    expect(gw.turns.includes('critique')).toBe(false);
+    expect(gw.turns.includes('objection')).toBe(false);
     expect(app.orchestrator.getRunState().splitOpen).toBe(true);
     expect(app.orchestrator.getRunState().phase).toBe('split');
   });
@@ -454,12 +454,12 @@ describe('EB-3 settle-then-ingest', () => {
     const betaId = app.registry.getByHandle('beta')!.id;
     agreeThenImplement(gw);
     await app.send('batch packets');
-    const critiqueIdx = gw.turns.findIndex((t) => t === 'critique');
-    expect(critiqueIdx).toBeGreaterThanOrEqual(0);
-    const critiquePack = isolationText(gw.lastMessages[critiqueIdx]!);
-    expect(critiquePack).toContain('At: turn-end');
-    expect(critiquePack).toContain(`From: ${alphaId}`);
-    expect(critiquePack).toContain(`From: ${betaId}`);
+    const objectionIdx = gw.turns.findIndex((t) => t === 'objection');
+    expect(objectionIdx).toBeGreaterThanOrEqual(0);
+    const objectionPack = isolationText(gw.lastMessages[objectionIdx]!);
+    expect(objectionPack).toContain('At: turn-end');
+    expect(objectionPack).toContain(`From: ${alphaId}`);
+    expect(objectionPack).toContain(`From: ${betaId}`);
     const impl = gw.turns.findIndex((t) => t === 'implement');
     const implIso = isolationText(gw.lastMessages[impl]!);
     expect(implIso).toContain(`From: ${alphaId}`);
@@ -472,14 +472,14 @@ describe('EB-3 settle-then-ingest', () => {
     }
   });
 
-  it('critique pack includes all propose packets + own SI-1', async () => {
+  it('objection pack includes all propose packets + own SI-1', async () => {
     const { app, gw } = harness();
     await twoBots(app);
     const alphaId = app.registry.getByHandle('alpha')!.id;
     gw.script = ({ turn, instruction, messages }) => {
       const round = Number((instruction.match(/Round (\d+)/) || [])[1] || 1);
-      if (turn === 'propose' && messages[0]?.content.includes('@alpha')) {
-        return 'ALPHA-OWN-PROPOSE-HISTORY';
+      if (turn === 'propose' && messages[0]?.content.includes('@beta')) {
+        return 'BETA-OWN-PROPOSE-HISTORY';
       }
       if (turn === 'consensus') {
         return round === 1 ? 'DISSENT' : 'AGREE';
@@ -489,16 +489,16 @@ describe('EB-3 settle-then-ingest', () => {
       }
       return 'talk';
     };
-    await app.send('critique talk');
+    await app.send('objection talk');
+    const betaId = app.registry.getByHandle('beta')!.id;
     const alphaCritique = gw.lastMessages.find((pack, i) => {
       const last = pack[pack.length - 1]?.content ?? '';
-      return gw.lastSendOpts[i]?.botId === alphaId && last.includes('Role: critique');
+      return gw.lastSendOpts[i]?.botId === betaId && last.includes('Role: targeted objection');
     })!;
     const text = joined(alphaCritique);
-    expect(text).toContain('ALPHA-OWN-PROPOSE-HISTORY');
+    expect(text).toContain('BETA-OWN-PROPOSE-HISTORY');
     expect(isolationText(alphaCritique)).toContain('At: turn-end');
     expect(isolationText(alphaCritique)).toContain(`From: ${alphaId}`);
-    const betaId = app.registry.getByHandle('beta')!.id;
     expect(isolationText(alphaCritique)).toContain(`From: ${betaId}`);
   });
 
@@ -597,12 +597,12 @@ describe('EB-3 settle-then-ingest', () => {
 });
 
 describe('EB-4 SI-1 persist + talk', () => {
-  it('SI-1 is still present at critique; not reset between batches', async () => {
+  it('SI-1 is still present at objection; not reset between batches', async () => {
     const { app, gw } = harness();
     await twoBots(app);
-    const alphaId = app.registry.getByHandle('alpha')!.id;
+    const betaId = app.registry.getByHandle('beta')!.id;
     gw.script = ({ turn, messages }) => {
-      if (turn === 'propose' && messages[0]?.content.includes('@alpha')) {
+      if (turn === 'propose' && messages[0]?.content.includes('@beta')) {
         return 'OWN-HISTORY-LINE';
       }
       if (turn === 'consensus') {
@@ -612,16 +612,16 @@ describe('EB-4 SI-1 persist + talk', () => {
     };
     await app.send('persist me');
     expect(app.orchestrator.getRunState().splitOpen).toBe(true);
-    const atSplit = app.orchestrator.sessions.messagesOf(alphaId);
+    const atSplit = app.orchestrator.sessions.messagesOf(betaId);
     expect(atSplit.length).toBeGreaterThan(0);
     expect(atSplit.some((m) => m.content.includes('OWN-HISTORY-LINE'))).toBe(true);
     expect(atSplit.some((m) => m.content.startsWith('Isolation packet:'))).toBe(true);
-    const critique = gw.lastMessages.find((pack, i) => {
+    const objection = gw.lastMessages.find((pack, i) => {
       const last = pack[pack.length - 1]?.content ?? '';
-      return gw.lastSendOpts[i]?.botId === alphaId && last.includes('Role: critique');
+      return gw.lastSendOpts[i]?.botId === betaId && last.includes('Role: targeted objection');
     })!;
-    expect(joined(critique)).toContain('OWN-HISTORY-LINE');
-    expect(isolationText(critique)).toContain('At: turn-end');
+    expect(joined(objection)).toContain('OWN-HISTORY-LINE');
+    expect(isolationText(objection)).toContain('At: turn-end');
   });
 
   it('SI-1 persists across Continue and Pick', async () => {
@@ -719,11 +719,11 @@ describe('EB-4 SI-1 persist + talk', () => {
     agreeThenImplement(gw);
     await app.send('Must keep ACCEPT-CRITERIA-VERBATIM-AC');
     const betaId = app.registry.getByHandle('beta')!.id;
-    const critique = gw.lastMessages.find((pack, i) => {
+    const objection = gw.lastMessages.find((pack, i) => {
       const last = pack[pack.length - 1]?.content ?? '';
-      return gw.lastSendOpts[i]?.botId === betaId && last.includes('Role: critique');
+      return gw.lastSendOpts[i]?.botId === betaId && last.includes('Role: targeted objection');
     })!;
-    const isolation = isolationText(critique);
+    const isolation = isolationText(objection);
     expect(isolation).toContain('Must keep ACCEPT-CRITERIA-VERBATIM-AC');
     expect(isolation).toContain('- Must keep ACCEPT-CRITERIA-VERBATIM-AC');
     expect(isolation).not.toMatch(/AC summarized|summary of acceptance/i);
@@ -794,10 +794,10 @@ describe('EB-4 SI-1 persist + talk', () => {
       .map((turn, i) => ({ turn, modelId: gw.lastSendOpts[i]?.modelId }))
       .filter((t) => t.turn === 'propose');
     expect(propose.map((p) => p.modelId).sort()).toEqual(['copilot/other', 'copilot/picked']);
-    const critique = gw.turns
+    const objection = gw.turns
       .map((turn, i) => ({ turn, modelId: gw.lastSendOpts[i]?.modelId }))
-      .filter((t) => t.turn === 'critique');
-    expect(critique.map((p) => p.modelId).sort()).toEqual(['copilot/other', 'copilot/picked']);
+      .filter((t) => t.turn === 'objection');
+    expect(objection.map((p) => p.modelId).sort()).toEqual(['copilot/other']);
   });
 
   it('reload / run-end clears SI-1; BR-3 / BotStoreFile.version unchanged', async () => {

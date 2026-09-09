@@ -2,7 +2,7 @@
 
 Fold into `ui-ux-spec.md` as **§23**. Bots tree + New/Edit form footer + command palette. Do **not** reopen §20 Attach slots or §22 model picker. Not a Swarm control. Not a fourth sidebar.
 
-Architecture: [architecture-bot-export-import.md](./architecture-bot-export-import.md). Additive. **EX-1–4 locked.** JSON and YAML interchange. Never overwrite. Never auto-suffix. Never execute. No Copilot on export/import. F7 parallel / Event Bus out.
+Architecture: [architecture-bot-export-import.md](./architecture-bot-export-import.md). Additive. **EX-1–4 shipped.** JSON and YAML interchange. Never overwrite. Never auto-suffix. Never execute. No Copilot on export/import. Export/import does not participate in the shipped F7 Event Bus.
 
 ## 23. Bot export / import (F6)
 

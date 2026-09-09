@@ -3,8 +3,44 @@ import { ChangesetStore } from '../src/app/changeset-store';
 import { APPLY_FAILED_MESSAGE } from '../src/domain/changeset';
 import { MemoryFs } from './fakes';
 import type { HostToUi } from '../src/protocol/messages';
+import { sourceHash } from '../src/app/unified-hunk';
 
 describe('ChangesetStore', () => {
+  it('materializes selected unified hunks and blocks stale sources before apply', async () => {
+    const fs = new MemoryFs();
+    fs.files.set('src/app.ts', 'one\ntwo\n');
+    const msgs: HostToUi[] = [];
+    const store = new ChangesetStore(fs, fs, (message) => msgs.push(message));
+    await store.setPendingPrepared([{
+      path: 'src/app.ts',
+      op: 'update',
+      patch: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,2 +1,2 @@\n one\n-two\n+second',
+      sourceHash: sourceHash('one\ntwo\n'),
+    }]);
+    expect(store.files?.[0]?.content).toBe('one\nsecond\n');
+
+    fs.files.set('src/app.ts', 'externally changed\n');
+    expect(await store.approve()).toBe(false);
+    expect(fs.applyCalls).toBe(0);
+    expect(msgs).toContainEqual(expect.objectContaining({ type: 'changeset/stale', paths: ['src/app.ts'] }));
+  });
+
+  it('omits unchecked files from preview and atomic apply', async () => {
+    const fs = new MemoryFs();
+    const msgs: HostToUi[] = [];
+    const store = new ChangesetStore(fs, fs, (message) => msgs.push(message));
+    store.setPending([
+      { path: 'a.ts', op: 'create', content: 'a' },
+      { path: 'b.ts', op: 'create', content: 'b' },
+    ]);
+    store.setIncluded('b.ts', false);
+    const preview = [...msgs].reverse().find((message) => message.type === 'changeset/preview');
+    expect(preview).toMatchObject({ type: 'changeset/preview', files: [{ path: 'a.ts' }] });
+    expect(await store.approve()).toBe(true);
+    expect(fs.files.get('a.ts')).toBe('a');
+    expect(fs.files.has('b.ts')).toBe(false);
+  });
+
   it('approve success clears the store', async () => {
     const fs = new MemoryFs();
     fs.files.set('src/app.ts', 'old');

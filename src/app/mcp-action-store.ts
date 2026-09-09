@@ -1,5 +1,6 @@
 import { COPY } from './copy';
 import type { HostToUi, McpActionDto } from '../protocol/messages';
+import type { CancelToken } from './ports';
 
 export const ARGS_LINE_MAX = 80;
 
@@ -14,6 +15,35 @@ export interface McpStagedAction {
   argsLine: string;
   botId: string;
   handle: string;
+}
+
+export interface McpBatchApprovalOptions {
+  token?: CancelToken;
+  onProgress?: (completed: number, total: number, action: McpStagedAction) => void;
+}
+
+export function mcpActionIdentity(
+  action: Pick<McpStagedAction, 'name' | 'server' | 'tool' | 'args'>,
+): string {
+  return `${action.server}\u0000${action.name}\u0000${action.tool}\u0000${canonicalJson(action.args)}`;
+}
+
+export function mcpBatchConfirmation(actions: readonly McpActionDto[]): {
+  message: string;
+  detail: string;
+  confirm: string;
+} {
+  const count = actions.length;
+  return {
+    message: COPY.mcpBatchConfirm(count),
+    detail: actions
+      .map((action, index) => {
+        const args = action.argsLine ? `\n   ${action.argsLine}` : '';
+        return `${index + 1}. ${action.server} · ${action.tool} · @${action.handle}${args}`;
+      })
+      .join('\n'),
+    confirm: COPY.mcpBatchRun(count),
+  };
 }
 
 export function toMcpActionDto(action: McpStagedAction): McpActionDto {
@@ -98,7 +128,30 @@ export class McpActionStore {
     return this.pending.map(toMcpActionDto);
   }
 
+  exportState(): McpStagedAction[] {
+    return this.pending.map((action) => ({ ...action, args: structuredClone(action.args) }));
+  }
+
+  restore(actions: readonly McpStagedAction[]): void {
+    this.pending = [];
+    this.seq = 0;
+    for (const action of actions) {
+      if (this.pending.some((item) => mcpActionIdentity(item) === mcpActionIdentity(action))) {
+        continue;
+      }
+      this.pending.push({ ...action, args: structuredClone(action.args) });
+      const sequence = Number(action.id.match(/^mcp-(\d+)$/)?.[1] ?? 0);
+      this.seq = Math.max(this.seq, sequence);
+    }
+    this.emitPreview();
+  }
+
   append(input: Omit<McpStagedAction, 'id'>): McpStagedAction {
+    const identity = mcpActionIdentity(input);
+    const duplicate = this.pending.find((action) => mcpActionIdentity(action) === identity);
+    if (duplicate) {
+      return duplicate;
+    }
     this.seq += 1;
     const action: McpStagedAction = { ...input, id: `mcp-${this.seq}` };
     this.pending.push(action);
@@ -112,16 +165,33 @@ export class McpActionStore {
     this.emit({ type: 'mcp/actions-cleared' });
   }
 
-  async approve(invoke: (action: McpStagedAction) => Promise<void>): Promise<boolean> {
+  async approve(
+    invoke: (action: McpStagedAction) => Promise<void>,
+    options: McpBatchApprovalOptions = {},
+  ): Promise<boolean> {
     if (!this.pending.length) {
       return false;
     }
     const batch = [...this.pending];
+    let completed = 0;
     for (const action of batch) {
+      if (options.token?.isCancellationRequested) {
+        this.emitPreview();
+        return false;
+      }
       try {
         await invoke(action);
         this.pending = this.pending.filter((item) => item.id !== action.id);
+        completed += 1;
+        options.onProgress?.(completed, batch.length, action);
+        if (this.pending.length) {
+          this.emitPreview();
+        }
       } catch {
+        if (options.token?.isCancellationRequested) {
+          this.emitPreview();
+          return false;
+        }
         this.emit({
           type: 'mcp/actions-failed',
           message: COPY.mcpActionsFailed,
@@ -138,4 +208,17 @@ export class McpActionStore {
   private emitPreview(): void {
     this.emit({ type: 'mcp/actions-preview', actions: this.snapshot() });
   }
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'undefined';
 }

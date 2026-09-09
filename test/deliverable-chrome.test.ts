@@ -18,6 +18,7 @@ import {
 const root = join(__dirname, '..');
 const review = readFileSync(join(root, 'src/adapters/review-tree.ts'), 'utf8');
 const extension = readFileSync(join(root, 'src/extension.ts'), 'utf8');
+const proposedProvider = readFileSync(join(root, 'src/adapters/proposed-content-provider.ts'), 'utf8');
 const chatJs = readFileSync(join(root, 'media/chat.js'), 'utf8');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
   contributes: {
@@ -48,9 +49,12 @@ describe('§21 standard-deliverables Proposed Changes chrome', () => {
       expect(chrome.description).toBe('Added');
       expect(chrome.contextValue).toBe('proposedFile');
       expect(chrome.command).toBe('botrider.review.openDiff');
+      expect(chrome.actionLabel).toBe(sample.ext === '.html' ? 'Preview' : 'Inspect');
       expect(chrome.decoration).toEqual({ badge: 'A', tooltip: 'Added' });
     }
     expect(proposedFileLabel('docs/Q3-plan.docx')).toBe('docs/Q3-plan.docx');
+    expect(proposedFileLabel('\\docs\\Q3-plan.docx')).toBe('docs/Q3-plan.docx');
+    expect(proposedFileChrome({ path: 'src/app.ts', op: 'update' }).actionLabel).toBe('Open diff');
     expect(proposedFileChrome({ path: 'src/app.ts', op: 'update' }).decoration).toBeUndefined();
     expect(proposedFileChrome({ path: 'gone.ts', op: 'delete' }).description).toBe('Deleted');
   });
@@ -73,6 +77,7 @@ describe('§21 standard-deliverables Proposed Changes chrome', () => {
   it('stays on the same Files section and BR-6 Approve/Reject — no extra deliverable gate', () => {
     expect(review).toContain("sectionItem('Files', 'filesSection', 'reviewFilesSection')");
     expect(fileItemFn).toContain("command: chrome.command");
+    expect(fileItemFn).toContain('title: chrome.actionLabel');
     expect(pkg.contributes.commands.map((c) => c.command)).not.toEqual(
       expect.arrayContaining([
         'botrider.deliverable.approve',
@@ -155,6 +160,14 @@ describe('§21 standard-deliverables Proposed Changes chrome', () => {
     expect(review).not.toContain('lockComposer');
     expect(chatJs).not.toMatch(/Which format should I write/);
     expect(pkg.contributes.commands.some((c) => /pick.*format|format.*pick/i.test(c.command))).toBe(false);
+  });
+
+  it('normalizes fallback lookup paths and retains stored proposed content', () => {
+    expect(extension).toContain('const wanted = proposedFileLabel(msg.path)');
+    expect(extension).toContain('proposedFileLabel(f.path) === wanted');
+    expect(openFn).toContain('file.content ?? proposed.contentFor(file.path)');
+    expect(proposedProvider).toContain('contentFor(path: string)');
+    expect(proposedProvider).toContain('this.contents.get(proposedFileLabel(path))');
   });
 
   it('keeps composer enabled on deliverableAsk; Split lock still wins', () => {

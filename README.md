@@ -1,6 +1,10 @@
 # Bot Rider
 
-Bot Rider is a VS Code extension that runs a **swarm of persona bots** through GitHub Copilot. Bots debate a master prompt in natural language, then a separate implementer pass can emit a JSON changeset. You review proposed workspace edits and Approve or Reject the whole batch.
+Bot Rider is a VS Code extension that runs a **swarm of persona bots** through GitHub Copilot. Protected Spec and Dispatcher bots plan work, dependency-ready workers run under a bounded scheduler, and all file or MCP side effects remain behind explicit review.
+
+## Install
+
+Download the versioned `.vsix` from the CI/release artifacts, then in VS Code choose **Extensions: Install from VSIX…**. Reload VS Code, open the Bot Rider activity bar, and follow **Getting Started**. See [docs/INSTALL.md](docs/INSTALL.md) for Copilot setup, recovery, and verification.
 
 ## Requirements
 
@@ -9,7 +13,7 @@ Bot Rider is a VS Code extension that runs a **swarm of persona bots** through G
 - Creating, editing, toggling, and deleting bots does **not** need Copilot
 - **No API keys.** Bot Rider never asks for a model key and never calls any vendor except Copilot via `vscode.lm.selectChatModels({ vendor: 'copilot' })`
 
-## Run from source (F5)
+## Contributor setup (F5)
 
 See [docs/INSTALL.md](docs/INSTALL.md) for the precise steps.
 
@@ -25,14 +29,14 @@ See [docs/INSTALL.md](docs/INSTALL.md) for the precise steps.
 1. Create bots (name, handle, persona, role, system instructions). Handles look like `@alpha` and are unique.
 2. Toggle which bots are active with the tree checkboxes.
 3. Type a master prompt in Swarm. Use `@handle` to lock a single bot for a language-only turn.
-4. Default debate: two rounds of propose → critique → AGREE/DISSENT. Unanimous AGREE runs the implementer. Otherwise you get a split: **Continue**, **Pick a bot to decide**, or **Stop**.
-5. Proposed files appear under **Proposed Changes**. Approve applies the whole `WorkspaceEdit`. Reject discards it. If apply fails, **Retry** finishes leftovers; Bot Rider does not roll back files that already landed.
+4. Debate runs bounded proposals, one synthesis, targeted objections, and a policy decision. **Continue**, **Pick**, and **Stop** remain explicit controls.
+5. Proposed files appear under **Proposed Changes**. Select files, inspect validated text hunks or binary deliverables, then Approve or Reject. Stale hunks must be regenerated.
 
 Copilot sign-in is the **Sign in to GitHub Copilot** command (`botrider.copilot.recheck`), which calls `selectChatModels({ vendor: 'copilot' })` from that click. Send and `@bot` are the other user gestures that may select a Copilot model.
 
 ## Documentation
 
-- [docs/INSTALL.md](docs/INSTALL.md) — install from source (F5)
+- [docs/INSTALL.md](docs/INSTALL.md) — VSIX installation and contributor setup
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — exact error copy
 - [docs/architecture-mvp.md](docs/architecture-mvp.md) — architecture blueprint revision 7
 - [docs/ui-ux-spec.md](docs/ui-ux-spec.md) — Bot Rider UI/UX Specification

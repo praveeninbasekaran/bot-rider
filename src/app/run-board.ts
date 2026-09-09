@@ -108,6 +108,14 @@ export class RunBoardStore {
     };
   }
 
+  restore(snapshot: RunBoardDto): void {
+    this.goal = snapshot.goal;
+    this.todos = snapshot.todos.map((todo) => ({ ...todo }));
+    this.decisions = snapshot.decisions.slice();
+    this.dissents = snapshot.dissents.map((dissent) => ({ ...dissent }));
+    this.files = snapshot.files.map((file) => ({ ...file }));
+  }
+
   clear(): void {
     this.goal = undefined;
     this.todos = [];
@@ -127,10 +135,17 @@ export class RunBoardStore {
     if (!text) {
       return;
     }
-    if (this.decisions[this.decisions.length - 1] === text) {
+    const key = normalizeTodo(text);
+    const existing = this.decisions.findIndex((decision) => normalizeTodo(decision) === key);
+    if (existing >= 0) {
+      if (text < this.decisions[existing]!) {
+        this.decisions[existing] = text;
+        this.decisions.sort((left, right) => normalizeTodo(left).localeCompare(normalizeTodo(right)));
+      }
       return;
     }
     this.decisions.push(text);
+    this.decisions.sort((left, right) => normalizeTodo(left).localeCompare(normalizeTodo(right)));
   }
 
   setDissents(items: { handle: string; text: string }[]): void {
@@ -164,6 +179,32 @@ export class RunBoardStore {
     }
   }
 
+  setTaskGraph(
+    tasks: readonly {
+      id: string;
+      owner: string;
+      readiness: 'blocked' | 'ready' | 'running' | 'settled';
+      outcome: 'completed' | 'failed' | 'cancelled' | 'skipped' | null;
+      blockedBy: readonly string[];
+    }[],
+  ): void {
+    this.todos = tasks.map((task) => {
+      const reason = task.readiness === 'blocked' && task.blockedBy.length
+        ? ` · blocked: ${task.blockedBy.join(', ')}`
+        : '';
+      return {
+        id: task.id,
+        text: `${task.id} · @${task.owner}${reason}`,
+        status:
+          task.outcome === 'completed'
+            ? 'done'
+            : task.readiness === 'running'
+              ? 'current'
+              : 'pending',
+      };
+    });
+  }
+
   mergeParseableTodos(text: string): void {
     const parsed = parseTodoLines(text);
     if (parsed.length === 0) {
@@ -173,7 +214,7 @@ export class RunBoardStore {
       const key = normalizeTodo(item.text);
       const existing = this.todos.find((t) => normalizeTodo(t.text) === key);
       if (existing) {
-        existing.status = item.status;
+        existing.status = strongerStatus(existing.status, item.status);
         continue;
       }
       this.todos.push({
@@ -183,5 +224,15 @@ export class RunBoardStore {
       });
       this.nextTodo += 1;
     }
+    this.todos.sort((left, right) => normalizeTodo(left.text).localeCompare(normalizeTodo(right.text)));
+    this.todos.forEach((todo, index) => {
+      todo.id = `t${index + 1}`;
+    });
+    this.nextTodo = this.todos.length + 1;
   }
+}
+
+function strongerStatus(left: TodoStatus, right: TodoStatus): TodoStatus {
+  const rank: Record<TodoStatus, number> = { pending: 0, current: 1, done: 2 };
+  return rank[right] > rank[left] ? right : left;
 }

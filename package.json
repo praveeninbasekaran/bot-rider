@@ -22,15 +22,26 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "vscode:prepublish": "npm run compile",
+    "package:vsix": "node scripts/package-vsix.mjs",
+    "test:extension": "node scripts/run-extension-tests.mjs",
+    "test:vsix": "node scripts/vsix-smoke.mjs",
+    "graphify:check": "node scripts/graphify-freshness.mjs --check",
+    "graphify:stamp": "node scripts/graphify-freshness.mjs --write",
+    "release:gate": "node scripts/release-gate.mjs"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^22.13.10",
     "@types/vscode": "^1.99.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.9.2",
+    "jsdom": "^29.1.1",
     "typescript": "^5.8.2",
     "vitest": "^3.0.9"
   },
@@ -104,6 +115,11 @@
       {
         "command": "botrider.copilot.recheck",
         "title": "Sign in to GitHub Copilot",
+        "category": "Bot Rider"
+      },
+      {
+        "command": "botrider.onboarding.reopen",
+        "title": "Open Getting Started",
         "category": "Bot Rider"
       },
       {
@@ -243,22 +259,22 @@
         },
         {
           "command": "botrider.changeset.approve",
-          "when": "view == botrider.review && botrider.hasPendingChanges && !botrider.hasPendingMcp",
+          "when": "view == botrider.review && botrider.hasPendingChanges",
           "group": "navigation@1"
         },
         {
           "command": "botrider.changeset.reject",
-          "when": "view == botrider.review && botrider.hasPendingChanges && !botrider.hasPendingMcp",
+          "when": "view == botrider.review && botrider.hasPendingChanges",
           "group": "navigation@2"
         },
         {
           "command": "botrider.mcp.approve",
-          "when": "view == botrider.review && botrider.hasPendingMcp && !botrider.hasPendingChanges && !botrider.mcpFailed",
+          "when": "view == botrider.review && botrider.hasPendingMcp && !botrider.mcpFailed",
           "group": "navigation@1"
         },
         {
           "command": "botrider.mcp.reject",
-          "when": "view == botrider.review && botrider.hasPendingMcp && !botrider.hasPendingChanges && !botrider.mcpFailed",
+          "when": "view == botrider.review && botrider.hasPendingMcp && !botrider.mcpFailed",
           "group": "navigation@2"
         },
         {
@@ -348,6 +364,66 @@
         }
       ]
     },
+    "configuration": {
+      "title": "Bot Rider",
+      "properties": {
+        "botrider.maxCopilotConcurrency": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 16,
+          "description": "Maximum number of Copilot requests Bot Rider runs concurrently."
+        },
+        "botrider.debate.quorumPercent": {
+          "type": "number",
+          "default": 60,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Percentage of active bots required for an ordinary Debate decision."
+        },
+        "botrider.debate.maxAutomaticRounds": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Maximum automatic proposal/synthesis/objection cycles before user escalation."
+        },
+        "botrider.debate.blockingClasses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "security",
+            "privacy",
+            "data-loss"
+          ],
+          "description": "Concrete objection classes that block an otherwise passing Debate decision."
+        },
+        "botrider.debate.highRiskKeywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "security",
+            "credential",
+            "payment",
+            "privacy",
+            "delete",
+            "migration"
+          ],
+          "description": "Request keywords that reserve unanimity for high-risk decisions."
+        },
+        "botrider.maxVisibleArticles": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 12,
+          "description": "Maximum bot response disclosures kept expanded in parallel runs."
+        }
+      }
+    },
     "viewsWelcome": [
       {
         "view": "botrider.bots",
@@ -356,7 +432,7 @@
       },
       {
         "view": "botrider.review",
-        "contents": "No proposed edits. After the swarm agrees, proposed WorkspaceEdits appear here for review.\nApprove applies the whole batch. Reject discards it.",
+        "contents": "No proposed edits. After the swarm agrees, proposed WorkspaceEdits appear here for review.\nSelect files, then Approve applies the selected batch. Reject discards it.",
         "when": "!botrider.hasPendingChanges && !botrider.hasPendingMcp"
       }
     ]

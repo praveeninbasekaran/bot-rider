@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Users SHALL create and edit persona bots (name, handle, persona, role, instructions) without Copilot. Empty swarm on first install. Acceptance follows architecture blueprint **revision 7**.
+Users SHALL create and edit persona bots (name, handle, persona, role, instructions) without Copilot. The shipped revision-7 baseline starts with an empty swarm. PU-1 supersedes that first-install rule when protected core bots ship.
 
 ## SHALL requirements
 
@@ -10,7 +10,7 @@ Users SHALL create and edit persona bots (name, handle, persona, role, instructi
 2. Handle SHALL match `[a-z0-9][a-z0-9_-]{0,31}`, SHALL be unique case-insensitively, SHALL auto-derive from Name, then remain editable.
 3. The Bots view (`botrider.bots`) SHALL offer **New Bot** (`botrider.bots.create`) and inline **Edit Bot** (`botrider.bots.edit`). Command palette SHALL hide edit (`when: false`).
 4. The form panel `botrider.botForm` SHALL collect Name, Handle, Persona, Role, System instructions, Active.
-5. First install SHALL show zero bots (no seed bots). There SHALL be no count cap.
+5. Shipped baseline: first install SHALL show zero bots (no seed bots). PU-1 replaces this clause when implemented. There SHALL be no count cap.
 6. Create and edit SHALL persist via BR-3 and SHALL NEVER call `vscode.lm`.
 7. UI SHALL identify bots as `@{handle}`, never the display name, including the Swarm picker (insert `@{handle}` plus trailing space — BR-5 / UI spec).
 8. Avatars SHALL be color + initials SVG only.

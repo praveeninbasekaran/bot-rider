@@ -20,7 +20,7 @@ Only Proposed Changes (`botrider.review`) **Files** rows (`proposedFile`).
 | Swarm thread / round headers / Split / Run board | Never |
 | Bots tree / bot form / §20 / §22 / §23 | Never |
 
-Not a fourth sidebar. Approve / Reject / Retry stay BR-6 whole-changeset. MCP Approve / Reject stay Grain B.
+Not a fourth sidebar. Approve / Reject / Retry stay EDIT-1 selected included files (BR-6). MCP Approve / Reject stay Grain B.
 
 ### 24.2 Chip text and placement
 
@@ -46,7 +46,7 @@ Missing `openspec/` or empty catalog: no chips, **no banner**, no welcome-line a
 
 ### 24.5 Unchanged
 
-§17 Run board. §18 article prose. §19 MCP Grain B (no chips on MCP rows). §20 Attach. §22 model picker. §23 export/import. Round headers. Split Continue / Pick / Stop. Composer. Approve/Reject still whole-changeset BR-6.
+§17 Run board. §18 article prose. §19 MCP Grain B (no chips on MCP rows). §20 Attach. §22 model picker. §23 export/import. Round headers. Split Continue / Pick / Stop. Composer. Approve/Reject apply EDIT-1 selected included files (BR-6).
 
 ### 24.6 Out
 

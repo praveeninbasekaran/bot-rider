@@ -31,6 +31,9 @@ export const COPY = {
   mcpSkipMutating: (server: string) => `Writes through ${server} aren't available in Bot Rider.`,
   mcpActionsFailed:
     'MCP actions failed\nSome remote side effects (Figma, Azure Boards, or other servers) may already have happened and may not roll back.',
+  mcpBatchConfirm: (n: number) => `Run ${n} staged MCP ${n === 1 ? 'action' : 'actions'}?`,
+  mcpBatchRun: (n: number) => (n === 1 ? 'Run action' : `Run ${n} actions`),
+  mcpBatchCancelled: 'MCP execution cancelled. Remaining actions are still pending.',
   mcpStagedResult: 'Staged for user Approve. Not executed.',
   packOverflow:
     "Prompt doesn't fit Copilot\nThe minimum context for this turn is larger than Copilot's window.\nShorten the prompt or shrink the active editor. Required context was not dropped.",

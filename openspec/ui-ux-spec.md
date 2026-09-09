@@ -56,7 +56,7 @@ New Bot, Edit Bot, Delete Bot, Toggle Active, Expand, Stop (`botrider.chat.stop`
 **Review** `!botrider.hasPendingChanges`:
 
 > No proposed edits. After the swarm agrees, proposed WorkspaceEdits appear here for review.  
-> Approve applies the whole batch. Reject discards it.
+> Approve applies **included** selected files. Reject discards the pending batch.
 
 ### Context keys
 

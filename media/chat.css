@@ -29,12 +29,110 @@ body {
   border-bottom: 1px solid var(--vscode-inputValidation-warningBorder);
 }
 
+.scheduler-status {
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--vscode-widget-border);
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-sideBar-background);
+  font-size: 11px;
+}
+
+.scheduler-status[hidden] {
+  display: none;
+}
+
+.activity-timeline,
+.summary-card {
+  margin: 6px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+  font-size: 12px;
+}
+
+.activity-timeline[hidden],
+.summary-card[hidden] {
+  display: none;
+}
+
+#activity-list {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.activity-row,
+.article-toggle {
+  border: 0;
+  color: var(--vscode-descriptionForeground);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.activity-row:focus-visible,
+.article-toggle:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.activity-row.status-speaking,
+.activity-row.status-inFlight {
+  color: var(--vscode-foreground);
+}
+
+.activity-row.status-blocked,
+.activity-row.status-failed,
+.decision-dissent {
+  color: var(--vscode-errorForeground);
+}
+
+.summary-card p {
+  margin: 6px 0 0;
+}
+
+.article-toggle {
+  margin: 4px 0;
+  padding: 2px 0;
+  color: var(--vscode-textLink-foreground);
+}
+
+.article-body[hidden] {
+  display: none;
+}
+
 .banner.visible,
 .expand-banner.visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.onboarding {
+  margin: 8px 10px;
+  padding: 10px;
+  border: 1px solid var(--vscode-widget-border);
+  background: var(--vscode-editorWidget-background);
+  font-size: 12px;
+}
+
+.onboarding-head,
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.onboarding-head {
+  justify-content: space-between;
+}
+
+.onboarding p {
+  margin: 8px 0;
 }
 
 .expand-banner {
@@ -610,6 +708,7 @@ body.vscode-reduce-motion .mcp-read-spinner {
 .files-banner {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 8px 0;
   font-size: 12px;
@@ -617,6 +716,11 @@ body.vscode-reduce-motion .mcp-read-spinner {
 
 .review-link {
   text-decoration: none;
+}
+
+.review-failure {
+  flex-basis: 100%;
+  color: var(--vscode-errorForeground);
 }
 
 .error {

@@ -6,7 +6,7 @@ Architecture: [architecture-event-bus.md](./architecture-event-bus.md). Additive
 
 ## 26. Parallel Debate stream (F7)
 
-**Status:** Additive after §25. **EB-1–4 locked** (host). This file is chrome only. Not a fourth view. Not Event Bus chrome. Not packet rows. Not a new sidebar. Not a new Activity Bar icon. Not token chrome. Not F3 / F4. Not leftovers 002/003/009/014. Do **not** reopen §20 / §22 / §23 / §24 / §25.
+**Status:** **EB-1–4 and PU-5 shipped.** This file is chrome only. Not a fourth view. Not Event Bus chrome. Not packet rows. Not a new sidebar. Not a new Activity Bar icon.
 
 OpenSpec chips stay on Proposed Changes **Files** rows (§24). Context Map unchanged (§25).
 
@@ -17,10 +17,10 @@ Same Swarm surfaces as today: sidebar `botRider.chat` and Expand `botRider.chatP
 | Surface | Parallel chrome |
 | --- | --- |
 | Swarm thread (sidebar + Expand) | HV articles **MAY overlap** during a parallel Debate batch |
-| Round header | `ROUND {n} · PROPOSE` then, after propose settled, `ROUND {n} · CRITIQUE` |
+| Round header | `ROUND {n} · PROPOSE`, one synthesis card, then `ROUND {n} · OBJECTION` |
 | `@` | Single article. No overlap chrome |
 | Vote / Split / implementer | No overlap chrome |
-| Run board | **MAY** show multiple in-flight speakers (one static ● / chip per handle) |
+| Activity | One compact keyed timeline distinguishes blocked, queued, in-flight, completed, and failed work |
 | Proposed Changes / MCP / OpenSpec chips / Context Map | Unchanged. Do **not** move onto the board |
 
 **No Event Bus chrome.** Do not paint the bus, packet ids, inbox counts, or subscriber lists. Do not add packet rows to the thread.
@@ -29,7 +29,7 @@ Same Swarm surfaces as today: sidebar `botRider.chat` and Expand `botRider.chatP
 
 ### 26.2 Overlap (Debate batch only)
 
-During a parallel Debate batch (remaining propose **or** remaining critique — never mixed), more than one HV article **MAY** stream at once.
+During a parallel Debate batch (remaining proposals or targeted objections — never mixed), more than one HV article **MAY** stream at once. Bot prose defaults to a collapsed native-button disclosure. Expanding responses is capped by `botrider.maxVisibleArticles`; collapsing never deletes transcript data.
 
 Each article stays that bot’s bubble (`@{handle}`, color + initials). Existing `chat/turn-start` / `chat/token` / `chat/turn-end` members. Host **MAY** emit overlapping turns.
 
@@ -48,25 +48,24 @@ ROUND {n} · PROPOSE
 After the propose batch **settles**:
 
 ```
-ROUND {n} · CRITIQUE
+ROUND {n} · OBJECTION
 ```
 
-`{n}` is the existing BR-4 round number. Do **not** invent `ROUND {n} · PARALLEL`. Do **not** show both PROPOSE and CRITIQUE as the live header at once. Critique header appears only after propose settled.
+`{n}` is the Debate cycle number. Do **not** invent `ROUND {n} · PARALLEL`. Render exactly one current synthesis card and one terminal decision card; replay replaces these keyed cards instead of duplicating them.
 
 Split title / Stopped / Pick copy unchanged (§ copy deck).
 
-### 26.4 Run board in-flight
+### 26.4 Compact activity timeline
 
-The Run board **MAY** show multiple in-flight speakers while a Debate batch is running: **one static ● / chip per handle**.
+The Swarm shows one compact activity row per bot. A keyed merge replaces duplicate chips and distinguishes blocked, queued, retrying/in-flight, completed, and failed states from Run Board, scheduler, and run messages.
 
-- Derive from outstanding `chat/turn-start` without `chat/turn-end` (or equivalent host run-state the UI already has).
-- Static. Do **not** animate a chase. Do **not** show tokens / packet text on the chip.
-- Label `@{handle}` (never display name as the identity).
-- Omit the region when only one speaker is in flight if the existing current-todo ● already covers it; showing one chip is allowed.
+- Derive state from `chat/turn-start` / `chat/turn-end`, Run Board todos, scheduler snapshots, and terminal errors.
+- Static. Do **not** animate a chase or show tokens / packet text.
+- Label `@{handle}`. Activating a row focuses and expands the corresponding disclosure when present.
 
 Do **not** move Approve, MCP actions, isolation packets, or OpenSpec chips onto the board. Those stay Proposed Changes / Grain B / host-internal / §24 Files rows.
 
-Board anatomy otherwise unchanged (§17). Dissents stay Split-only. Clicking a chip is a no-op.
+Board anatomy otherwise remains unchanged (§17). Dissents stay Split-only.
 
 ### 26.5 Composer and Stop
 
@@ -98,17 +97,15 @@ Shorten the prompt or shrink the active editor. Required context was not dropped
 
 ### 26.7 Accessibility
 
-Per-article live regions. **≤ 1 announce / 2 seconds / article.**
+Article-local live regions are disabled. One serialized, adjacent-deduplicated announcement queue owns the polite live region so concurrent streams cannot talk over one another.
 
-Do **not** use a single thread-wide live region that announces every sibling token. Overflow / Stop / Split announcements stay existing polite patterns; do not stack them onto every streaming article.
-
-Round header change (`PROPOSE` → `CRITIQUE`) may announce once when the propose batch settles.
+Round header change (`PROPOSE` → `OBJECTION`) may announce once when the proposal batch settles.
 
 In-flight chips: text includes `@{handle}`. Glyph `aria-hidden` if a ● is decorative.
 
 ### 26.8 Protocol consume
 
-No new Event Bus protocol members. Consume existing `chat/turn-start` / `chat/token` / `chat/turn-end` / `chat/stop` / `run/state` / `chat/board` / `error`.
+No Event Bus protocol members are exposed. Consume `chat/turn-start` / `chat/token` / `chat/turn-end` / `chat/synthesis` / `chat/decision` / `chat/stop` / `run/state` / `chat/board` / `copilot/scheduler` / `ui/preferences` / `error`.
 
 UI never calls `vscode.lm`. UI never paints packets. UI never implies same-batch bots have ingested each other.
 

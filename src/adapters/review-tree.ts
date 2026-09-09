@@ -10,6 +10,7 @@ import {
   mcpFailedViewMessage,
   proposedCreateDecoration,
   proposedFileChrome,
+  proposedFileLabel,
   reviewChromeMode,
 } from './review-chrome';
 
@@ -46,8 +47,8 @@ export class ProposedFileDecorationProvider implements vscode.FileDecorationProv
     if (uri.scheme !== PROPOSED_SCHEME) {
       return undefined;
     }
-    const rel = uri.path.replace(/^\/+/, '').replace(/\\/g, '/');
-    const file = this.app.changesets.files?.find((f) => f.path.replace(/\\/g, '/') === rel);
+    const rel = proposedFileLabel(uri.path);
+    const file = this.app.changesets.files?.find((f) => proposedFileLabel(f.path) === rel);
     if (file?.op !== 'create') {
       return undefined;
     }
@@ -70,6 +71,14 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
 
   attach(view: vscode.TreeView<ReviewItem>): void {
     this.view = view;
+    view.onDidChangeCheckboxState((event) => {
+      for (const [item, state] of event.items) {
+        if (item.file) {
+          this.app.changesets.setIncluded(item.file.path, state === vscode.TreeItemCheckboxState.Checked);
+        }
+      }
+      this.refresh();
+    });
     this.syncChrome();
   }
 
@@ -94,6 +103,18 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     }
   }
 
+  async revealFiles(): Promise<void> {
+    if (!this.view) {
+      return;
+    }
+    await vscode.commands.executeCommand('botrider.review.focus');
+    const roots = this.getChildren();
+    const target = roots.find((item) => item.kind === 'filesSection') ?? this.fileItems()[0];
+    if (target) {
+      await this.view.reveal(target, { expand: true, focus: true, select: true });
+    }
+  }
+
   async revealFile(path: string): Promise<void> {
     if (!this.view) {
       return;
@@ -104,8 +125,8 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     if (section) {
       await this.view.reveal(section, { expand: true });
     }
-    const wanted = path.replace(/\\/g, '/');
-    const target = this.fileItems().find((item) => item.file?.path.replace(/\\/g, '/') === wanted);
+    const wanted = proposedFileLabel(path);
+    const target = this.fileItems().find((item) => proposedFileLabel(item.file?.path ?? '') === wanted);
     if (target) {
       await this.view.reveal(target, { expand: true, focus: true, select: true });
     }
@@ -199,10 +220,11 @@ export async function openProposedDiff(
   file: ChangeFile | { path: string; op: FileOp; content?: string; kind?: ChangeFile['kind'] },
   proposed: ProposedContentProvider,
 ): Promise<void> {
+  const content = file.content ?? proposed.contentFor(file.path);
   const plan = resolveProposedOpen({
     path: file.path,
     op: file.op,
-    content: file.content,
+    content,
     kind: 'kind' in file ? file.kind : undefined,
     binary: 'binary' in file ? file.binary : undefined,
   });
@@ -278,11 +300,19 @@ function fileItem(file: ChangeFile): ReviewItem {
   item.contextValue = chrome.contextValue;
   item.command = {
     command: chrome.command,
-    title: 'Open Diff',
+    title: chrome.actionLabel,
     arguments: [item],
   };
+  item.tooltip = `${chrome.actionLabel}: ${chrome.label}`;
   item.resourceUri = proposedUri(chrome.resourcePath);
   item.description = chrome.description;
+  item.checkboxState = file.included === false
+    ? vscode.TreeItemCheckboxState.Unchecked
+    : vscode.TreeItemCheckboxState.Checked;
+  if (file.stale) {
+    item.description = [item.description, 'Stale — regenerate'].filter(Boolean).join(' · ');
+    item.contextValue = `${item.contextValue}Stale`;
+  }
   return item;
 }
 

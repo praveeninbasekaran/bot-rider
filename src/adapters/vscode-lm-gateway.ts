@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CopilotGateway } from '../app/copilot-gateway';
+import type { CopilotSchedulerSnapshot } from '../app/copilot-scheduler';
 import type { McpGateway } from '../app/mcp-gateway';
 import type {
   CancelToken,
@@ -147,11 +148,16 @@ export function createCopilotGateway(
   context: vscode.ExtensionContext,
   onStatus: (status: CopilotStatus) => void,
   mcp?: McpGateway,
+  scheduling: {
+    maxConcurrent?: number;
+    onChange?: (snapshot: CopilotSchedulerSnapshot) => void;
+  } = {},
 ): CopilotGateway {
   return new CopilotGateway(
     new VsCodeLanguageModelPort(context.languageModelAccessInformation),
     onStatus,
     60_000,
     mcp,
+    scheduling,
   );
 }

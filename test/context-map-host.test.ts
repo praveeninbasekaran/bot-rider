@@ -209,9 +209,10 @@ describe('CM-1 view contribution', () => {
     );
   });
 
-  it('is not a second Activity Bar icon and is not Graphify', () => {
+  it('is not a second Activity Bar icon or a runtime development-graph dependency', () => {
     expect(Object.keys(pkg.contributes.views)).toEqual(['botrider']);
-    const blobs = ['package.json', 'src/extension.ts', 'src/adapters/context-map-view.ts', 'src/app/context-map.ts'];
+    expect(Object.keys(pkg.dependencies ?? {})).not.toContain('graphify');
+    const blobs = ['src/extension.ts', 'src/adapters/context-map-view.ts', 'src/app/context-map.ts'];
     for (const file of blobs) {
       expect(src(file), file).not.toMatch(/Graphify/i);
     }

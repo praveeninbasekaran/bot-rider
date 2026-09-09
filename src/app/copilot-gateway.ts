@@ -14,6 +14,10 @@ import { COPILOT_JUSTIFICATION } from './copy';
 import { waitForCancel } from './cancel';
 import type { McpGateway } from './mcp-gateway';
 import { normalizeModelId } from '../domain/bot';
+import {
+  CopilotRequestScheduler,
+  type CopilotSchedulerSnapshot,
+} from './copilot-scheduler';
 
 export const MAX_MCP_TOOL_ROUNDS = 8;
 
@@ -23,6 +27,8 @@ export interface CopilotSendOpts {
   handle?: string;
   /** LanguageModelChat.id for this bot turn. Empty / omit = host default. Vote does not pass this. */
   modelId?: string | null;
+  /** User-directed @bot turns enter the bounded priority lane. */
+  priority?: 'user' | 'normal';
 }
 
 export interface ICopilotGateway {
@@ -36,6 +42,7 @@ export interface ICopilotGateway {
   ensureAvailable(): Promise<CopilotStatus>;
   prepareTurn(modelId?: string | null): Promise<{ usedFallback: boolean }>;
   watchFormModels(savedModelId: string | null | undefined, emit: (msg: HostToUi) => void): FormModelsWatch;
+  setMaxConcurrency?(value: number): void;
   stream(
     messages: PromptMessage[],
     token: CancelToken,
@@ -122,6 +129,9 @@ export class CopilotGateway implements ICopilotGateway {
   private accessSettled = false;
   private knownModelIds: string[] = [];
   private readonly hangMs: number;
+  private readonly scheduler: CopilotRequestScheduler;
+  private readonly retryLimit: number;
+  private readonly retryBaseMs: number;
 
   get cachedCopilotModelIds(): readonly string[] {
     return this.knownModelIds;
@@ -132,8 +142,17 @@ export class CopilotGateway implements ICopilotGateway {
     private readonly onStatus: (status: CopilotStatus) => void = () => undefined,
     hangMs = 60_000,
     private readonly mcp?: McpGateway,
+    scheduling: {
+      maxConcurrent?: number;
+      retryLimit?: number;
+      retryBaseMs?: number;
+      onChange?: (snapshot: CopilotSchedulerSnapshot) => void;
+    } = {},
   ) {
     this.hangMs = hangMs;
+    this.retryLimit = Math.max(0, Math.min(5, Math.floor(scheduling.retryLimit ?? 2)));
+    this.retryBaseMs = Math.max(1, Math.floor(scheduling.retryBaseMs ?? 500));
+    this.scheduler = new CopilotRequestScheduler(scheduling.maxConcurrent, scheduling.onChange);
     this.lm.onDidChangeChatModels(() => {
       this.modelsSettled = true;
       void this.refreshAfterSettle();
@@ -150,6 +169,14 @@ export class CopilotGateway implements ICopilotGateway {
 
   get maxInputTokens(): number {
     return (this.turnModel ?? this.model)?.maxInputTokens ?? 64_000;
+  }
+
+  setMaxConcurrency(value: number): void {
+    this.scheduler.setMaxConcurrent(value);
+  }
+
+  schedulerSnapshot(): CopilotSchedulerSnapshot {
+    return this.scheduler.snapshot();
   }
 
   async countTokens(messages: PromptMessage[]): Promise<number> {
@@ -224,6 +251,66 @@ export class CopilotGateway implements ICopilotGateway {
     token: CancelToken,
     onText: (chunk: string) => void,
     opts: CopilotSendOpts = {},
+  ): Promise<'ok' | 'cancelled'> {
+    let attempt = 0;
+    while (!token.isCancellationRequested) {
+      const release = await this.scheduler.acquire(token, {
+        botId: opts.botId,
+        handle: opts.handle,
+        priority: opts.priority,
+        attempt,
+      });
+      if (!release) {
+        return 'cancelled';
+      }
+      let emittedText = false;
+      let retryDelay = 0;
+      try {
+        const outcome = await this.sendNow(messages, token, (chunk) => {
+          emittedText = emittedText || chunk.length > 0;
+          onText(chunk);
+        }, opts);
+        if (attempt > 0 && outcome === 'ok') {
+          this.setStatus('ready');
+        }
+        return outcome;
+      } catch (error) {
+        const safeToRetry =
+          mapCopilotError(error) === 'quota' &&
+          opts.tools !== 'mcp-debate' &&
+          !emittedText &&
+          attempt < this.retryLimit;
+        if (!safeToRetry) {
+          throw error;
+        }
+        attempt += 1;
+        retryDelay = this.retryBaseMs * 2 ** (attempt - 1);
+      } finally {
+        release();
+      }
+      const retry = this.scheduler.markRetrying(
+        {
+          botId: opts.botId,
+          handle: opts.handle,
+          priority: opts.priority ?? 'normal',
+          attempt,
+        },
+        retryDelay,
+      );
+      await Promise.race([
+        new Promise<void>((resolve) => setTimeout(resolve, retryDelay)),
+        waitForCancel(token),
+      ]);
+      retry.clear();
+    }
+    return 'cancelled';
+  }
+
+  private async sendNow(
+    messages: PromptMessage[],
+    token: CancelToken,
+    onText: (chunk: string) => void,
+    opts: CopilotSendOpts,
   ): Promise<'ok' | 'cancelled'> {
     this.inflight += 1;
     this.requestCount += 1;

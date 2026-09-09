@@ -187,3 +187,69 @@ describe('CopilotGateway MCP tools', () => {
     expect(msgs.filter((m) => m.type.startsWith('chat/mcp-'))).toEqual([]);
   });
 });
+
+describe('CopilotGateway bounded retry', () => {
+  const idle = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) };
+
+  it('backs off and recovers from transient quota failures with visible retry state', async () => {
+    let attempts = 0;
+    const lm = new FakeLm();
+    lm.models = [model({
+      sendRequest: async () => {
+        attempts += 1;
+        if (attempts < 3) throw Object.assign(new Error('rate limit'), { code: 'quota' });
+        return { text: (async function* () { yield 'done'; })() };
+      },
+    })];
+    const snapshots: import('../src/app/copilot-scheduler').CopilotSchedulerSnapshot[] = [];
+    const gateway = new CopilotGateway(lm, () => undefined, 60_000, undefined, {
+      maxConcurrent: 1,
+      retryLimit: 2,
+      retryBaseMs: 1,
+      onChange: (snapshot) => snapshots.push(snapshot),
+    });
+    await gateway.ensureAvailable();
+    const chunks: string[] = [];
+    await expect(gateway.send(
+      [{ role: 'user', content: 'retry' }],
+      idle,
+      (chunk) => chunks.push(chunk),
+      { tools: 'none', handle: 'alpha' },
+    )).resolves.toBe('ok');
+    expect(attempts).toBe(3);
+    expect(chunks.join('')).toBe('done');
+    expect(snapshots.some((snapshot) => snapshot.requests.some((item) => item.state === 'retrying'))).toBe(true);
+    expect(gateway.status).toBe('ready');
+  });
+
+  it('stops at the retry limit and never retries an MCP-capable turn', async () => {
+    let attempts = 0;
+    const lm = new FakeLm();
+    lm.models = [model({
+      sendRequest: async () => {
+        attempts += 1;
+        throw Object.assign(new Error('quota exceeded'), { code: 'quota' });
+      },
+    })];
+    const gateway = new CopilotGateway(lm, () => undefined, 60_000, undefined, {
+      retryLimit: 2,
+      retryBaseMs: 1,
+    });
+    await gateway.ensureAvailable();
+    await expect(gateway.send(
+      [{ role: 'user', content: 'retry' }],
+      idle,
+      () => undefined,
+      { tools: 'none' },
+    )).rejects.toThrow('quota exceeded');
+    expect(attempts).toBe(3);
+    attempts = 0;
+    await expect(gateway.send(
+      [{ role: 'user', content: 'do not duplicate tools' }],
+      idle,
+      () => undefined,
+      { tools: 'mcp-debate' },
+    )).rejects.toThrow('quota exceeded');
+    expect(attempts).toBe(1);
+  });
+});

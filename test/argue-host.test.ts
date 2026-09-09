@@ -194,8 +194,8 @@ describe('AG-1 collision trigger + one path at a time + hold Approve', () => {
     expect(handles.every((h) => h === 'deva' || h === 'devb')).toBe(true);
     expect(handles).not.toContain('lead');
     expect(handles).not.toContain('specbot');
-    const host = src('src/app/orchestrator.ts');
-    expect(host).toContain('assignedPath');
+    const host = src('src/app/work-policy.ts');
+    expect(host).toContain('assignments.some');
     expect(host).toMatch(/bot\.dispatcher \|\| bot\.spec/);
     const claims = workPathClaims([
       { botId: 'deva', files: [{ path: 'src/a.ts', op: 'create', content: 'a' }, { path: 'src/keep.ts', op: 'create', content: 'k' }] },

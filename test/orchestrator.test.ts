@@ -54,7 +54,7 @@ describe('Orchestrator positive', () => {
     expect(app.changesets.applyFailed).toBe(false);
     const starts = msgs.filter((m) => m.type === 'chat/turn-start');
     expect(starts.some((m) => m.type === 'chat/turn-start' && m.turn === 'propose' && m.round === 1)).toBe(true);
-    expect(starts.some((m) => m.type === 'chat/turn-start' && m.turn === 'critique' && m.round === 1)).toBe(true);
+    expect(starts.some((m) => m.type === 'chat/turn-start' && m.turn === 'objection' && m.round === 1)).toBe(true);
     const tokens = msgs.filter((m) => m.type === 'chat/token');
     expect(tokens.length).toBeGreaterThan(0);
     expect(tokens.every((m) => m.type === 'chat/token' && typeof m.botId === 'string' && typeof m.delta === 'string')).toBe(
@@ -71,7 +71,7 @@ describe('Orchestrator positive', () => {
   });
 
   it('@known solo then NEED_EDIT implementer for that bot', async () => {
-    const { app, gw } = harness();
+    const { app, gw, msgs } = harness();
     await twoBots(app);
     gw.script = ({ turn }) => {
       if (turn === 'direct') {
@@ -126,6 +126,116 @@ describe('Orchestrator positive', () => {
     expect(msgs.some((m) => m.type === 'chat/turn-start' && m.inactiveNotice === COPY.inactiveTurn('Alpha'))).toBe(
       true,
     );
+  });
+});
+
+describe('PU-5 synthesis-based Debate host flow', () => {
+  it('runs proposal, one synthesis, targeted objection, then accepts an ordinary majority', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    await app.createBot({
+      name: 'Gamma',
+      handle: 'gamma',
+      persona: 'risk',
+      role: 'risk reviewer',
+      instructions: 'review',
+    });
+    gw.script = ({ turn, messages }) => {
+      const persona = messages[0]?.content ?? '';
+      if (turn === 'synthesis') return 'Use the typed scheduler.';
+      if (turn === 'objection') return 'NO_BLOCKER';
+      if (turn === 'consensus') return persona.includes('@gamma') ? 'DISSENT needs polish' : 'AGREE';
+      if (turn === 'implement') {
+        return changesetFence([{ path: 'src/decision.ts', op: 'create', content: 'done' }]);
+      }
+      return 'proposal';
+    };
+
+    await app.send('choose an ordinary approach');
+
+    const synthesisIndex = gw.turns.indexOf('synthesis');
+    const objectionIndex = gw.turns.indexOf('objection');
+    const lastProposal = gw.turns.lastIndexOf('propose');
+    expect(synthesisIndex).toBeGreaterThan(lastProposal);
+    expect(objectionIndex).toBeGreaterThan(synthesisIndex);
+    expect(gw.turns.filter((turn) => turn === 'synthesis')).toHaveLength(1);
+    expect(msgs.filter((message) => message.type === 'chat/synthesis')).toHaveLength(1);
+    expect(msgs).toContainEqual({
+      type: 'chat/decision',
+      decision: expect.objectContaining({ status: 'accepted', agreeVotes: 2, validVotes: 3 }),
+    });
+    expect(app.orchestrator.getRunState().phase).toBe('pendingReview');
+  });
+
+  it('stops unchanged concrete blockers, escalates once, and preserves Continue', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    gw.script = ({ turn }) => {
+      if (turn === 'synthesis') return 'Ship the recommendation.';
+      if (turn === 'objection') {
+        return 'BLOCKING security: authentication acceptance — credentials can leak';
+      }
+      if (turn === 'consensus') return 'AGREE';
+      return 'proposal';
+    };
+
+    await app.send('choose an approach');
+    expect(app.orchestrator.getRunState().splitOpen).toBe(true);
+    expect(gw.turns.filter((turn) => turn === 'propose')).toHaveLength(4);
+    expect(msgs.filter((message) => message.type === 'chat/decision')).toHaveLength(1);
+    const before = msgs.filter((message) => message.type === 'chat/decision').length;
+    await app.continueDebate();
+    expect(app.orchestrator.getRunState().splitOpen).toBe(true);
+    expect(msgs.filter((message) => message.type === 'chat/decision')).toHaveLength(before);
+    expect(gw.turns.some((turn, index) => turn === 'propose' && index > 0)).toBe(true);
+  });
+
+  it('escalates a quorum failure at the configured hard cap', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    app.orchestrator.configureDebate({ quorumPercent: 100, maxAutomaticRounds: 1 });
+    gw.script = ({ turn }) => {
+      if (turn === 'synthesis') return 'A bounded recommendation.';
+      if (turn === 'objection') return 'NO_BLOCKER';
+      if (turn === 'consensus') return 'No structured vote was supplied.';
+      return 'proposal';
+    };
+
+    await app.send('make a normal decision');
+    expect(app.orchestrator.getRunState().splitOpen).toBe(true);
+    expect(gw.turns.filter((turn) => turn === 'propose')).toHaveLength(2);
+    expect(msgs).toContainEqual({
+      type: 'chat/decision',
+      decision: expect.objectContaining({ status: 'escalated', validVotes: 0, quorumRequired: 2 }),
+    });
+  });
+
+  it('requires unanimity for a high-risk request even when ordinary majority passes', async () => {
+    const { app, gw, msgs } = harness();
+    await twoBots(app);
+    await app.createBot({
+      name: 'Gamma',
+      handle: 'gamma',
+      persona: 'risk',
+      role: 'worker',
+      instructions: 'review',
+    });
+    app.orchestrator.configureDebate({ maxAutomaticRounds: 1 });
+    gw.script = ({ turn, messages }) => {
+      if (turn === 'synthesis') return 'Delete credential records safely.';
+      if (turn === 'objection') return 'NO_BLOCKER';
+      if (turn === 'consensus') {
+        return (messages[0]?.content ?? '').includes('@gamma') ? 'DISSENT' : 'AGREE';
+      }
+      return 'proposal';
+    };
+
+    await app.send('delete credential records');
+    expect(app.orchestrator.getRunState().splitOpen).toBe(true);
+    expect(msgs).toContainEqual({
+      type: 'chat/decision',
+      decision: expect.objectContaining({ status: 'escalated', highRisk: true, agreeVotes: 2 }),
+    });
   });
 });
 
@@ -386,13 +496,13 @@ describe('Orchestrator negative', () => {
   });
 
   it('split pick summaries are position one-liners from the freeze snapshot', async () => {
-    const { app, gw } = harness();
+    const { app, gw, msgs } = harness();
     await twoBots(app);
     gw.script = ({ turn }) => {
       if (turn === 'propose') {
         return 'Ship the cache layer now.';
       }
-      if (turn === 'critique') {
+      if (turn === 'objection') {
         return 'Cache is the right cut.';
       }
       if (turn === 'consensus') {
@@ -404,7 +514,7 @@ describe('Orchestrator negative', () => {
     expect(app.orchestrator.getRunState().splitOpen).toBe(true);
     const summaries = app.orchestrator.getPositionSummaries();
     expect(summaries.map((s) => s.name)).toEqual(['Alpha', 'Beta']);
-    expect(summaries[0]?.summary).toBe('Cache is the right cut.');
+    expect(summaries[0]?.summary).toBe('Ship the cache layer now.');
     gw.script = ({ turn }) => {
       if (turn === 'implement') {
         return changesetFence([{ path: 'picked.ts', op: 'create', content: 'p' }]);
@@ -414,6 +524,10 @@ describe('Orchestrator negative', () => {
     await app.pick(summaries[0]!.botId);
     expect(gw.turns.includes('implement')).toBe(true);
     expect(app.orchestrator.getRunState().phase).toBe('pendingReview');
+    expect(msgs).toContainEqual({
+      type: 'chat/decision',
+      decision: expect.objectContaining({ status: 'accepted', recommendation: 'User selected @alpha to decide.' }),
+    });
   });
 });
 
@@ -459,7 +573,8 @@ describe('Orchestrator MCP turn flags', () => {
     await app.send('debate then ship');
     const paired = gw.turns.map((turn, i) => ({ turn, tools: gw.lastSendOpts[i]?.tools }));
     expect(paired.filter((p) => p.turn === 'propose').every((p) => p.tools === 'mcp-debate')).toBe(true);
-    expect(paired.filter((p) => p.turn === 'critique').every((p) => p.tools === 'mcp-debate')).toBe(true);
+    expect(paired.filter((p) => p.turn === 'synthesis').every((p) => p.tools === 'none')).toBe(true);
+    expect(paired.filter((p) => p.turn === 'objection').every((p) => p.tools === 'none')).toBe(true);
     expect(paired.filter((p) => p.turn === 'consensus').every((p) => p.tools === 'none')).toBe(true);
     expect(paired.filter((p) => p.turn === 'implement').every((p) => p.tools === 'none')).toBe(true);
   });
@@ -496,7 +611,8 @@ describe('Orchestrator MCP turn flags', () => {
       .map((turn, i) => ({ turn, tools: gw.lastSendOpts[i]?.tools }))
       .slice(before);
     expect(extra.filter((p) => p.turn === 'propose').every((p) => p.tools === 'mcp-debate')).toBe(true);
-    expect(extra.filter((p) => p.turn === 'critique').every((p) => p.tools === 'mcp-debate')).toBe(true);
+    expect(extra.filter((p) => p.turn === 'synthesis').every((p) => p.tools === 'none')).toBe(true);
+    expect(extra.filter((p) => p.turn === 'objection').every((p) => p.tools === 'none')).toBe(true);
     expect(extra.filter((p) => p.turn === 'consensus').every((p) => p.tools === 'none')).toBe(true);
     expect(extra.filter((p) => p.turn === 'implement').every((p) => p.tools === 'none')).toBe(true);
   });
@@ -544,7 +660,7 @@ describe('Orchestrator TokenGovernor packs and RunBoard', () => {
         expect(text).not.toContain('UNIQUE-SPEECH-ALPHA-ZZZ');
       }
       expect(text).toContain('Run board:');
-      if (turn === 'propose' || turn === 'critique' || turn === 'direct') {
+      if (turn === 'propose' || turn === 'objection' || turn === 'direct') {
         expect(text).toContain('LSP slice of active file');
         expect(text).not.toContain('Active editor contents:');
         expect(text).not.toContain('export const n = 1;');

@@ -16,13 +16,18 @@ import {
   PROPOSED_SCHEME,
 } from './adapters/proposed-content-provider';
 import { closeDeliverablePreviews, openProposedDiff, ReviewTreeProvider } from './adapters/review-tree';
+import { proposedFileLabel } from './adapters/review-chrome';
 import { createCopilotGateway } from './adapters/vscode-lm-gateway';
 import { VsCodeMcpPort } from './adapters/vscode-mcp';
 import { VsCodeWorkspacePort } from './adapters/vscode-workspace';
 import { VsCodeLspSlicePort } from './adapters/vscode-lsp';
+import { VsCodeRepositoryContextPort } from './adapters/vscode-repository-context';
+import { RepositoryContextService } from './app/repository-context';
 import type { HostToUi, UiToHost } from './protocol/messages';
 import type { ChangePreviewKind, FileOp } from './domain/changeset';
+import { isCoreBot } from './domain/core-bot';
 import { COPY, copilotStatusMessage } from './app/copy';
+import { mcpBatchConfirmation } from './app/mcp-action-store';
 import { MCP_SETTLE_MS, McpGateway } from './app/mcp-gateway';
 import {
   BOT_EXPORT_COMMANDS,
@@ -51,7 +56,9 @@ class MementoStore {
   }
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+let activeApplication: Application | undefined;
+
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const keys = new ContextKeys();
   const workspace = new VsCodeWorkspacePort();
   const proposed = new ProposedContentProvider();
@@ -110,11 +117,28 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   const mcp = new McpGateway(new VsCodeMcpPort(), emit, { settleMs: MCP_SETTLE_MS });
+  const concurrency = vscode.workspace
+    .getConfiguration('botrider')
+    .get<number>('maxCopilotConcurrency', 4);
   const gateway = createCopilotGateway(context, (status) => {
     gatewayStatus = status;
     emit({ type: 'copilot/status', status, message: copilotStatusMessage(status) });
-  }, mcp);
+  }, mcp, {
+    maxConcurrent: concurrency,
+    onChange: (snapshot) => emit({ type: 'copilot/scheduler', snapshot }),
+  });
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('botrider.maxCopilotConcurrency')) {
+        gateway.setMaxConcurrency(
+          vscode.workspace.getConfiguration('botrider').get<number>('maxCopilotConcurrency', 4),
+        );
+      }
+    }),
+  );
   const lsp = new VsCodeLspSlicePort();
+  const repository = new RepositoryContextService(new VsCodeRepositoryContextPort());
+  await repository.rebuild();
 
   const app = new Application(
     new MementoStore(context.globalState),
@@ -137,9 +161,44 @@ export function activate(context: vscode.ExtensionContext): void {
       actions: vscodeContextMapActions(async (path) => {
         await reviewTree?.revealFile(path);
       }),
+      repository,
     },
+    new MementoStore(context.workspaceState),
   );
   appRef = app;
+  activeApplication = app;
+  hub.bindThread(app.thread);
+  const applyProductSettings = (): void => {
+    const config = vscode.workspace.getConfiguration('botrider');
+    app.orchestrator.configureDebate({
+      quorumPercent: config.get<number>('debate.quorumPercent', 60),
+      maxAutomaticRounds: config.get<number>('debate.maxAutomaticRounds', 2),
+      blockingClasses: config.get<string[]>('debate.blockingClasses', ['security', 'privacy', 'data-loss']),
+      highRiskKeywords: config.get<string[]>('debate.highRiskKeywords', [
+        'security',
+        'credential',
+        'payment',
+        'privacy',
+        'delete',
+        'migration',
+      ]),
+    });
+    emit({
+      type: 'ui/preferences',
+      maxVisibleArticles: Math.max(1, Math.min(12, config.get<number>('maxVisibleArticles', 3))),
+    });
+  };
+  applyProductSettings();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (
+        event.affectsConfiguration('botrider.debate') ||
+        event.affectsConfiguration('botrider.maxVisibleArticles')
+      ) {
+        applyProductSettings();
+      }
+    }),
+  );
 
   botsTree = new BotsTreeProvider(app);
   reviewTree = new ReviewTreeProvider(app);
@@ -194,6 +253,10 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
       const bot = app.registry.getById(id);
+      if (bot && isCoreBot(bot)) {
+        void vscode.window.showInformationMessage(`${bot.name} is a protected core bot.`);
+        return;
+      }
       const pick = await vscode.window.showWarningMessage(
         `Delete ${bot?.name ?? 'this bot'}?`,
         { modal: true },
@@ -213,8 +276,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('botrider.changeset.approve', () => approveChanges()),
     vscode.commands.registerCommand('botrider.changeset.reject', () => app.reject()),
     vscode.commands.registerCommand('botrider.changeset.retry', () => approveChanges('retry')),
-    vscode.commands.registerCommand('botrider.mcp.approve', () => app.approveMcp()),
+    vscode.commands.registerCommand('botrider.mcp.approve', () => approveMcpBatch()),
     vscode.commands.registerCommand('botrider.mcp.reject', () => app.rejectMcp()),
+    vscode.commands.registerCommand('botrider.review.focusFiles', () => reviewTree.revealFiles()),
     vscode.commands.registerCommand('botrider.review.focusMcp', () => reviewTree.revealMcp()),
     vscode.commands.registerCommand(
       'botrider.review.openDiff',
@@ -227,6 +291,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('botrider.split.continue', () => app.continueDebate()),
     vscode.commands.registerCommand('botrider.split.pick', () => pickBot()),
     vscode.commands.registerCommand('botrider.copilot.recheck', () => app.recheck()),
+    vscode.commands.registerCommand('botrider.onboarding.reopen', () => app.reopenOnboarding()),
     vscode.commands.registerCommand(BOT_EXPORT_COMMANDS.export, async (item?: BotTreeItem) => {
       if (item?.bot) {
         await runExport([item.bot]);
@@ -364,6 +429,44 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
+  async function approveMcpBatch(): Promise<boolean> {
+    const actions = app.mcp.actions.snapshot();
+    if (!actions.length) {
+      return false;
+    }
+    const confirmation = mcpBatchConfirmation(actions);
+    const picked = await vscode.window.showWarningMessage(
+      confirmation.message,
+      { modal: true, detail: confirmation.detail },
+      confirmation.confirm,
+    );
+    if (picked !== confirmation.confirm) {
+      return false;
+    }
+    return vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Running MCP actions',
+        cancellable: true,
+      },
+      async (progress, token) => {
+        const ok = await app.approveMcp({
+          token,
+          onProgress: (completed, total, action) => {
+            progress.report({
+              increment: 100 / total,
+              message: `${completed}/${total} · ${action.server} · ${action.tool}`,
+            });
+          },
+        });
+        if (!ok && token.isCancellationRequested) {
+          void vscode.window.showInformationMessage(COPY.mcpBatchCancelled);
+        }
+        return ok;
+      },
+    );
+  }
+
   async function pickBot(): Promise<void> {
     const items = app.orchestrator.getPositionSummaries();
     if (!items.length) {
@@ -379,7 +482,12 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   async function handleUi(
-    msg: UiToHost | { type: 'ui/pick' } | { type: 'ui/focus-expanded' } | { type: 'ui/focus-review-mcp' },
+    msg:
+      | UiToHost
+      | { type: 'ui/pick' }
+      | { type: 'ui/focus-expanded' }
+      | { type: 'ui/focus-review-files' }
+      | { type: 'ui/focus-review-mcp' },
   ): Promise<void> {
     try {
       if (msg.type === 'ui/pick') {
@@ -390,12 +498,17 @@ export function activate(context: vscode.ExtensionContext): void {
         expand.reveal();
         return;
       }
+      if (msg.type === 'ui/focus-review-files') {
+        await reviewTree.revealFiles();
+        return;
+      }
       if (msg.type === 'ui/focus-review-mcp') {
         await reviewTree.revealMcp();
         return;
       }
       if (msg.type === 'review/open-diff') {
-        const pending = app.changesets.files?.find((f) => f.path === msg.path);
+        const wanted = proposedFileLabel(msg.path);
+        const pending = app.changesets.files?.find((f) => proposedFileLabel(f.path) === wanted);
         await openProposedDiff(pending ?? { path: msg.path, op: msg.op ?? 'update' }, proposed);
         return;
       }
@@ -426,10 +539,13 @@ export function activate(context: vscode.ExtensionContext): void {
     });
   }
 
-  app.snapshotBots();
+  await app.ensureCoreBots();
+  app.offerRecovery();
+  app.snapshotOnboarding();
   void syncKeys();
 }
 
-export function deactivate(): void {
-  // Session-only transcript, pending changeset, and pending MCP batch die with the host.
+export async function deactivate(): Promise<void> {
+  await activeApplication?.persistRecoveryNow();
+  activeApplication = undefined;
 }
