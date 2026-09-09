@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="media/logo.svg" alt="Bot Rider — galaxy warrior bot squad in formation" width="720" />
+  <img src="media/logo.svg" alt="Bot Rider — 47 linked bots in a retro swarm sphere" width="720" />
 </p>
 
 # Bot Rider
