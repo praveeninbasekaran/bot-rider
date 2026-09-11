@@ -360,7 +360,7 @@ describe('§27 F8a Work run chrome', () => {
 
   it('keeps one Files list from changeset/preview, collision notes, and Approve off until settle', () => {
     expect(showFilesFn).toContain('state.previewFiles = files || []');
-    expect(showFilesFn).toContain("Proposed changes · '");
+    expect(showFilesFn).toContain('paintReviewStrip()');
     expect(showFilesFn).not.toMatch(/collision|workerFiles|N Approve/);
     expect(chatJs).toContain("msg.type === 'changeset/preview'");
     expect(chatJs).toContain('showFiles(msg.files || [])');
@@ -402,7 +402,7 @@ describe('§27 F8a Work run chrome', () => {
     expect(overflowFn).not.toContain('lockComposer()');
     expect(chrome.canAnnounceArticle(1000, 2500)).toBe(false);
     expect(chrome.canAnnounceArticle(1000, 3000)).toBe(true);
-    expect(turnStart).toContain('class="article-live sr-only" aria-live="polite"');
+    expect(turnStart).toContain('class="article-live sr-only" aria-live="off"');
   });
 
   it('consumes existing Swarm members only and does not reopen §20–§26 or Event Bus chrome', () => {

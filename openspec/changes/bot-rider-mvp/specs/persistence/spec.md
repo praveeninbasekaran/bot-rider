@@ -1,5 +1,7 @@
 # Delta for Persistence (BR-3)
 
+> **Historical delta.** PU-7 supersedes transcript and pending-changeset memory-only rules. See [br-3-bot-toggle-delete-persist](../../specs/br-3-bot-toggle-delete-persist/spec.md) and [pu-1-product-usability](../../specs/pu-1-product-usability/spec.md#pu-7-reload-recovery).
+
 ## Purpose
 
 Bots survive reloads locally. Chat and pending edits do not. Settings Sync stays off.

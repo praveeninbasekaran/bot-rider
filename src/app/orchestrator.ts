@@ -14,7 +14,6 @@ import { EmptyMcpPort, McpGateway } from './mcp-gateway';
 import { PromptBuilder, turnInstruction, type HistoryTurn } from './prompt-builder';
 import { PatchParser } from './patch-parser';
 import type { ChangesetStore } from './changeset-store';
-import type { ThreadStore } from './thread-store';
 import { oneLine, parseMentions, parseVote, parseAgreeWriter, stripNeedEditTrailer } from './mentions';
 import { removeParseableTodoLines, stripArticleChrome, stripLeadingVoteToken } from './article-strip';
 import type { WorkspaceContextPort, FileSystemPort } from './ports';
@@ -32,7 +31,6 @@ import {
   isTesterAssignment,
   parseDispatcherSplit,
   remainingWorkBots,
-  workPathClaims,
   validateDispatcherSplit,
   type CollisionClaim,
   type SplitValidate,
@@ -49,6 +47,34 @@ import { detectFormat } from './deliverable-detect';
 import { DeliverableBuilder, templateForBot } from './deliverable-builder';
 import { curateFacts } from './deliverable-facts';
 import { extractDeliverableSpecs, selectPrimarySpecs } from './deliverable-parse';
+import {
+  DEFAULT_DEBATE_POLICY,
+  conciseDissentSummary,
+  evaluateDebateDecision,
+  isHighRiskDebate,
+  normalizeDebatePolicy,
+  parseBlockingObjection,
+  selectDebateObjectors,
+  synthesisOwner,
+  unchangedObjections,
+  type BlockingObjection,
+  type DebatePolicyConfig,
+} from './debate-policy';
+import type { RepositoryContextService } from './repository-context';
+import { routeSend, routeStop, runningState } from './run-lifecycle';
+import { finalizeReviewFiles, pendingReviewState } from './review-finalization';
+import {
+  collisionClaimants,
+  decideWorkUnion,
+  hasExactlyOneWorkPair,
+  selectWorkRoles,
+} from './work-policy';
+import {
+  parseTaskGraph,
+  TaskGraphScheduler,
+  validateTaskGraph,
+  type TaskNode,
+} from './task-graph';
 
 export class Orchestrator {
   private state: RunStateDto = idleRunState();
@@ -73,7 +99,14 @@ export class Orchestrator {
   private argueClaimantHandles: string[] = [];
   private baPackets: IsolationPacket[] = [];
   private workAssignments: ValidatedAssignment[] = [];
+  private workTasks: TaskNode[] = [];
+  private workTaskInstructions = new Map<string, string>();
   private workerFiles = new Map<string, ChangeFile[]>();
+  private runId = '';
+  private debatePolicy: DebatePolicyConfig = DEFAULT_DEBATE_POLICY;
+  private previousObjections: BlockingObjection[] = [];
+  private debateEscalated = false;
+  private contextStatusSent = false;
   private inflightBotIds = new Set<string>();
   private inflightWaiters = new Map<string, Array<() => void>>();
 
@@ -87,13 +120,13 @@ export class Orchestrator {
     private readonly prompts: PromptBuilder,
     private readonly parser: PatchParser,
     private readonly changesets: ChangesetStore,
-    private readonly thread: ThreadStore,
     private readonly workspacePort: WorkspaceContextPort,
     private readonly emit: (msg: HostToUi) => void,
     private readonly mcp: McpGateway = new McpGateway(new EmptyMcpPort(), emit, { settleMs: 0 }),
     readonly board: RunBoardStore = new RunBoardStore(),
     readonly lsp: LspSlicePort = new EmptyLspSlicePort(),
     private readonly files: FileSystemPort = { exists: async () => false, readText: async () => undefined },
+    private readonly repository?: RepositoryContextService,
   ) {
     this.catalog = new OpenSpecCatalog(files);
   }
@@ -108,6 +141,64 @@ export class Orchestrator {
 
   bindContextMap(host: ContextMapHost): void {
     this.contextMap = host;
+  }
+
+  configureDebate(policy: Partial<DebatePolicyConfig>): void {
+    this.debatePolicy = normalizeDebatePolicy(policy);
+  }
+
+  recoverySnapshot(): { runId?: string; userText?: string; run: RunStateDto; tasks: TaskNode[] } {
+    return {
+      runId: this.runId || undefined,
+      userText: this.userText || undefined,
+      run: { ...this.state, frozenBotIds: this.state.frozenBotIds.slice() },
+      tasks: this.workTasks.map((task) => ({
+        ...task,
+        dependsOn: task.dependsOn.slice(),
+        requiredArtifacts: task.requiredArtifacts.slice(),
+        producesArtifacts: task.producesArtifacts.slice(),
+        paths: task.paths.slice(),
+        blockedBy: task.blockedBy.slice(),
+      })),
+    };
+  }
+
+  restoreRecovery(runId: string | undefined, run: RunStateDto, tasks: readonly TaskNode[]): void {
+    this.runId = runId ?? '';
+    this.state = {
+      ...run,
+      debateRunning: false,
+      frozenBotIds: run.frozenBotIds.slice(),
+    };
+    this.freeze = run.frozenBotIds
+      .map((id) => this.registry.getById(id))
+      .filter((bot): bot is BotRecord => !!bot);
+    this.workTasks = tasks.map((task) => ({
+      ...task,
+      readiness: task.readiness === 'running' ? 'blocked' : task.readiness,
+      outcome: task.readiness === 'running' ? 'cancelled' : task.outcome,
+      blockedBy: task.readiness === 'running' ? ['Interrupted by reload'] : task.blockedBy.slice(),
+      dependsOn: task.dependsOn.slice(),
+      requiredArtifacts: task.requiredArtifacts.slice(),
+      producesArtifacts: task.producesArtifacts.slice(),
+      paths: task.paths.slice(),
+    }));
+  }
+
+  async regenerateStaleChanges(): Promise<void> {
+    const stalePaths = (this.changesets.files ?? []).filter((file) => file.stale).map((file) => file.path);
+    const implementer = this.freeze[0];
+    if (!implementer || stalePaths.length === 0 || this.state.phase !== 'pendingReview') {
+      return;
+    }
+    await this.changesets.reject();
+    const original = this.userText;
+    this.userText = `${original}\n\nRegenerate only these stale paths against their current workspace contents: ${stalePaths.join(', ')}.`;
+    try {
+      await this.runImplementer(implementer);
+    } finally {
+      this.userText = original;
+    }
   }
 
   getPositionSummaries(): { botId: string; name: string; summary: string }[] {
@@ -138,21 +229,20 @@ export class Orchestrator {
   }
 
   async send(text: string, runType: 'work' | 'debate' = 'debate'): Promise<void> {
-    if (this.state.splitOpen) {
+    const route = routeSend(this.state, {
+      loopActive: this.loopActive,
+      workBatchActive: this.workBatchActive,
+      argueActive: this.argueActive,
+    });
+    if (route === 'blocked') {
       return;
     }
-    if (this.state.deliverableAsk) {
+    if (route === 'deliverable-answer') {
       await this.answerDeliverableAsk(text);
       return;
     }
-    if (this.workBatchActive || this.argueActive) {
+    if (route === 'work-batch-message') {
       await this.sendDuringWorkBatch(text);
-      return;
-    }
-    if (this.state.debateRunning || this.loopActive) {
-      return;
-    }
-    if (this.state.phase === 'pendingReview' || this.state.phase === 'implement') {
       return;
     }
 
@@ -210,6 +300,10 @@ export class Orchestrator {
     this.deliverableAskCount = 0;
     this.deliverableAnswers = [];
     this.cts = new CancelSource();
+    this.runId = crypto.randomUUID();
+    this.previousObjections = [];
+    this.debateEscalated = false;
+    this.contextStatusSent = false;
     this.loopActive = true;
     this.board.clear();
     this.board.setGoal(text);
@@ -219,46 +313,22 @@ export class Orchestrator {
 
     if (solo) {
       this.freeze = [{ ...solo }];
-      this.state = {
-        phase: 'direct',
-        round: 1,
-        splitOpen: false,
-        debateRunning: true,
-        applyFailed: this.changesets.applyFailed,
-        frozenBotIds: [solo.id],
-        currentBotId: solo.id,
-        turn: 'direct',
-      };
+      this.state = runningState('direct', [solo.id], this.changesets.applyFailed);
       this.pushState();
       this.contextMap?.syncRun();
       await this.runDirect(solo);
     } else if (runType === 'work') {
       this.freeze = this.registry.snapshotActive();
-      this.state = {
-        phase: 'work',
-        round: 1,
-        splitOpen: false,
-        debateRunning: true,
-        applyFailed: this.changesets.applyFailed,
-        frozenBotIds: this.freeze.map((b) => b.id),
-        runType: 'work',
-      };
+      this.state = runningState('work', this.freeze.map((b) => b.id), this.changesets.applyFailed);
       this.pushState();
       this.contextMap?.syncRun();
       await this.runWork();
     } else {
       this.freeze = this.registry.snapshotActive();
-      this.state = {
-        phase: 'debate',
-        round: 0,
-        splitOpen: false,
-        debateRunning: true,
-        applyFailed: this.changesets.applyFailed,
-        frozenBotIds: this.freeze.map((b) => b.id),
-      };
+      this.state = runningState('debate', this.freeze.map((b) => b.id), this.changesets.applyFailed);
       this.pushState();
       this.contextMap?.syncRun();
-      await this.runDebateRounds(1, 2);
+      await this.runDebateRounds(1, this.debatePolicy.maxAutomaticRounds);
     }
 
     this.loopActive = false;
@@ -309,6 +379,17 @@ export class Orchestrator {
     this.board.clearDissents();
     this.board.addDecision(`Pick @${bot.handle}`);
     this.emitBoard();
+    this.emit({
+      type: 'chat/decision',
+      decision: {
+        status: 'accepted',
+        recommendation: `User selected @${bot.handle} to decide.`,
+        highRisk: false,
+        agreeVotes: 0,
+        validVotes: 0,
+        quorumRequired: 0,
+      },
+    });
     this.remainingSlots = [{ botId: bot.id, turn: 'implement' }];
     this.publishPacket(buildIsolationPacket({ at: 'pick', board: this.board.snapshot() }));
     this.state = {
@@ -324,22 +405,24 @@ export class Orchestrator {
 
   stop(): void {
     this.cts?.cancel();
-    if (this.state.debateRunning && this.isWorkRun()) {
-      this.emit({ type: 'chat/notice', text: COPY.interrupted });
-      if (this.argueActive) {
+    switch (routeStop(this.state, this.isWorkRun(), this.argueActive)) {
+      case 'wait-argue':
+        this.emit({ type: 'chat/notice', text: COPY.interrupted });
         return;
-      }
-      this.abortWorkRun();
-      return;
-    }
-    if (this.state.debateRunning) {
-      this.emit({ type: 'chat/notice', text: COPY.interrupted });
-      this.enterSplit(COPY.splitPaused, COPY.splitPausedReason, true);
-      return;
-    }
-    if (this.state.splitOpen) {
-      this.emit({ type: 'chat/notice', text: COPY.stoppedNoImpl });
-      this.exitToIdle();
+      case 'abort-work':
+        this.emit({ type: 'chat/notice', text: COPY.interrupted });
+        this.abortWorkRun();
+        return;
+      case 'pause-debate':
+        this.emit({ type: 'chat/notice', text: COPY.interrupted });
+        this.enterSplit(COPY.splitPaused, COPY.splitPausedReason, true);
+        return;
+      case 'close-split':
+        this.emit({ type: 'chat/notice', text: COPY.stoppedNoImpl });
+        this.exitToIdle();
+        return;
+      default:
+        return;
     }
   }
 
@@ -361,49 +444,157 @@ export class Orchestrator {
     this.argueActive = false;
     this.argueClaimantHandles = [];
     this.workAssignments = [];
+    this.workTasks = [];
+    this.workTaskInstructions.clear();
     this.workerFiles.clear();
     this.exitToIdle();
   }
 
   private async runDebateRounds(fromRound: number, toRound: number): Promise<void> {
-    this.planDebateSlots(fromRound, toRound);
+    const synthesizer = synthesisOwner(this.freeze);
+    if (!synthesizer) {
+      return;
+    }
+    const objectors = selectDebateObjectors(this.freeze, synthesizer.id);
+    this.remainingSlots = [];
+    for (let round = fromRound; round <= toRound; round++) {
+      this.remainingSlots.push(...this.freeze.map((bot) => ({ botId: bot.id, turn: 'propose' as const })));
+      this.remainingSlots.push({ botId: synthesizer.id, turn: 'synthesis' });
+      this.remainingSlots.push(...objectors.map((bot) => ({ botId: bot.id, turn: 'objection' as const })));
+      this.remainingSlots.push(...this.freeze.map((bot) => ({ botId: bot.id, turn: 'consensus' as const })));
+    }
+    const implementer = this.freeze[0];
+    if (implementer) {
+      this.remainingSlots.push({ botId: implementer.id, turn: 'implement' });
+    }
+
     for (let round = fromRound; round <= toRound; round++) {
       if (this.cancelled()) {
         return;
       }
       this.state.round = round;
+      this.state.debateStage = 'proposal';
       this.pushState();
       const proposed = await this.runDebateBatch('propose', round);
       if (!isTurnOk(proposed)) {
         return;
       }
-      const critiqued = await this.runDebateBatch('critique', round);
-      if (!isTurnOk(critiqued)) {
+
+      this.state.debateStage = 'synthesis';
+      this.pushState();
+      const synthesis = await this.runTurn(
+        synthesizer,
+        'synthesis',
+        round,
+        turnInstruction('synthesis', round, this.userText),
+      );
+      if (!isTurnOk(synthesis)) {
         return;
       }
+      const recommendation = oneLine(synthesis.text) || 'No recommendation was produced.';
+      this.emit({
+        type: 'chat/synthesis',
+        synthesis: {
+          round,
+          botId: synthesizer.id,
+          handle: synthesizer.handle,
+          text: synthesis.text,
+        },
+      });
+
+      this.state.debateStage = 'objection';
+      this.pushState();
+      const historyStart = this.history.length;
+      const objected = await this.runDebateBatch(
+        'objection',
+        round,
+        objectors,
+        `Settled synthesis:\n${synthesis.text}`,
+      );
+      if (!isTurnOk(objected)) {
+        return;
+      }
+      const objections = this.history
+        .slice(historyStart)
+        .flatMap((turn) => {
+          const parsed = parseBlockingObjection(turn.handle, turn.text);
+          return parsed ? [parsed] : [];
+        });
+
+      this.state.debateStage = 'decision';
+      this.pushState();
       const votes = new Map<string, 'AGREE' | 'DISSENT'>();
+      const voteExtra = `Settled synthesis:\n${synthesis.text}\nConcrete blockers:\n${
+        objections.map((item) => `- ${item.className}: ${item.criterion}`).join('\n') || '(none)'
+      }`;
       for (const bot of this.freeze) {
-        const result = await this.runTurn(bot, 'consensus', round, turnInstruction('consensus', round, this.userText));
+        const result = await this.runTurn(
+          bot,
+          'consensus',
+          round,
+          turnInstruction('consensus', round, this.userText, voteExtra),
+        );
         if (!isTurnOk(result)) {
           return;
         }
-        votes.set(bot.id, result.vote ?? parseVote(result.text));
+        if (result.validVote && result.vote) {
+          votes.set(bot.id, result.vote);
+        }
       }
-      const allAgree = this.freeze.every((b) => votes.get(b.id) === 'AGREE');
-      if (allAgree) {
+      const decision = evaluateDebateDecision({
+        botIds: this.freeze.map((bot) => bot.id),
+        votes,
+        objections,
+        highRisk: isHighRiskDebate(this.userText, this.debatePolicy),
+        config: this.debatePolicy,
+      });
+      if (decision.accepted) {
+        this.previousObjections = [];
         this.board.clearDissents();
-        this.board.addDecision('Consensus');
+        this.board.addDecision(`Decision: ${recommendation}`);
         this.emitBoard();
+        this.emit({
+          type: 'chat/decision',
+          decision: {
+            status: 'accepted',
+            recommendation,
+            highRisk: decision.highRisk,
+            agreeVotes: decision.agreeVotes,
+            validVotes: decision.validVotes,
+            quorumRequired: decision.quorumRequired,
+          },
+        });
         this.publishPacket(buildIsolationPacket({ at: 'consensus', board: this.board.snapshot() }));
-        const implementer = this.freeze[0];
         if (implementer) {
           await this.maybeStartImplementer(implementer);
         }
         return;
       }
-    }
-    if (!this.cancelled()) {
-      this.enterSplit(COPY.splitNoConsensus, 'The swarm did not reach AGREE. Continue for another round or pick a bot to decide.', false);
+
+      const unchanged = unchangedObjections(this.previousObjections, objections);
+      this.previousObjections = objections;
+      if (round < toRound && !unchanged) {
+        continue;
+      }
+      const handles = new Map(this.freeze.map((bot) => [bot.id, bot.handle]));
+      const dissentSummary = conciseDissentSummary(objections, votes, handles);
+      if (!this.debateEscalated) {
+        this.debateEscalated = true;
+        this.emit({
+          type: 'chat/decision',
+          decision: {
+            status: 'escalated',
+            recommendation,
+            dissentSummary,
+            highRisk: decision.highRisk,
+            agreeVotes: decision.agreeVotes,
+            validVotes: decision.validVotes,
+            quorumRequired: decision.quorumRequired,
+          },
+        });
+      }
+      this.enterSplit(COPY.splitNoConsensus, dissentSummary, false);
+      return;
     }
   }
 
@@ -471,7 +662,7 @@ export class Orchestrator {
       return;
     }
     if (deliverable && detected) {
-      this.finishDeliverable(bot, result.text, detected, root);
+      await this.finishDeliverable(bot, result.text, detected, root);
       return;
     }
     const parsed = this.parser.parseImplementer(result.text, root, this.catalog.snapshot());
@@ -479,10 +670,15 @@ export class Orchestrator {
       this.fail(parsed.code, parsed.code === 'parse-failed' ? COPY.parseFailed : COPY.validateFailed);
       return;
     }
-    this.enterPendingReview(parsed.files);
+    await this.enterPendingReview(parsed.files);
   }
 
-  private finishDeliverable(bot: BotRecord, implementerText: string, detected: FormatSpec, root: string): void {
+  private async finishDeliverable(
+    bot: BotRecord,
+    implementerText: string,
+    detected: FormatSpec,
+    root: string,
+  ): Promise<void> {
     const fromImpl = extractDeliverableSpecs(implementerText, root);
     const specs = selectPrimarySpecs(detected.formats, fromImpl, detected);
     const facts = curateFacts(this.board.snapshot(), this.mcp.contextLines());
@@ -492,12 +688,12 @@ export class Orchestrator {
         templateForBot(bot, spec.format),
       ),
     );
-    this.enterPendingReview(files);
+    await this.enterPendingReview(files);
   }
 
-  private enterPendingReview(files: ChangeFile[]): void {
+  private async enterPendingReview(files: ChangeFile[]): Promise<void> {
     const catalog = this.catalog.snapshot();
-    this.changesets.setPending(files.map((file) => attachFileCites(file, catalog)));
+    await this.changesets.setPendingPrepared(finalizeReviewFiles(files, catalog));
     this.syncFiles(files.map((f) => f.path));
     this.contextMap?.syncRun();
     this.emitBoard();
@@ -505,15 +701,7 @@ export class Orchestrator {
     this.workRunActive = false;
     this.argueActive = false;
     this.argueClaimantHandles = [];
-    this.state = {
-      phase: 'pendingReview',
-      round: this.state.round,
-      splitOpen: false,
-      debateRunning: false,
-      applyFailed: false,
-      frozenBotIds: this.freeze.map((b) => b.id),
-      runType: this.state.runType,
-    };
+    this.state = pendingReviewState(this.state, this.freeze);
     this.pushState();
   }
 
@@ -534,8 +722,7 @@ export class Orchestrator {
       round: this.state.round || 1,
     });
     this.emit({ type: 'chat/token', botId: bot.id, delta: question });
-    this.history.push({ handle: bot.handle, text: question });
-    this.thread.append({ role: 'assistant', text: question, handle: bot.handle, botId: bot.id });
+    this.history.push({ handle: bot.handle, text: question, turn });
     this.emit({
       type: 'chat/turn-end',
       botId: bot.id,
@@ -622,12 +809,17 @@ export class Orchestrator {
     return this.freeze.filter((bot) => this.remainingSlots.some((slot) => slot.botId === bot.id && slot.turn === turn));
   }
 
-  private async runDebateBatch(turn: 'propose' | 'critique', round: number): Promise<TurnResult> {
+  private async runDebateBatch(
+    turn: 'propose' | 'critique' | 'objection',
+    round: number,
+    selected?: BotRecord[],
+    extra?: string,
+  ): Promise<TurnResult> {
     if (this.cancelled()) {
       return 'cancelled';
     }
-    const speakers = this.speakersFor(turn);
-    const instruction = turnInstruction(turn, round, this.userText);
+    const speakers = selected ?? this.speakersFor(turn);
+    const instruction = turnInstruction(turn, round, this.userText, extra);
     this.debateBatchActive = true;
     this.state.turn = turn;
     this.state.round = round;
@@ -715,6 +907,20 @@ export class Orchestrator {
     const inbox = extras?.skipInbox ? [] : this.sessions.takeInbox(bot.id);
     const assignedPaths = extras?.assignedPaths;
     const isolationPackets = extras?.isolationPackets ?? inbox;
+    const repositoryContext = this.repository?.buildContext({
+      query: `${this.userText} ${instruction}`,
+      paths: assignedPaths ?? this.board.snapshot().files.map((file) => file.path),
+      specIds: this.catalog.snapshot().map((entry) => entry.id),
+      maxChars: 6000,
+    });
+    if (repositoryContext && !this.contextStatusSent) {
+      this.contextStatusSent = true;
+      this.emit({
+        type: 'context/status',
+        includedChars: repositoryContext.includedChars,
+        dropped: repositoryContext.dropped,
+      });
+    }
     const packed = await this.prompts.pack({
       bot,
       kind,
@@ -730,6 +936,7 @@ export class Orchestrator {
             : await this.implementerFiles()
           : undefined,
       mcpContext: kind === 'debate' ? this.mcp.contextLines() : undefined,
+      repositoryContext: repositoryContext?.text || undefined,
       sessionMessages: this.sessions.messagesOf(bot.id),
       isolationPackets,
     });
@@ -800,6 +1007,7 @@ export class Orchestrator {
             botId: bot.id,
             handle: bot.handle,
             modelId: turnModelId,
+            priority: extras?.solo ? 'user' : 'normal',
           },
         );
         if (streamed === 'cancelled' || this.cancelled()) {
@@ -836,6 +1044,7 @@ export class Orchestrator {
       let visible = full;
       let trailer: 'NEED_EDIT' | 'NO_EDIT' | undefined;
       let vote: 'AGREE' | 'DISSENT' | undefined;
+      let validVote = false;
       if (!keepRaw || turn === 'dispatch') {
         visible = this.parser.sanitizeDebate(full);
       }
@@ -846,6 +1055,7 @@ export class Orchestrator {
         visible = visible.replace(/\s*(NEED_EDIT|NO_EDIT)\.?$/i, '').replace(/\s+$/g, '');
       }
       if (turn === 'consensus') {
+        validVote = /^(AGREE|DISSENT)\b/i.test(visible.trim());
         vote = parseVote(visible);
         visible = stripLeadingVoteToken(visible);
       }
@@ -863,8 +1073,7 @@ export class Orchestrator {
         visible = stripArticleChrome(visible, this.userText);
       }
 
-      this.history.push({ handle: bot.handle, text: visible });
-      this.thread.append({ role: 'assistant', text: visible, handle: bot.handle, botId: bot.id });
+      this.history.push({ handle: bot.handle, text: visible, turn });
       this.emit({
         type: 'chat/turn-end',
         botId: bot.id,
@@ -881,6 +1090,8 @@ export class Orchestrator {
       if (
         turn === 'propose' ||
         turn === 'critique' ||
+        turn === 'synthesis' ||
+        turn === 'objection' ||
         turn === 'direct' ||
         turn === 'spec' ||
         turn === 'dispatch' ||
@@ -903,7 +1114,7 @@ export class Orchestrator {
         { role: 'user', content: instruction },
         { role: 'assistant', content: stored },
       ]);
-      return { ok: true, text: stored, trailer, vote };
+      return { ok: true, text: stored, trailer, vote, validVote };
     } finally {
       this.markInflight(bot.id, false);
     }
@@ -992,7 +1203,12 @@ export class Orchestrator {
 
   private positionOneLiner(handle: string): string {
     const key = handle.toLowerCase();
-    const mine = this.history.filter((h) => h.handle.toLowerCase() === key);
+    const authored = this.history.filter(
+      (h) => h.handle.toLowerCase() === key && (h.turn === 'propose' || h.turn === 'critique'),
+    );
+    const mine = authored.length > 0
+      ? authored
+      : this.history.filter((h) => h.handle.toLowerCase() === key && h.turn !== 'consensus');
     for (let i = mine.length - 1; i >= 0; i--) {
       const line = oneLine(mine[i]!.text);
       if (!line) {
@@ -1094,25 +1310,12 @@ export class Orchestrator {
     this.argueClaimantHandles = [];
     this.baPackets = [];
     this.workAssignments = [];
+    this.workTasks = [];
+    this.workTaskInstructions.clear();
     this.workerFiles.clear();
     this.inflightBotIds.clear();
     this.inflightWaiters.clear();
     this.contextMap?.clearRun();
-  }
-
-  private planDebateSlots(fromRound: number, toRound: number): void {
-    this.remainingSlots = [];
-    for (let round = fromRound; round <= toRound; round++) {
-      for (const turn of ['propose', 'critique', 'consensus'] as const) {
-        for (const bot of this.freeze) {
-          this.remainingSlots.push({ botId: bot.id, turn });
-        }
-      }
-    }
-    const implementer = this.freeze[0];
-    if (implementer) {
-      this.remainingSlots.push({ botId: implementer.id, turn: 'implement' });
-    }
   }
 
   private completeSlot(botId: string, turn: TurnKind): void {
@@ -1138,21 +1341,11 @@ export class Orchestrator {
   }
 
   private workDesignationOk(): boolean {
-    const active = this.registry.snapshotActive();
-    return (
-      active.filter((bot) => bot.dispatcher).length === 1 &&
-      active.filter((bot) => bot.spec).length === 1
-    );
+    return hasExactlyOneWorkPair(this.registry.snapshotActive());
   }
 
   private workRoles(): { spec: BotRecord; dispatcher: BotRecord } | undefined {
-    const active = this.freeze.filter((bot) => bot.active);
-    const specs = active.filter((bot) => bot.spec);
-    const dispatchers = active.filter((bot) => bot.dispatcher);
-    if (specs.length !== 1 || dispatchers.length !== 1) {
-      return undefined;
-    }
-    return { spec: specs[0]!, dispatcher: dispatchers[0]! };
+    return selectWorkRoles(this.freeze);
   }
 
   private async runWork(): Promise<void> {
@@ -1177,6 +1370,12 @@ export class Orchestrator {
     if (!isTurnOk(specResult)) {
       return;
     }
+    this.bus.publishEvent({
+      type: 'SPEC_PUBLISHED',
+      runId: this.runId,
+      artifact: 'spec',
+      botId: spec.id,
+    });
     this.baPackets = this.sessions.listPublished().filter((packet) => packet.fromBotId === spec.id);
     this.ingestSettledBatch(this.workFreezeIds());
 
@@ -1200,6 +1399,19 @@ export class Orchestrator {
     }
     this.workAssignments = split.assignments;
     this.ingestSettledBatch(this.workFreezeIds());
+
+    if (this.workTasks.length > 0) {
+      const result = await this.runTaskGraph();
+      if (result === 'error') {
+        this.fail('validate-failed', 'Task graph work failed. Review the blocked task reasons in the Run Board.');
+        return;
+      }
+      if (!isTurnOk(result) || this.cancelled()) {
+        return;
+      }
+      await this.finishWorkUnion();
+      return;
+    }
 
     for (const assignment of this.workAssignments) {
       this.remainingSlots.push({ botId: assignment.botId, turn: 'work' });
@@ -1231,10 +1443,6 @@ export class Orchestrator {
     if (!isTurnOk(result)) {
       return { ok: false, reason: result === 'cancelled' ? 'cancelled' : 'dispatch failed' };
     }
-    const parsed = parseDispatcherSplit(result.text);
-    if (!parsed.ok) {
-      return { ok: false, reason: parsed.reason };
-    }
     const roles = this.workRoles();
     if (!roles) {
       return { ok: false, reason: 'unknown handle' };
@@ -1244,12 +1452,139 @@ export class Orchestrator {
     if (!root) {
       return { ok: false, reason: 'no-workspace' };
     }
+    const graph = parseTaskGraph(result.text);
+    if (graph.ok) {
+      const validated = validateTaskGraph({
+        tasks: graph.tasks,
+        workers: remaining,
+        workspaceRoot: root,
+        availableArtifacts: ['spec'],
+      });
+      if (!validated.ok) {
+        return validated;
+      }
+      this.workTasks = validated.tasks;
+      const byOwner = new Map<string, ValidatedAssignment>();
+      for (const task of validated.tasks) {
+        const current = byOwner.get(task.ownerId) ?? {
+          handle: task.owner,
+          botId: task.ownerId,
+          paths: [],
+        };
+        current.paths.push(...task.paths.filter((path) => !current.paths.includes(path)));
+        byOwner.set(task.ownerId, current);
+      }
+      return { ok: true, assignments: [...byOwner.values()] };
+    }
+    const parsed = parseDispatcherSplit(result.text);
+    if (!parsed.ok) {
+      return { ok: false, reason: parsed.reason };
+    }
     return validateDispatcherSplit({
       assignments: parsed.assignments,
       declaredPaths: parsed.declaredPaths,
       remaining,
       workspaceRoot: root,
     });
+  }
+
+  private async runTaskGraph(): Promise<TurnResult> {
+    const scheduler = new TaskGraphScheduler(this.workTasks);
+    for (const event of this.bus.listEvents()) {
+      scheduler.consume(event);
+    }
+    const outputByBot = new Map<string, Map<string, ChangeFile>>();
+
+    while (!scheduler.isSettled()) {
+      this.board.setTaskGraph(scheduler.snapshot());
+      this.emitBoard();
+      const wave = scheduler.nextWave();
+      if (wave.length === 0) {
+        this.workTasks = scheduler.snapshot();
+        return 'error';
+      }
+      for (const task of wave) {
+        this.bus.publishEvent({
+          type: 'TASK_READY',
+          runId: this.runId,
+          taskId: task.id,
+          botId: task.ownerId,
+        });
+      }
+      scheduler.start(wave.map((task) => task.id));
+      this.board.setTaskGraph(scheduler.snapshot());
+      this.emitBoard();
+      this.workAssignments = wave.map((task) => ({
+        handle: task.owner,
+        botId: task.ownerId,
+        paths: task.paths,
+      }));
+      this.workTaskInstructions.clear();
+      for (const task of wave) {
+        this.remainingSlots.push({ botId: task.ownerId, turn: 'work' });
+        this.workTaskInstructions.set(
+          task.ownerId,
+          `Task ${task.id} (${task.kind}). Required artifacts: ${task.requiredArtifacts.join(', ') || '(none)'}. Produce artifacts: ${task.producesArtifacts.join(', ') || '(none)'}.`,
+        );
+      }
+
+      const result = await this.runWorkBatch();
+      if (result === 'cancelled' || result === 'hung' || this.cancelled()) {
+        scheduler.cancelRemaining();
+        this.workTasks = scheduler.snapshot();
+        this.board.setTaskGraph(this.workTasks);
+        this.emitBoard();
+        return result;
+      }
+      for (const task of wave) {
+        const files = this.workerFiles.get(task.ownerId);
+        const valid =
+          files &&
+          files.length > 0 &&
+          files.every((file) => task.paths.includes(file.path));
+        if (!valid) {
+          const failed = this.bus.publishEvent({
+            type: 'TASK_FAILED',
+            runId: this.runId,
+            taskId: task.id,
+            botId: task.ownerId,
+            reason: files ? 'output exceeded assigned paths' : 'missing changeset output',
+          });
+          scheduler.consume(failed);
+          continue;
+        }
+        const aggregate = outputByBot.get(task.ownerId) ?? new Map<string, ChangeFile>();
+        files.forEach((file) => aggregate.set(file.path, file));
+        outputByBot.set(task.ownerId, aggregate);
+        if (task.kind === 'architecture') {
+          const architecture = this.bus.publishEvent({
+            type: 'ARCHITECTURE_READY',
+            runId: this.runId,
+            taskId: task.id,
+            botId: task.ownerId,
+            artifacts: task.producesArtifacts,
+          });
+          scheduler.consume(architecture);
+        }
+        const completed = this.bus.publishEvent({
+          type: 'TASK_COMPLETED',
+          runId: this.runId,
+          taskId: task.id,
+          botId: task.ownerId,
+          artifacts: task.producesArtifacts,
+        });
+        scheduler.consume(completed);
+      }
+    }
+
+    this.workTasks = scheduler.snapshot();
+    this.board.setTaskGraph(this.workTasks);
+    this.emitBoard();
+    this.workerFiles = new Map(
+      [...outputByBot].map(([botId, files]) => [botId, [...files.values()]]),
+    );
+    const failed = this.workTasks.some((task) => task.outcome !== 'completed');
+    return failed ? 'error' : { ok: true, text: '' };
   }
 
   private async runWorkBatch(): Promise<TurnResult> {
@@ -1274,7 +1609,8 @@ export class Orchestrator {
         continue;
       }
       const pathLines = assignment.paths.map((path) => `- ${path}`).join('\n');
-      const extra = `Assigned paths:\n${pathLines}`;
+      const taskLine = this.workTaskInstructions.get(bot.id);
+      const extra = `${taskLine ? `${taskLine}\n` : ''}Assigned paths:\n${pathLines}`;
       const isolationPackets = isTesterAssignment(assignment.paths) ? this.baPackets : undefined;
       const next = await this.prepareSpeaker(
         bot,
@@ -1346,43 +1682,28 @@ export class Orchestrator {
 
   private async finishWorkUnion(): Promise<void> {
     const byWorker = [...this.workerFiles.entries()].map(([botId, files]) => ({ botId, files }));
-    const claims = workPathClaims(byWorker);
-    if (claims.collisions.length === 0) {
-      if (claims.remainder.length === 0) {
-        this.exitToIdle();
-        return;
-      }
-      this.enterPendingReview(claims.remainder);
+    const decision = decideWorkUnion(byWorker);
+    if (decision.route === 'idle') {
+      this.exitToIdle();
       return;
     }
-    await this.runArgue(claims.remainder, claims.collisions);
+    if (decision.route === 'review') {
+      await this.enterPendingReview(decision.files);
+      return;
+    }
+    await this.runArgue(decision.remainder, decision.collisions);
   }
 
   private claimantsOf(collision: CollisionClaim): { bot: BotRecord; file: ChangeFile }[] {
-    const out: { bot: BotRecord; file: ChangeFile }[] = [];
-    for (const claim of collision.claimants) {
-      const bot = this.freeze.find((item) => item.id === claim.botId);
-      if (!bot) {
-        continue;
-      }
-      if ((bot.dispatcher || bot.spec) && !this.assignedPath(bot.id, collision.path)) {
-        continue;
-      }
-      out.push({ bot, file: claim.file });
-    }
-    return out.sort((a, b) => a.bot.handle.localeCompare(b.bot.handle));
+    return collisionClaimants(collision, this.freeze, this.workAssignments);
   }
 
-  private assignedPath(botId: string, path: string): boolean {
-    return this.workAssignments.some((item) => item.botId === botId && item.paths.includes(path));
-  }
-
-  private showHeldUnion(remainder: ChangeFile[], winners: Map<string, ChangeFile>): void {
+  private async showHeldUnion(remainder: ChangeFile[], winners: Map<string, ChangeFile>): Promise<void> {
     const catalog = this.catalog.snapshot();
     const files = [...remainder, ...winners.values()]
       .sort((a, b) => a.path.localeCompare(b.path))
       .map((file) => attachFileCites(file, catalog));
-    this.changesets.setPending(files, { holdApprove: true });
+    await this.changesets.setPendingPrepared(files, { holdApprove: true });
     this.syncFiles(files.map((file) => file.path));
     this.contextMap?.syncRun();
     this.emitBoard();
@@ -1439,7 +1760,7 @@ export class Orchestrator {
     this.workBatchActive = false;
     const ordered = [...collisions].sort((a, b) => a.path.localeCompare(b.path));
     const winners = new Map<string, ChangeFile>();
-    this.showHeldUnion(remainder, winners);
+    await this.showHeldUnion(remainder, winners);
 
     for (const collision of ordered) {
       if (this.cancelled()) {
@@ -1453,10 +1774,10 @@ export class Orchestrator {
       }
       if (outcome.winnerFile) {
         winners.set(collision.path, outcome.winnerFile);
-        this.showHeldUnion(remainder, winners);
+        await this.showHeldUnion(remainder, winners);
       } else {
         this.noteSkippedCollision(collision.path);
-        this.showHeldUnion(remainder, winners);
+        await this.showHeldUnion(remainder, winners);
       }
     }
 
@@ -1471,7 +1792,7 @@ export class Orchestrator {
       this.exitToIdle();
       return;
     }
-    this.enterPendingReview(union);
+    await this.enterPendingReview(union);
   }
 
   private async arguePath(
@@ -1654,7 +1975,13 @@ function isAuthQuotaHung(status: import('../protocol/messages').CopilotStatus): 
 }
 
 type TurnResult =
-  | { ok: true; text: string; trailer?: 'NEED_EDIT' | 'NO_EDIT'; vote?: 'AGREE' | 'DISSENT' }
+  | {
+      ok: true;
+      text: string;
+      trailer?: 'NEED_EDIT' | 'NO_EDIT';
+      vote?: 'AGREE' | 'DISSENT';
+      validVote?: boolean;
+    }
   | 'hung'
   | 'cancelled'
   | 'error';
@@ -1678,7 +2005,7 @@ type PreparedSpeaker = {
   extras?: SpeakerExtras;
 };
 
-function isTurnOk(result: TurnResult): result is { ok: true; text: string; trailer?: 'NEED_EDIT' | 'NO_EDIT'; vote?: 'AGREE' | 'DISSENT' } {
+function isTurnOk(result: TurnResult): result is Extract<TurnResult, { ok: true }> {
   return typeof result === 'object' && result.ok === true;
 }
 

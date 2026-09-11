@@ -58,20 +58,28 @@ Additive F8c idle follow-on / FO-1–4: [architecture-work-run.md](./architectur
 
 Additive F6 bot export / import: [architecture-bot-export-import.md](./architecture-bot-export-import.md). Envelope `format: 'botrider.bots.v1'`. UiToHost `bots/export-self` only (form Export). Chrome: [ui-ux-bot-export-import.md](./ui-ux-bot-export-import.md) §23. BR / QC / HV / MA / SD / TA / MS / SI frozen. Leftovers 002/003/009/014 out. Parallel Event Bus out.
 
-Additive F2 OpenSpec / OS-1–4: [architecture-openspec-trace.md](./architecture-openspec-trace.md). Optional `specIds` on `changeset/preview` Files. Chrome: [ui-ux-openspec-chips.md](./ui-ux-openspec-chips.md) §24. Missing `openspec/` = empty catalog, no error, no chips, no banner. BR / QC / HV / MA / SD / TA / MS / SI / EX frozen otherwise. F1 Graphify out. F7 parallel out.
+Additive F2 OpenSpec / OS-1–4: [architecture-openspec-trace.md](./architecture-openspec-trace.md). Optional `specIds` on `changeset/preview` Files. Chrome: [ui-ux-openspec-chips.md](./ui-ux-openspec-chips.md) §24. Missing `openspec/` = empty catalog, no error, no chips, no banner. BR / QC / HV / MA / SD / TA / MS / SI / EX frozen otherwise. F1 Graphify out. F7 parallel is shipped through EB-1–EB-4.
 
-Additive F1 Context Map / CM-1–4: [architecture-context-map.md](./architecture-context-map.md). Fourth view in the existing container (Bots → Chat → Context Map → Proposed Changes). Chrome: [ui-ux-context-map.md](./ui-ux-context-map.md) §25. Bot Rider–owned webview. Graphify-as-vendor stays out. BR / QC / HV / MA / SD / TA / MS / SI / EX / OS frozen otherwise. Do not reopen §20–§24. F7 parallel out.
+Additive F1 Context Map / CM-1–4: [architecture-context-map.md](./architecture-context-map.md). Fourth view in the existing container (Bots → Chat → Context Map → Proposed Changes). Chrome: [ui-ux-context-map.md](./ui-ux-context-map.md) §25. Bot Rider–owned webview. Graphify-as-vendor stays out. BR / QC / HV / MA / SD / TA / MS / SI / EX / OS frozen otherwise. Do not reopen §20–§24. F7 parallel is shipped through EB-1–EB-4.
+
+Additive EDIT-1 selective hunk patching: [openspec/specs/edit-1-selective-hunks/spec.md](../openspec/specs/edit-1-selective-hunks/spec.md). Unified hunks, per-file inclusion, stale detection. HostToUi `changeset/stale`. UiToHost `changeset/toggle-file`, `changeset/regenerate-stale`.
+
+Additive PU-7 reload recovery: [openspec/specs/pu-1-product-usability/spec.md](../openspec/specs/pu-1-product-usability/spec.md) §PU-7. Workspace snapshot in `workspaceState`. HostToUi `recovery/state`. UiToHost `recovery/resume`, `recovery/review`, `recovery/discard`.
+
+Additive CTX-1–3 repository context: [openspec/specs/ctx-1-repository-context/spec.md](../openspec/specs/ctx-1-repository-context/spec.md). `RepositoryContextService` injects bounded neighborhoods into prompt assembly. HostToUi `context/status`.
 
 ### UI → host
 
-`bots/create`, `bots/update`, `bots/toggle`, `bots/delete`, `chat/send`, `chat/stop`, `split/continue`, `split/pick`, `changeset/approve`, `changeset/retry`, `changeset/reject`, `mcp/actions-approve`, `mcp/actions-reject`, `review/open-diff`, `copilot/recheck`
+`bots/create`, `bots/update`, `bots/toggle`, `bots/delete`, `chat/send`, `chat/stop`, `split/continue`, `split/pick`, `changeset/approve`, `changeset/retry`, `changeset/reject`, `changeset/toggle-file`, `changeset/regenerate-stale`, `mcp/actions-approve`, `mcp/actions-reject`, `review/open-diff`, `copilot/recheck`, `recovery/resume`, `recovery/review`, `recovery/discard`
 
 ## Apply table (`ChangesetStore.buildEdit`)
 
 | op | `initial` | `retry` |
 | --- | --- | --- |
 | create | `createFile`, overwrite false | `createFile`, overwrite true (leftover creates replace) |
-| update | replace full document | replace full document |
+| update | replace full document from materialized patch/content | replace full document |
 | delete | `deleteFile` | skip if already gone; otherwise `ignoreIfNotExists` |
+
+Approve applies only **included** pending files. Excluded or stale files are skipped.
 
 `applyEdit` is called only from `ChangesetStore.approve()` (`botrider.changeset.approve` / retry with `buildEdit('retry')`).

@@ -8,6 +8,7 @@ const root = join(__dirname, '..');
 const chatJs = readFileSync(join(root, 'media/chat.js'), 'utf8');
 const review = readFileSync(join(root, 'src/adapters/review-tree.ts'), 'utf8');
 const extension = readFileSync(join(root, 'src/extension.ts'), 'utf8');
+const vscodeMcp = readFileSync(join(root, 'src/adapters/vscode-mcp.ts'), 'utf8');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
   contributes: {
     commands: { command: string; tooltip?: string }[];
@@ -25,8 +26,8 @@ describe('Staged MCP actions chrome (§19 Grain B)', () => {
     const titles = pkg.contributes.menus['view/title'];
     const fileTitle = titles.find((m) => m.command === 'botrider.changeset.approve');
     const mcpTitle = titles.find((m) => m.command === 'botrider.mcp.approve');
-    expect(fileTitle?.when).toContain('!botrider.hasPendingMcp');
-    expect(mcpTitle?.when).toContain('!botrider.hasPendingChanges');
+    expect(fileTitle?.when).not.toContain('!botrider.hasPendingMcp');
+    expect(mcpTitle?.when).not.toContain('!botrider.hasPendingChanges');
 
     const itemCtx = pkg.contributes.menus['view/item/context'];
     expect(itemCtx.some((m) => m.command === 'botrider.changeset.approve' && m.when?.includes('reviewFilesSection'))).toBe(
@@ -35,11 +36,30 @@ describe('Staged MCP actions chrome (§19 Grain B)', () => {
     expect(itemCtx.some((m) => m.command === 'botrider.mcp.approve' && m.when?.includes('reviewMcpSection'))).toBe(true);
 
     expect(extension).toMatch(/botrider\.changeset\.approve',\s*\(\) => approveChanges\(\)/);
-    expect(extension).toMatch(/botrider\.mcp\.approve',\s*\(\) => app\.approveMcp\(\)/);
+    expect(extension).toMatch(/botrider\.mcp\.approve',\s*\(\) => approveMcpBatch\(\)/);
     expect(extension).not.toMatch(/approveChanges\([^)]*\)[\s\S]{0,40}approveMcp/);
     expect(extension).not.toMatch(/approveMcp\([^)]*\)[\s\S]{0,40}approveChanges/);
     expect(chatJs).not.toContain("type: 'mcp/actions-approve'");
     expect(chatJs).not.toContain("type: 'changeset/approve'");
+  });
+
+  it('confirms one complete batch and runs it with cancellable progress', () => {
+    const approve = extension.slice(extension.indexOf('async function approveMcpBatch'), extension.indexOf('async function pickBot'));
+    expect(approve).toContain('mcpBatchConfirmation(actions)');
+    expect(approve).toContain('showWarningMessage');
+    expect(approve).toContain('{ modal: true, detail: confirmation.detail }');
+    expect(approve).toContain('withProgress');
+    expect(approve).toContain('cancellable: true');
+    expect(approve).toContain('increment: 100 / total');
+    expect(approve).toContain('token.isCancellationRequested');
+    expect(approve.match(/showWarningMessage/g)).toHaveLength(1);
+  });
+
+  it('uses the only valid invocation-token value for a custom webview flow', () => {
+    expect(vscodeMcp).toContain('MCP_TOOL_INVOCATION_TOKEN');
+    expect(vscodeMcp).toContain('ChatParticipant request handlers');
+    expect(vscodeMcp).toContain('toolInvocationToken: MCP_TOOL_INVOCATION_TOKEN');
+    expect(vscodeMcp).not.toContain('toolInvocationToken: undefined');
   });
 
   it('pins MCP Approve/Reject on the MCP section header when both gates are pending', () => {
@@ -68,19 +88,18 @@ describe('Staged MCP actions chrome (§19 Grain B)', () => {
     expect(review).not.toMatch(/Applied MCP|MCP actions applied|success/i);
   });
 
-  it('Swarm card is MCP actions · n plus Review only and hides when empty', () => {
-    expect(chatJs).toContain("'MCP actions · ' + list.length");
-    expect(chatJs).toContain("link.textContent = 'Review'");
-    expect(chatJs).toContain("type: 'ui/focus-review-mcp'");
+  it('updates one Swarm review strip with independent file and MCP focus actions', () => {
+    expect(chatJs).toContain("strip.id = 'review-strip'");
+    expect(chatJs).toContain('strip.replaceChildren()');
+    expect(chatJs).toContain("label.textContent = 'Review · ' + counts.join(' · ')");
+    expect(chatJs).toContain("reviewFocusButton('Files', 'ui/focus-review-files')");
+    expect(chatJs).toContain("reviewFocusButton('MCP', 'ui/focus-review-mcp')");
     expect(chatJs).toContain('function hideMcpActions');
     expect(chatJs).toContain("msg.type === 'mcp/actions-cleared'");
     expect(chatJs).toContain('hideMcpActions()');
-    const cardFn = chatJs.slice(chatJs.indexOf('function showMcpActions'), chatJs.indexOf('window.addEventListener'));
-    expect(cardFn).not.toMatch(/Approve/);
-    expect(cardFn).not.toContain('mcp/actions-approve');
-    expect(cardFn).toContain('if (!list.length)');
-    expect(cardFn).not.toMatch(/for\s*\(.*actions/);
-    expect(cardFn).not.toMatch(/actions\.map/);
+    expect(chatJs.match(/id = 'review-strip'/g)).toHaveLength(1);
+    expect(chatJs).toContain("state.mcpFailedMessage = msg.message || 'MCP actions failed'");
+    expect(chatJs).toContain("failure.setAttribute('role', 'alert')");
     expect(chatJs).not.toMatch(/run-board[\s\S]{0,200}mcp\/actions/);
   });
 

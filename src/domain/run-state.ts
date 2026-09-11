@@ -1,5 +1,7 @@
 export type TurnKind =
   | 'propose'
+  | 'synthesis'
+  | 'objection'
   | 'critique'
   | 'consensus'
   | 'direct'
@@ -42,6 +44,8 @@ export interface RunStateDto {
   arguePath?: string;
   /** Argue round 1 or 2 for this path. Not F7 `ROUND n · CRITIQUE`. */
   argueRound?: 1 | 2;
+  /** Current PU-5 Debate stage. */
+  debateStage?: 'proposal' | 'synthesis' | 'objection' | 'decision';
 }
 
 export function idleRunState(): RunStateDto {

@@ -2,7 +2,7 @@
 
 Fold into `ui-ux-spec.md` as **§27** (F8a Work), **§28** (F8b Argue), and **§29** (F8c idle follow-on). Additive Swarm + New/Edit Bot chrome. Do **not** reopen §20 Attach, §22 model picker, §23 export/import, §24 OpenSpec chips, §25 Context Map, or §26 F7 Debate composer-lock. Do **not** rewrite §27.9 (F8a Work-batch overlap). Do **not** rewrite §28 except the Out pointer. Not a new sidebar. Not a new Activity Bar icon. Not a fourth view. Not Event Bus chrome.
 
-Architecture: [architecture-work-run.md](./architecture-work-run.md). Additive. **WK-1–6 locked** (F8a shipped). **AG-1–4 locked** (F8b host). **FO-1–4 locked** (F8c host). Work is a **different run type**, not Debate chrome. Host Event Bus is **not** painted. HV is **display only**. Debate lock in §26 stays Debate-only. Argue chrome is **§28**, never §27.9. Follow-on chrome is **§29**. Reuse §27 run-board in-flight+waiting. No ARGUE header for follow-on.
+Architecture: [architecture-work-run.md](./architecture-work-run.md). Additive. **WK-1–6 shipped** (F8a). **AG-1–4 shipped** (F8b). **FO-1–4 planned** (F8c host and chrome are not implemented). Work is a **different run type**, not Debate chrome. Host Event Bus is **not** painted. HV is **display only**. Debate lock in §26 stays Debate-only. Argue chrome is **§28**, never §27.9. Follow-on target chrome is **§29**. Reuse §27 run-board in-flight+waiting. No ARGUE header for follow-on.
 
 ## 27. Work run chrome (F8a)
 
@@ -291,9 +291,9 @@ Event Bus chrome · packet rows · new sidebar · new Activity Bar icon · fourt
 
 ## 29. Idle follow-on chrome (F8c)
 
-**Status:** Additive after §28. **FO-1–4 locked** (host). This section is chrome only. Follow-on chrome is **§29**. Do **not** reopen §20–§28 except the §27/§28 Out pointer. Do **not** rewrite §27.9 or §28. Not a fourth view. Not Event Bus chrome. Not packet rows. Not a new sidebar. Not a new Activity Bar icon. Not F3 / F4. Not leftovers 002/003/009/014. Do **not** reopen §20–§26. F8a Work | Debate, designation, Work-batch unlocked composer, F8b `ARGUE · {path}`, and one Files list stay as shipped.
+**Status:** **Planned.** FO-1–FO-4 host and §29 chrome are not implemented. This section defines target chrome only. Do **not** reopen §20–§28 except the §27/§28 Out pointer. Do **not** rewrite §27.9 or §28. Not a fourth view. Not Event Bus chrome. Not packet rows. Not a new sidebar. Not a new Activity Bar icon. Not F3 / F4. Not leftovers 002/003/009/014. F8a Work | Debate, designation, Work-batch unlocked composer, F8b `ARGUE · {path}`, and one Files list stay as shipped.
 
-Architecture: [architecture-work-run.md](./architecture-work-run.md) F8c / FO-1–4. **This chrome stamp does not change the host FO lock.** Host freeze unchanged: one extra dispatch + one extra Work-batch of idle bots only; disjoint from pending union and among follow-on assignments; cap one per Send; no second Argue.
+Architecture: [architecture-work-run.md](./architecture-work-run.md) F8c / FO-1–4. This planned chrome does not implement the host behavior. Target host behavior: one extra dispatch + one extra Work-batch of idle bots only; disjoint from pending union and among follow-on assignments; cap one per Send; no second Argue.
 
 ### 29.0 Chrome lock (BA, matches FO-1–4)
 

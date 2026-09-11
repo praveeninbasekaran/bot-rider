@@ -1,7 +1,7 @@
 # Bot Rider — Staged MCP actions (additive slice)
 
-Status: **ready for implementation.** Design only until a developer lands it. Not a host rewrite of BR-1–BR-6, QC, or HV. Not a combined file+MCP Approve.
-Stories: **MA-1** discover existing servers, **MA-2** stage mutating tools on debate/@ (and Continue extra rounds), **MA-3** independent MCP Approve/Reject (Grain B), **MA-4** fail / skip / session-only pending.
+Status: **shipped (MA-1–MA-4 + PU-6 batch approval).** Verified by `test/mcp-actions.test.ts`, `test/mcp-gateway.test.ts`, and `test/mcp-actions-chrome.test.ts`. Implementation-allocation notes below are historical.
+Stories: **MA-1** discover existing servers, **MA-2** stage mutating tools on debate/@ (and Continue extra rounds), **MA-3** independent MCP Approve/Reject (Grain B), **MA-4** fail / skip / PU-7-restorable pending.
 UI chrome contract: `ui-ux-spec.md` §19 (addendum `ui-ux-mcp-actions.md`).
 Date: 2026-08-30.
 Parent: `architecture-mvp.md`. Reads: `architecture-workspace-mcp.md` (WM-1–3 **unchanged**; WM-4 “never invoke write” is **superseded** by staging + MCP-gate Approve). Additive protocol. **No pack/TokenGovernor change. No HV change.**
@@ -17,7 +17,7 @@ Split (when PO allocates): **Developer 1** host (`McpGateway` stage path, `McpAc
 - **Vote / Split / Stop / implementer:** still **no MCP tools**. Implementer is JSON files only. Stop never starts implementer and never invokes staged MCP.
 - **Mutations:** Copilot may **propose** tools that are not `readOnlyHint`. Host **STAGES** them. **Never** `invokeTool` a write inside the Copilot tool loop. Execute **only** on MCP-gate Approve. Reject discards **that MCP batch only**.
 - **Grain B:** MCP Approve/Reject is **independent of BR-6**. Two gates if both exist. User picks order. File fail does **not** block MCP Approve. MCP fail does **not** roll back files. **One click must not apply both.**
-- Pending MCP batch is **session-only** (reload clears, like changeset/board). File pending store unchanged.
+- Pending MCP batch metadata is **restorable** from PU-7 workspace recovery snapshots. Restored actions never auto-execute. File pending store unchanged on MCP-only Reject.
 - Failed MCP Approve: **keep the batch**, never claim success, no silent retry. Retry must not be blocked solely because the remote object now exists/changed. Copy **exact** §19.4.
 - Missing MCP: visible skip. Unauth: visible error, no silent retry. §16 `mutating-blocked` copy **only when the host cannot stage**.
 - Additive. **BR-1–6, QC packs, HV frozen.** Leftovers 002/003/009/014 out. Graphify out. No fourth view. No Run-board MCP region. No token chrome. No pre-Send gate.
@@ -35,10 +35,12 @@ Keep listReadOnly/allow/invoke/ensureStartedFromSend. Add listStageable() and de
 opts.tools: mcp-debate | none. Propose/critique/direct/Continue extra debate = mcp-debate. Consensus, implementer, turns after Split/Stop open = none. Stage: do not invokeTool; emit full mcp/actions-preview; feed Copilot "Staged for user Approve. Not executed."; no Swarm thread args dump. argsLine ~80 chars. MAX_MCP_TOOL_ROUNDS still caps the Copilot loop not Approve invokes. Stop cancels in-flight reads, does not execute staged MCP; pending stays until Reject, successful Approve, or reload.
 
 ## 4. McpActionStore
-Session-only. snapshot/append/clear/approve. approve walks in order invokeTool outside sendRequest. Failure: keep leftoverIds including failed id, emit mcp/actions-failed, never success. Retry = approve again on leftover; do not refuse because remote object now exists. reject/reload: mcp/actions-cleared, files untouched.
+Session-scoped with PU-7 metadata restore. snapshot/append/clear/approve. Append deduplicates equivalent server/tool/argument payloads. Approve walks in order and invokes outside `sendRequest`, reports progress, and checks cancellation between actions. Success removes that action immediately. Cancellation preserves the remainder. Failure keeps `leftoverIds` from the failed action onward, emits `mcp/actions-failed`, and never claims success. Retry invokes only the remainder. Reject emits `mcp/actions-cleared`; files stay untouched. Reload without recovery Discard may clear the batch.
 
 ## 5. Grain B
 Files BR-6 changeset/approve applyEdit only. MCP mcp/actions-approve invoke staged only. Two pairs when both pending. User order. File fail does not block MCP Approve. MCP fail does not roll back files or set applyFailed. One click must not send both messages. MCP Approve allowed while Split is open; new staging is not.
+
+MCP Approve first shows one modal Bot Rider confirmation containing every deduplicated staged action. Confirmed actions execute sequentially in one cancellable progress notification. VS Code 1.99 requires `toolInvocationToken: undefined` outside a Chat Participant request; custom webviews cannot mint a valid token. Platform-owned per-tool native confirmations therefore cannot be coalesced by Bot Rider.
 
 ## 6. Protocol
 McpActionDto: id, server, tool, argsLine, botId, handle.

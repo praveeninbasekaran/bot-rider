@@ -1,6 +1,7 @@
 import type { ChangeFile, FileOp } from '../domain/changeset';
 import * as nodePath from 'node:path';
 import { attachFileCites, type OpenSpecEntry } from './openspec-catalog';
+import { parseUnifiedPatch } from './unified-hunk';
 
 export type ParseResult =
   | { ok: true; files: ChangeFile[] }
@@ -89,7 +90,14 @@ export class PatchParser {
       if (!item || typeof item !== 'object') {
         return { ok: false, code: 'validate-failed', message: 'Each file entry must be an object.' };
       }
-      const rec = item as { path?: unknown; op?: unknown; content?: unknown; specIds?: unknown };
+      const rec = item as {
+        path?: unknown;
+        op?: unknown;
+        content?: unknown;
+        patch?: unknown;
+        sourceHash?: unknown;
+        specIds?: unknown;
+      };
       if (typeof rec.path !== 'string') {
         return { ok: false, code: 'validate-failed', message: 'Each file needs a path.' };
       }
@@ -104,6 +112,32 @@ export class PatchParser {
       const jsonIds = readJsonSpecIds(rec.specIds);
       if (op === 'delete') {
         files.push(attachFileCites({ path: pathCheck.relative, op, specIds: jsonIds }, catalog));
+        continue;
+      }
+      if (op === 'update' && rec.patch !== undefined) {
+        if (typeof rec.patch !== 'string' || rec.content !== undefined) {
+          return { ok: false, code: 'validate-failed', message: 'update requires either patch or content, not both.' };
+        }
+        const parsed = parseUnifiedPatch(rec.patch);
+        if (!parsed.ok) {
+          return { ok: false, code: 'validate-failed', message: parsed.reason };
+        }
+        if (parsed.oldPath !== pathCheck.relative || parsed.newPath !== pathCheck.relative) {
+          return { ok: false, code: 'validate-failed', message: `Patch headers must match ${pathCheck.relative}.` };
+        }
+        if (
+          rec.sourceHash !== undefined &&
+          (typeof rec.sourceHash !== 'string' || !/^sha256:[0-9a-f]{64}$/i.test(rec.sourceHash))
+        ) {
+          return { ok: false, code: 'validate-failed', message: 'sourceHash must be a SHA-256 value.' };
+        }
+        files.push(attachFileCites({
+          path: pathCheck.relative,
+          op,
+          patch: rec.patch,
+          sourceHash: typeof rec.sourceHash === 'string' ? rec.sourceHash.toLowerCase() : undefined,
+          specIds: jsonIds,
+        }, catalog));
         continue;
       }
       if (typeof rec.content !== 'string') {

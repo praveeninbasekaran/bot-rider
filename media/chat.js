@@ -5,6 +5,7 @@
     bots: [],
     run: { round: 0, splitOpen: false, debateRunning: false, frozenBotIds: [], phase: 'idle' },
     copilotStatus: 'settling',
+    scheduler: { maxConcurrent: 4, requests: [] },
     expanded: false,
     splitOpen: false,
     debateRunning: false,
@@ -16,6 +17,8 @@
     pickerIndex: 0,
     pickerOpen: false,
     previewFiles: [],
+    pendingMcpActions: [],
+    mcpFailedMessage: '',
     board: null,
     boardCollapsed: false,
     todosExpanded: false,
@@ -26,6 +29,16 @@
     announced: {},
     lastArguePath: '',
     lastArgueRoundKey: '',
+    onboarding: { open: false, complete: false, sampleTask: '' },
+    maxVisibleArticles: 3,
+    expandedArticles: [],
+    decision: null,
+    synthesis: null,
+    a11yQueue: [],
+    a11yTimer: null,
+    lastError: '',
+    articleSequence: 0,
+    recovery: null,
   };
 
   if (document.body.classList.contains('vscode-high-contrast')) {
@@ -37,6 +50,18 @@
   root.innerHTML =
     '<div id="expand-banner" class="expand-banner"><span>Expanded in editor</span><button id="focus-expanded" type="button">Focus</button></div>' +
     '<div id="banner" class="banner"><span id="banner-text"></span><button id="recheck" type="button">Sign in to GitHub Copilot</button></div>' +
+    '<div id="scheduler-status" class="scheduler-status" hidden></div>' +
+    '<div id="context-status" class="scheduler-status" hidden></div>' +
+    '<section id="onboarding" class="onboarding" hidden aria-label="Getting started">' +
+    '<div class="onboarding-head"><strong>Getting started</strong><button id="onboarding-dismiss" type="button" class="review-link">Hide</button></div>' +
+    '<p id="onboarding-copilot">Checking GitHub Copilot…</p>' +
+    '<p><strong>Spec</strong> defines requirements and acceptance. <strong>Dispatcher</strong> proposes dependency-aware assignments. Both are protected core bots.</p>' +
+    '<p><strong>Debate</strong> compares ideas. <strong>Work</strong> runs Spec, Dispatcher, then ready workers.</p>' +
+    '<div class="onboarding-actions"><button type="button" data-worker-template="coder">Add Coder</button><button type="button" data-worker-template="reviewer">Add Reviewer</button><button type="button" data-worker-template="writer">Add Writer</button><button id="onboarding-sample" type="button">Use sample task</button></div>' +
+    '<p>When work is proposed, open <strong>Proposed Changes</strong>. Review Files as diffs/previews and approve MCP actions separately.</p>' +
+    '<div class="onboarding-actions"><button id="onboarding-files" type="button">Open Files review</button><button id="onboarding-mcp" type="button">Open MCP review</button></div>' +
+    '</section>' +
+    '<section id="recovery" class="onboarding recovery" hidden aria-label="Recovered work"></section>' +
     '<div id="empty" class="empty-pane" hidden></div>' +
     '<section id="run-board" class="run-board" hidden aria-label="Run">' +
     '<button type="button" id="run-board-toggle" class="run-board-toggle" aria-expanded="true">' +
@@ -47,6 +72,9 @@
     '</span></button>' +
     '<div id="run-board-body" class="run-board-body"></div>' +
     '</section>' +
+    '<section id="activity-timeline" class="activity-timeline" hidden aria-label="Activity"><strong>Activity</strong><div id="activity-list" role="list"></div></section>' +
+    '<section id="synthesis-card" class="summary-card synthesis-card" hidden aria-label="Synthesis"></section>' +
+    '<section id="decision-card" class="summary-card decision-card" hidden aria-label="Decision"></section>' +
     '<div id="thread" class="thread" role="log" aria-live="off"></div>' +
     '<div id="live" class="sr-only" aria-live="polite"></div>' +
     '<div id="run-board-goal-live" class="sr-only" aria-live="polite"></div>' +
@@ -67,6 +95,11 @@
   const empty = document.getElementById('empty');
   const banner = document.getElementById('banner');
   const bannerText = document.getElementById('banner-text');
+  const schedulerStatus = document.getElementById('scheduler-status');
+  const contextStatus = document.getElementById('context-status');
+  const onboarding = document.getElementById('onboarding');
+  const recovery = document.getElementById('recovery');
+  const onboardingCopilot = document.getElementById('onboarding-copilot');
   const expandBanner = document.getElementById('expand-banner');
   const live = document.getElementById('live');
   const input = document.getElementById('input');
@@ -86,15 +119,164 @@
   const runBoardSummaryCount = document.getElementById('run-board-summary-count');
   const runBoardBody = document.getElementById('run-board-body');
   const boardGoalLive = document.getElementById('run-board-goal-live');
+  const activityTimeline = document.getElementById('activity-timeline');
+  const activityList = document.getElementById('activity-list');
+  const synthesisCard = document.getElementById('synthesis-card');
+  const decisionCard = document.getElementById('decision-card');
 
   const PACK_OVERFLOW_COPY =
     "Prompt doesn't fit Copilot\nThe minimum context for this turn is larger than Copilot's window.\nShorten the prompt or shrink the active editor. Required context was not dropped.";
+
+  function paintScheduler(snapshot) {
+    state.scheduler = snapshot || { maxConcurrent: 4, requests: [] };
+    const requests = Array.isArray(state.scheduler.requests) ? state.scheduler.requests : [];
+    const queued = requests.filter((item) => item.state === 'queued').length;
+    const active = requests.filter((item) => item.state === 'inFlight').length;
+    const retrying = requests.filter((item) => item.state === 'retrying').length;
+    schedulerStatus.hidden = true;
+    schedulerStatus.textContent =
+      'Copilot · ' + active + '/' + state.scheduler.maxConcurrent + ' active' +
+      (queued ? ' · ' + queued + ' queued' : '') +
+      (retrying ? ' · ' + retrying + ' retrying' : '');
+    renderActivityTimeline();
+  }
+
+  function activityRows() {
+    const rows = {};
+    const rank = { completed: 1, blocked: 2, queued: 3, retrying: 4, inFlight: 5, speaking: 6, failed: 7 };
+    function put(id, handle, status, detail) {
+      const key = id || handle;
+      if (!key || (rows[key] && rank[rows[key].status] > rank[status])) return;
+      rows[key] = { id: id || '', handle: handle || id || 'bot', status: status, detail: detail || '' };
+    }
+    const requests = (state.scheduler && state.scheduler.requests) || [];
+    requests.forEach(function (item) {
+      put(item.botId, item.handle, item.state, item.state === 'queued' ? 'waiting for Copilot' : item.state);
+    });
+    const todos = (state.board && state.board.todos) || [];
+    todos.forEach(function (todo) {
+      const match = String(todo.text || '').match(/@([a-z0-9][a-z0-9_-]*)/i);
+      if (/blocked:/i.test(todo.text || '')) {
+        put('', match && match[1], 'blocked', String(todo.text).split(/blocked:/i)[1] || 'dependency');
+      }
+    });
+    Object.keys(state.completedBots).forEach(function (id) {
+      const bot = state.bots.find(function (item) { return item.id === id; });
+      put(id, bot && bot.handle, 'completed', 'settled');
+    });
+    Object.keys(state.flights).forEach(function (id) {
+      const flight = state.flights[id];
+      put(id, flight && flight.handle, 'speaking', flight && flight.turn);
+    });
+    if (state.lastError) {
+      put('system', 'swarm', 'failed', state.lastError);
+    }
+    return Object.keys(rows).map(function (key) { return rows[key]; }).sort(function (a, b) {
+      return a.handle.localeCompare(b.handle);
+    });
+  }
+
+  function renderActivityTimeline() {
+    const rows = activityRows();
+    activityTimeline.hidden = rows.length === 0;
+    activityList.replaceChildren();
+    rows.forEach(function (row) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'activity-row status-' + row.status;
+      button.setAttribute('role', 'listitem');
+      button.setAttribute('data-bot-id', row.id);
+      button.textContent = '@' + row.handle + ' · ' + row.status + (row.detail ? ' · ' + row.detail.trim() : '');
+      button.addEventListener('click', function () {
+        const matches = row.id ? thread.querySelectorAll('[data-bot-id="' + row.id + '"]') : [];
+        const article = matches.length ? matches[matches.length - 1] : null;
+        if (article) {
+          setArticleExpanded(article, true);
+          article.focus();
+          article.scrollIntoView({ block: 'nearest' });
+        }
+      });
+      activityList.appendChild(button);
+    });
+  }
+
+  function setArticleExpanded(article, expanded) {
+    if (!article) return;
+    const toggle = article.querySelector('.article-toggle');
+    const body = article.querySelector('.article-body');
+    if (!toggle || !body) return;
+    const id = article.getAttribute('data-article-id');
+    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    body.hidden = !expanded;
+    state.expandedArticles = state.expandedArticles.filter(function (item) { return item !== id; });
+    if (expanded) {
+      state.expandedArticles.push(id);
+      while (state.expandedArticles.length > state.maxVisibleArticles) {
+        const oldest = state.expandedArticles.shift();
+        const previous = thread.querySelector('[data-article-id="' + oldest + '"]');
+        if (previous && previous !== article) setArticleExpanded(previous, false);
+      }
+    }
+  }
+
+  function paintSynthesis(synthesis) {
+    state.synthesis = synthesis || null;
+    synthesisCard.hidden = !synthesis;
+    synthesisCard.replaceChildren();
+    if (!synthesis) return;
+    const title = document.createElement('strong');
+    title.textContent = 'Synthesis · @' + synthesis.handle;
+    const body = document.createElement('div');
+    body.className = 'article-body';
+    paintArticle(body, synthesis.text || '');
+    synthesisCard.appendChild(title);
+    synthesisCard.appendChild(body);
+    announceOnce('Synthesis ready');
+  }
+
+  function paintDecision(decision) {
+    state.decision = decision || null;
+    decisionCard.hidden = !decision;
+    decisionCard.replaceChildren();
+    if (!decision) return;
+    const title = document.createElement('strong');
+    title.textContent = decision.status === 'accepted' ? 'Decision accepted' : 'Decision needs you';
+    const recommendation = document.createElement('p');
+    recommendation.textContent = decision.recommendation || '';
+    decisionCard.appendChild(title);
+    decisionCard.appendChild(recommendation);
+    if (decision.dissentSummary) {
+      const dissent = document.createElement('p');
+      dissent.className = 'decision-dissent';
+      dissent.textContent = decision.dissentSummary;
+      decisionCard.appendChild(dissent);
+    }
+    announceOnce(title.textContent);
+  }
 
   document.getElementById('focus-expanded').addEventListener('click', function () {
     vscode.postMessage({ type: 'ui/focus-expanded' });
   });
   recheck.addEventListener('click', function () {
     vscode.postMessage({ type: 'copilot/recheck' });
+  });
+  document.getElementById('onboarding-dismiss').addEventListener('click', function () {
+    vscode.postMessage({ type: 'onboarding/dismiss' });
+  });
+  document.getElementById('onboarding-sample').addEventListener('click', function () {
+    input.value = state.onboarding.sampleTask || '';
+    input.focus();
+  });
+  document.getElementById('onboarding-files').addEventListener('click', function () {
+    vscode.postMessage({ type: 'ui/focus-review-files' });
+  });
+  document.getElementById('onboarding-mcp').addEventListener('click', function () {
+    vscode.postMessage({ type: 'ui/focus-review-mcp' });
+  });
+  root.querySelectorAll('[data-worker-template]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      vscode.postMessage({ type: 'onboarding/template', template: button.getAttribute('data-worker-template') });
+    });
   });
   runBoardToggle.addEventListener('click', function () {
     if (runBoard.hidden) {
@@ -197,10 +379,10 @@
     if (!text || state.splitOpen || state.debateRunning && !state.workBatch && !isArgueRun() || state.copilotStatus !== 'ready') {
       return;
     }
-    state.pendingSend = input.value;
     const runType = selectedRunType();
     vscode.postMessage({ type: 'chat/send', text: input.value, runType: runType });
-    if (state.workBatch || isArgueRun()) {
+    const appendImmediately = state.workBatch || isArgueRun() || !state.debateRunning;
+    if (appendImmediately) {
       appendUser(input.value);
       input.value = '';
       state.pendingSend = '';
@@ -344,7 +526,23 @@
   }
 
   function announce(text) {
-    live.textContent = text;
+    const value = String(text || '').trim();
+    if (!value || state.a11yQueue[state.a11yQueue.length - 1] === value) {
+      return;
+    }
+    state.a11yQueue.push(value);
+    drainAnnouncements();
+  }
+
+  function drainAnnouncements() {
+    if (state.a11yTimer || state.a11yQueue.length === 0) {
+      return;
+    }
+    live.textContent = state.a11yQueue.shift();
+    state.a11yTimer = setTimeout(function () {
+      state.a11yTimer = null;
+      drainAnnouncements();
+    }, 1000);
   }
 
   function announceOnce(text) {
@@ -357,7 +555,7 @@
   }
 
   function isDebateTurn(turn) {
-    return turn === 'propose' || turn === 'critique';
+    return turn === 'propose' || turn === 'critique' || turn === 'objection';
   }
 
   function isWorkTurn(turn) {
@@ -374,6 +572,9 @@
     }
     if (turn === 'critique') {
       return 'ROUND ' + n + ' · CRITIQUE';
+    }
+    if (turn === 'objection') {
+      return 'ROUND ' + n + ' · OBJECTION';
     }
     return '';
   }
@@ -498,7 +699,7 @@
   }
 
   function announceArticle(flight, text) {
-    if (!flight || !flight.live) {
+    if (!flight) {
       return;
     }
     const now = Date.now();
@@ -506,7 +707,7 @@
       return;
     }
     flight.lastAnnounce = now;
-    flight.live.textContent = text;
+    announce(text);
   }
 
   function dropFlight(botId) {
@@ -1254,6 +1455,7 @@
 
   function renderCopilot() {
     const status = state.copilotStatus;
+    paintOnboarding();
     banner.classList.remove('visible');
     empty.hidden = true;
     if (status === 'ready') {
@@ -1301,6 +1503,51 @@
       });
     }
     lockComposer();
+  }
+
+  function paintOnboarding(next) {
+    if (next) {
+      state.onboarding = next;
+    }
+    onboarding.hidden = !state.onboarding.open;
+    if (state.copilotStatus === 'ready') {
+      onboardingCopilot.textContent = 'GitHub Copilot is ready.';
+    } else if (state.copilotStatus === 'settling') {
+      onboardingCopilot.textContent = 'Checking GitHub Copilot…';
+    } else {
+      onboardingCopilot.textContent = 'GitHub Copilot needs attention. Use the sign-in or retry action above.';
+    }
+  }
+
+  function paintRecovery(next) {
+    state.recovery = next || null;
+    recovery.hidden = !next || !next.available;
+    recovery.replaceChildren();
+    if (!next || !next.available) return;
+    const title = document.createElement('strong');
+    title.textContent = 'Recovered work is available';
+    const detail = document.createElement('p');
+    detail.textContent =
+      (next.phase ? 'Last phase: ' + next.phase + '. ' : '') +
+      next.fileCount + ' file proposal(s), ' + next.mcpCount + ' MCP action(s). Nothing will run automatically.';
+    recovery.appendChild(title);
+    recovery.appendChild(detail);
+    const actions = document.createElement('div');
+    actions.className = 'onboarding-actions';
+    [
+      ['Review pending', 'recovery/review', true],
+      ['Resume', 'recovery/resume', !!next.canResume],
+      ['Discard', 'recovery/discard', true],
+    ].forEach(function (entry) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = entry[0];
+      button.disabled = !entry[2];
+      button.addEventListener('click', function () { vscode.postMessage({ type: entry[1] }); });
+      actions.appendChild(button);
+    });
+    recovery.appendChild(actions);
+    announceOnce('Recovered work is available');
   }
 
   function renderEmpty() {
@@ -1490,61 +1737,224 @@
 
   function showFiles(files) {
     state.previewFiles = files || [];
-    const n = state.previewFiles.length;
-    const wrap = document.createElement('div');
-    wrap.className = 'files-banner';
-    const label = document.createElement('span');
-    label.textContent = 'Proposed changes · ' + (n === 1 ? '1 file' : n + ' files');
-    const link = document.createElement('button');
-    link.type = 'button';
-    link.className = 'review-link';
-    link.textContent = 'Review';
-    link.addEventListener('click', function () {
-      const first = state.previewFiles[0];
-      if (first) {
-        vscode.postMessage({ type: 'review/open-diff', path: first.path, op: first.op });
-      }
-    });
-    wrap.appendChild(label);
-    wrap.appendChild(link);
-    thread.appendChild(wrap);
-    thread.scrollTop = thread.scrollHeight;
+    paintReviewStrip();
   }
 
   function hideMcpActions() {
-    const existing = document.getElementById('mcp-actions-banner');
-    if (existing) {
-      existing.remove();
-    }
+    state.pendingMcpActions = [];
+    state.mcpFailedMessage = '';
+    paintReviewStrip();
   }
 
   function showMcpActions(actions) {
-    hideMcpActions();
-    const list = actions || [];
-    if (!list.length) {
+    state.pendingMcpActions = actions || [];
+    state.mcpFailedMessage = '';
+    paintReviewStrip();
+  }
+
+  function countLabel(count, singular, plural) {
+    return count + ' ' + (count === 1 ? singular : plural);
+  }
+
+  function reviewFocusButton(text, type) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'review-link';
+    button.textContent = text;
+    button.addEventListener('click', function () {
+      vscode.postMessage({ type: type });
+    });
+    return button;
+  }
+
+  function paintReviewStrip() {
+    let strip = document.getElementById('review-strip');
+    const fileCount = state.previewFiles.length;
+    const mcpCount = state.pendingMcpActions.length;
+    if (!fileCount && !mcpCount) {
+      if (strip) {
+        strip.remove();
+      }
       return;
     }
-    const wrap = document.createElement('div');
-    wrap.id = 'mcp-actions-banner';
-    wrap.className = 'files-banner mcp-actions-banner';
+    if (!strip) {
+      strip = document.createElement('div');
+      strip.id = 'review-strip';
+      strip.className = 'files-banner review-strip';
+      thread.appendChild(strip);
+    }
+    strip.replaceChildren();
     const label = document.createElement('span');
-    label.textContent = 'MCP actions · ' + list.length;
-    const link = document.createElement('button');
-    link.type = 'button';
-    link.className = 'review-link';
-    link.textContent = 'Review';
-    link.addEventListener('click', function () {
-      vscode.postMessage({ type: 'ui/focus-review-mcp' });
+    const counts = [];
+    if (fileCount) {
+      counts.push(countLabel(fileCount, 'file', 'files'));
+    }
+    if (mcpCount) {
+      counts.push(countLabel(mcpCount, 'MCP action', 'MCP actions'));
+    }
+    label.textContent = 'Review · ' + counts.join(' · ');
+    strip.appendChild(label);
+    if (fileCount) {
+      strip.appendChild(reviewFocusButton('Files', 'ui/focus-review-files'));
+    }
+    if (mcpCount) {
+      strip.appendChild(reviewFocusButton('MCP', 'ui/focus-review-mcp'));
+    }
+    if (state.mcpFailedMessage) {
+      const failure = document.createElement('span');
+      failure.className = 'review-failure';
+      failure.setAttribute('role', 'alert');
+      failure.textContent = state.mcpFailedMessage;
+      strip.appendChild(failure);
+    }
+    thread.scrollTop = thread.scrollHeight;
+  }
+
+  function appendSnapshotError(entry) {
+    if (entry.code === 'pack-overflow') {
+      paintPackOverflow(entry.text);
+      return;
+    }
+    const el = document.createElement('div');
+    el.className = 'error';
+    el.setAttribute('role', 'alert');
+    el.textContent = entry.text || entry.code || 'Error';
+    thread.appendChild(el);
+  }
+
+  function appendSnapshotBot(entry) {
+    if (entry.turn === 'implement' || entry.turn === 'consensus' || entry.turn === 'synthesis') {
+      return;
+    }
+    maybePhaseHeader(entry.turn, entry.handle, entry.round);
+    const el = document.createElement('div');
+    el.className = 'msg';
+    el.setAttribute('data-bot-id', entry.botId);
+    el.setAttribute('data-turn', entry.turn);
+    el.setAttribute('data-handle', entry.handle);
+    el.setAttribute('data-article-id', String(++state.articleSequence));
+    el.setAttribute('tabindex', '-1');
+    const solo = entry.solo ? '<span>SOLO · @' + esc(entry.handle) + '</span>' : '';
+    const disclosure = entry.solo
+      ? ''
+      : '<button type="button" class="article-toggle" aria-expanded="false">Show response</button>';
+    el.innerHTML =
+      avatarSvg(entry.name, entry.colorIndex) +
+      '<div class="bubble"><div class="meta"><span>' +
+      esc(entry.name) +
+      '</span><span class="handle">@' +
+      esc(entry.handle) +
+      '</span>' +
+      solo +
+      '</div>' +
+      (entry.inactiveNotice ? '<div class="notice">' + esc(entry.inactiveNotice) + '</div>' : '') +
+      disclosure +
+      '<div class="body article-body"' + (entry.solo ? '' : ' hidden') + '><p class="article-p article-stream"></p></div>' +
+      '<div class="article-live sr-only" aria-live="off"></div></div>';
+    const toggle = el.querySelector('.article-toggle');
+    if (toggle) {
+      toggle.addEventListener('click', function () {
+        setArticleExpanded(el, toggle.getAttribute('aria-expanded') !== 'true');
+      });
+    }
+    const body = el.querySelector('.article-body');
+    if (entry.complete) {
+      paintArticle(body, entry.text || '');
+      if (entry.interrupted) {
+        const interrupted = document.createElement('div');
+        interrupted.className = 'notice interrupted';
+        interrupted.textContent = 'Interrupted';
+        (el.querySelector('.bubble') || el).appendChild(interrupted);
+      }
+    } else {
+      const flight = {
+        botId: entry.botId,
+        name: entry.name,
+        handle: entry.handle,
+        turn: entry.turn,
+        el: el,
+        body: body,
+        stream: el.querySelector('.article-stream'),
+        think: null,
+        speak: null,
+        live: el.querySelector('.article-live'),
+        lastAnnounce: 0,
+      };
+      if (flight.stream && entry.text) {
+        flight.stream.textContent = entry.text;
+      }
+      state.flights[entry.botId] = flight;
+      state.current = flight;
+    }
+    if (entry.complete) {
+      state.completedBots[entry.botId] = true;
+    }
+    thread.appendChild(el);
+  }
+
+  function restoreTranscript(snapshot) {
+    const data = snapshot || {};
+    thread.replaceChildren();
+    state.flights = {};
+    state.current = null;
+    state.completedBots = {};
+    state.announced = {};
+    state.lastPhaseKey = '';
+    state.lastTurn = '';
+    state.pendingSend = '';
+    state.expandedArticles = [];
+    state.articleSequence = 0;
+    state.run = data.run || { round: 0, splitOpen: false, debateRunning: false, frozenBotIds: [], phase: 'idle' };
+    state.splitOpen = !!state.run.splitOpen;
+    state.debateRunning = !!state.run.debateRunning;
+    state.workBatch = !!state.run.workBatch;
+    state.board = data.board || null;
+    const entries = (data.entries || []).slice().sort(function (a, b) {
+      return Number(a.sequence || 0) - Number(b.sequence || 0);
     });
-    wrap.appendChild(label);
-    wrap.appendChild(link);
-    thread.appendChild(wrap);
+    entries.forEach(function (entry) {
+      if (entry.kind === 'user') {
+        appendUser(entry.text || '');
+      } else if (entry.kind === 'bot') {
+        appendSnapshotBot(entry);
+      } else if (entry.kind === 'notice') {
+        appendNotice(entry.text || '');
+      } else if (entry.kind === 'error') {
+        appendSnapshotError(entry);
+      }
+    });
+    if (data.split && state.splitOpen && !isArgueRun()) {
+      showSplit(data.split);
+    } else {
+      hideSplit();
+    }
+    paintBoard(state.board);
+    paintSynthesis(data.synthesis);
+    paintDecision(data.decision);
+    renderActivityTimeline();
+    if ((data.pendingFiles || []).length) {
+      showFiles(data.pendingFiles);
+    }
+    showMcpActions(data.pendingMcpActions || []);
+    empty.hidden = entries.length > 0;
+    lockComposer();
+    renderEmpty();
     thread.scrollTop = thread.scrollHeight;
   }
 
   window.addEventListener('message', function (event) {
     const msg = event.data || {};
-    if (msg.type === 'bots/snapshot') {
+    if (msg.type === 'onboarding/state') {
+      paintOnboarding(msg);
+      return;
+    }
+    if (msg.type === 'recovery/state') {
+      paintRecovery(msg.recovery);
+      return;
+    }
+    if (msg.type === 'chat/transcript-snapshot') {
+      restoreTranscript(msg.snapshot);
+    } else if (msg.type === 'bots/snapshot') {
       state.bots = msg.bots || [];
       renderPicker();
       renderEmpty();
@@ -1559,6 +1969,19 @@
         bannerText.textContent = msg.message;
       }
       renderCopilot();
+    } else if (msg.type === 'copilot/scheduler') {
+      paintScheduler(msg.snapshot);
+    } else if (msg.type === 'ui/preferences') {
+      state.maxVisibleArticles = Math.max(1, Math.min(12, Number(msg.maxVisibleArticles) || 3));
+    } else if (msg.type === 'context/status') {
+      contextStatus.hidden = false;
+      contextStatus.textContent =
+        'Task context: ' + msg.includedChars + ' characters' +
+        ((msg.dropped || []).length ? ' · ' + msg.dropped.length + ' optional item(s) dropped' : '');
+    } else if (msg.type === 'chat/synthesis') {
+      paintSynthesis(msg.synthesis);
+    } else if (msg.type === 'chat/decision') {
+      paintDecision(msg.decision);
     } else if (msg.type === 'run/state') {
       const wasRunning = state.debateRunning;
       state.run = msg.state || state.run;
@@ -1592,9 +2015,10 @@
       }
       renderEmpty();
       paintBoard(state.board);
+      renderActivityTimeline();
     } else if (msg.type === 'chat/turn-start') {
       state.lastTurn = msg.turn;
-      if (msg.turn === 'implement' || msg.turn === 'consensus') {
+      if (msg.turn === 'implement' || msg.turn === 'consensus' || msg.turn === 'synthesis') {
         return;
       }
       maybePhaseHeader(msg.turn, msg.handle, msg.round);
@@ -1603,9 +2027,12 @@
       el.setAttribute('data-bot-id', msg.botId);
       el.setAttribute('data-turn', msg.turn);
       el.setAttribute('data-handle', msg.handle);
+      el.setAttribute('data-article-id', String(++state.articleSequence));
+      el.setAttribute('tabindex', '-1');
       const solo = msg.solo ? '<span>SOLO · @' + esc(msg.handle) + '</span>' : '';
-      const chips =
-        '<span class="chips"><span class="chip think">thinking</span><span class="chip speak" style="display:none">speaking</span></span>';
+      const disclosure = msg.solo
+        ? ''
+        : '<button type="button" class="article-toggle" aria-expanded="false">Show response</button>';
       el.innerHTML =
         avatarSvg(msg.name, msg.colorIndex) +
         '<div class="bubble"><div class="meta"><span>' +
@@ -1614,11 +2041,17 @@
         esc(msg.handle) +
         '</span>' +
         solo +
-        chips +
         '</div>' +
         (msg.inactiveNotice ? '<div class="notice">' + esc(msg.inactiveNotice) + '</div>' : '') +
-        '<div class="body article-body"><p class="article-p article-stream"></p></div>' +
-        '<div class="article-live sr-only" aria-live="polite"></div></div>';
+        disclosure +
+        '<div class="body article-body"' + (msg.solo ? '' : ' hidden') + '><p class="article-p article-stream"></p></div>' +
+        '<div class="article-live sr-only" aria-live="off"></div></div>';
+      const articleToggle = el.querySelector('.article-toggle');
+      if (articleToggle) {
+        articleToggle.addEventListener('click', function () {
+          setArticleExpanded(el, articleToggle.getAttribute('aria-expanded') !== 'true');
+        });
+      }
       const flight = {
         botId: msg.botId,
         name: msg.name,
@@ -1627,8 +2060,8 @@
         el: el,
         body: el.querySelector('.article-body'),
         stream: el.querySelector('.article-stream'),
-        think: el.querySelector('.think'),
-        speak: el.querySelector('.speak'),
+        think: null,
+        speak: null,
         live: el.querySelector('.article-live'),
         lastAnnounce: 0,
       };
@@ -1640,6 +2073,7 @@
       if (isDebateTurn(msg.turn) || isWorkTurn(msg.turn)) {
         paintBoard(state.board);
       }
+      renderActivityTimeline();
       thread.scrollTop = thread.scrollHeight;
     } else if (msg.type === 'chat/token') {
       const current = flightFor(msg.botId);
@@ -1676,6 +2110,10 @@
         state.completedBots[msg.botId || current.botId] = true;
       }
       dropFlight(msg.botId || (current && current.botId));
+      if (msg.botId || (current && current.botId)) {
+        state.completedBots[msg.botId || current.botId] = true;
+      }
+      renderActivityTimeline();
       if (isDebateTurn(msg.turn) || isWorkTurn(msg.turn) || !msg.turn) {
         paintBoard(state.board);
       }
@@ -1705,9 +2143,13 @@
       }
     } else if (msg.type === 'chat/board') {
       paintBoard(msg.board);
+      renderActivityTimeline();
     } else if (msg.type === 'error' && msg.code === 'pack-overflow') {
+      state.lastError = msg.message || msg.code;
       paintPackOverflow(msg.message);
+      renderActivityTimeline();
     } else if (msg.type === 'error') {
+      state.lastError = msg.message || msg.code;
       const el = document.createElement('div');
       el.className = 'error';
       const workCopy =
@@ -1734,20 +2176,45 @@
       }
       thread.appendChild(el);
       thread.scrollTop = thread.scrollHeight;
+      renderActivityTimeline();
     } else if (msg.type === 'changeset/apply-failed') {
+      state.lastError = msg.message || 'Apply failed';
       const el = document.createElement('div');
       el.className = 'error';
       el.setAttribute('role', 'alert');
       el.textContent = msg.message || '';
       thread.appendChild(el);
+      renderActivityTimeline();
+    } else if (msg.type === 'changeset/stale') {
+      const el = document.createElement('div');
+      el.className = 'error stale-patch';
+      el.setAttribute('role', 'alert');
+      const text = document.createElement('span');
+      text.textContent = msg.message || 'Workspace files changed.';
+      const regenerate = document.createElement('button');
+      regenerate.type = 'button';
+      regenerate.textContent = 'Regenerate stale patches';
+      regenerate.addEventListener('click', function () {
+        vscode.postMessage({ type: 'changeset/regenerate-stale' });
+      });
+      el.appendChild(text);
+      el.appendChild(regenerate);
+      thread.appendChild(el);
+      announceOnce(text.textContent);
     } else if (msg.type === 'changeset/preview') {
       showFiles(msg.files || []);
+    } else if (msg.type === 'changeset/cleared') {
+      showFiles([]);
     } else if (msg.type === 'mcp/actions-preview') {
       showMcpActions(msg.actions || []);
     } else if (msg.type === 'mcp/actions-cleared') {
       hideMcpActions();
     } else if (msg.type === 'mcp/actions-failed') {
-      return;
+      state.lastError = msg.message || 'MCP actions failed';
+      state.mcpFailedMessage = msg.message || 'MCP actions failed';
+      paintReviewStrip();
+      appendSnapshotError({ kind: 'error', text: state.mcpFailedMessage });
+      renderActivityTimeline();
     }
   });
 

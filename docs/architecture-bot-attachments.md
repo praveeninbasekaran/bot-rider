@@ -1,6 +1,6 @@
 # Bot Rider — Bot form import (typed attachments)
 
-Status: **ready for implementation.** Design only until a developer lands typed slots. Not a host rewrite of BR-1–BR-6, QC, HV, MA, or SD. Replaces the shipped untyped Attach on Import Existing (IE / §20). **Not a new §22.**
+Status: **shipped (TA-1–TA-4).** Verified by `test/bot-attach.test.ts` and `test/bot-form-attach-chrome.test.ts`. Implementation-allocation notes below are historical.
 Stories TA-1–4.
 - Six slots on New/Edit Bot. No undifferentiated Attach.
 - Agent: 0 or 1, not required. Empty Agent save allowed. Map empty name/handle/persona only when an Agent file is present (default persona counts as empty).

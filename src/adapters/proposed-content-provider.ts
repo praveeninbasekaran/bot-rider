@@ -27,6 +27,10 @@ export class ProposedContentProvider implements vscode.TextDocumentContentProvid
     }
   }
 
+  contentFor(path: string): string | undefined {
+    return this.contents.get(proposedFileLabel(path));
+  }
+
   provideTextDocumentContent(uri: vscode.Uri): string {
     const empty = uri.query.includes('empty=1') || uri.path === EMPTY_PATH;
     const key = proposedFileLabel(uri.path);

@@ -6,6 +6,13 @@ import { ChangesetStore } from './changeset-store';
 import type { ICopilotGateway } from './copilot-gateway';
 import { COPY, copilotStatusMessage } from './copy';
 import { EmptyMcpPort, McpGateway } from './mcp-gateway';
+import type { McpBatchApprovalOptions } from './mcp-action-store';
+import {
+  ONBOARDING_SAMPLE_TASK,
+  OnboardingStore,
+  WORKER_BOT_TEMPLATES,
+  type WorkerTemplateId,
+} from './onboarding';
 import { Orchestrator } from './orchestrator';
 import { PatchParser } from './patch-parser';
 import { PromptBuilder } from './prompt-builder';
@@ -27,6 +34,13 @@ import {
   type ContextMapActions,
   type ContextMapNeighborhood,
 } from './context-map';
+import {
+  deserializeChangeFiles,
+  serializeChangeFiles,
+  WorkspaceRecoveryStore,
+  type WorkspaceRecoverySnapshot,
+} from './recovery';
+import type { RepositoryContextService } from './repository-context';
 
 export class Application {
   readonly registry: BotRegistry;
@@ -39,6 +53,10 @@ export class Application {
   readonly lsp: LspSlicePort;
   readonly mcp: McpGateway;
   readonly contextMap: ContextMapHost;
+  readonly onboarding: OnboardingStore;
+  readonly recovery: WorkspaceRecoveryStore;
+  private readonly emitRaw: (msg: HostToUi) => void;
+  private recoveryTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     store: StateStore,
@@ -46,35 +64,44 @@ export class Application {
     applyPort: ApplyEditPort,
     fs: FileSystemPort,
     private readonly workspace: WorkspaceContextPort,
-    private readonly emit: (msg: HostToUi) => void,
+    emit: (msg: HostToUi) => void,
     docs?: ProposedDocHost,
     diffs?: DiffCloser,
     mcp?: McpGateway,
     lsp?: LspSlicePort,
-    map?: { neighborhood?: ContextMapNeighborhood; actions?: ContextMapActions },
+    map?: {
+      neighborhood?: ContextMapNeighborhood;
+      actions?: ContextMapActions;
+      repository?: RepositoryContextService;
+    },
+    recoveryStore?: StateStore,
   ) {
-    this.mcp = mcp ?? new McpGateway(new EmptyMcpPort(), emit, { settleMs: 0 });
+    this.emitRaw = emit;
+    this.thread = new ThreadStore();
+    const emitRecorded = (message: HostToUi): void => this.emit(message);
+    this.mcp = mcp ?? new McpGateway(new EmptyMcpPort(), emitRecorded, { settleMs: 0 });
     this.lsp = lsp ?? new EmptyLspSlicePort();
     this.board = new RunBoardStore();
     this.registry = new BotRegistry(store);
-    this.thread = new ThreadStore();
-    this.changesets = new ChangesetStore(applyPort, fs, emit, docs, diffs);
+    this.onboarding = new OnboardingStore(store);
+    this.recovery = new WorkspaceRecoveryStore(recoveryStore ?? store);
+    this.changesets = new ChangesetStore(applyPort, fs, emitRecorded, docs, diffs);
     this.orchestrator = new Orchestrator(
       this.registry,
       gateway,
       this.prompts,
       this.parser,
       this.changesets,
-      this.thread,
       workspace,
-      emit,
+      emitRecorded,
       this.mcp,
       this.board,
       this.lsp,
       fs,
+      map?.repository,
     );
     this.contextMap = new ContextMapHost(
-      emit,
+      emitRecorded,
       map?.neighborhood ?? new EmptyContextMapNeighborhood(),
       {
         bots: () => this.orchestrator.getFrozenBots(),
@@ -88,6 +115,37 @@ export class Application {
 
   snapshotBots(): void {
     this.emit({ type: 'bots/snapshot', bots: this.registry.list() });
+  }
+
+  async ensureCoreBots(): Promise<void> {
+    await this.registry.ensureCoreBots();
+    this.snapshotBots();
+  }
+
+  snapshotOnboarding(): void {
+    const state = this.onboarding.snapshot();
+    this.emit({ type: 'onboarding/state', ...state, sampleTask: ONBOARDING_SAMPLE_TASK });
+  }
+
+  reopenOnboarding(): void {
+    const state = this.onboarding.reopen();
+    this.emit({ type: 'onboarding/state', ...state, sampleTask: ONBOARDING_SAMPLE_TASK });
+  }
+
+  dismissOnboarding(): void {
+    const state = this.onboarding.dismiss();
+    this.emit({ type: 'onboarding/state', ...state, sampleTask: ONBOARDING_SAMPLE_TASK });
+  }
+
+  async createWorkerTemplate(template: WorkerTemplateId): Promise<BotRecord> {
+    const preset = WORKER_BOT_TEMPLATES[template];
+    const bot = await this.createBot({ ...preset, handle: undefined });
+    return bot;
+  }
+
+  private async completeOnboarding(): Promise<void> {
+    const state = await this.onboarding.markComplete();
+    this.emit({ type: 'onboarding/state', ...state, sampleTask: ONBOARDING_SAMPLE_TASK });
   }
 
   async createBot(draft: BotDraft): Promise<BotRecord> {
@@ -117,6 +175,7 @@ export class Application {
   }
 
   async send(text: string, runType: 'work' | 'debate' = 'debate'): Promise<void> {
+    this.thread.appendUser(text);
     await this.orchestrator.send(text, runType);
   }
 
@@ -150,8 +209,8 @@ export class Application {
     if (ok) {
       this.orchestrator.noteRunCleared({ invalidateSlice: true });
       const text = COPY.approvedNotice(n);
-      this.thread.append({ role: 'notice', text });
       this.emit({ type: 'chat/notice', text });
+      await this.completeOnboarding();
     } else {
       this.orchestrator.noteApplyFailed(this.changesets.hasPending());
     }
@@ -167,14 +226,17 @@ export class Application {
     await this.changesets.reject();
     this.orchestrator.noteRunCleared({ invalidateSlice: false });
     if (had) {
-      this.thread.append({ role: 'notice', text: COPY.rejectedNotice });
       this.emit({ type: 'chat/notice', text: COPY.rejectedNotice });
     }
   }
 
   /** Grain B: invoke staged MCP only. Does not applyEdit or set applyFailed. Allowed while Split is open. */
-  async approveMcp(): Promise<boolean> {
-    return this.mcp.approveStaged();
+  async approveMcp(options: McpBatchApprovalOptions = {}): Promise<boolean> {
+    const ok = await this.mcp.approveStaged(options);
+    if (ok) {
+      await this.completeOnboarding();
+    }
+    return ok;
   }
 
   /** Grain B: drop the MCP batch only. File changeset untouched. */
@@ -185,6 +247,116 @@ export class Application {
   /** Session reload of pending MCP. Files stay. */
   reloadMcpActions(): void {
     this.mcp.rejectStaged();
+  }
+
+  offerRecovery(): void {
+    const snapshot = this.recovery.offered();
+    this.emit({
+      type: 'recovery/state',
+      recovery: {
+        available: !!snapshot,
+        savedAt: snapshot?.savedAt,
+        phase: snapshot?.run.phase,
+        fileCount: snapshot?.pendingFiles.length ?? 0,
+        mcpCount: snapshot?.pendingMcpActions.length ?? 0,
+        canResume: !!snapshot?.userText,
+      },
+    });
+  }
+
+  async reviewRecovered(): Promise<void> {
+    const snapshot = this.recovery.offered();
+    if (!snapshot) {
+      return;
+    }
+    await this.recovery.resolve();
+    this.thread.restore(snapshot.thread);
+    if (snapshot.thread.board) {
+      this.board.restore(snapshot.thread.board);
+    }
+    this.orchestrator.restoreRecovery(snapshot.runId, snapshot.run, snapshot.tasks);
+    if (snapshot.pendingFiles.length > 0) {
+      await this.changesets.setPendingPrepared(deserializeChangeFiles(snapshot.pendingFiles));
+    }
+    if (snapshot.pendingMcpActions.length > 0) {
+      this.mcp.actions.restore(snapshot.pendingMcpActions);
+    }
+    this.emitRaw({ type: 'chat/transcript-snapshot', snapshot: this.thread.snapshot() });
+    this.emit({
+      type: 'recovery/state',
+      recovery: { available: false, fileCount: 0, mcpCount: 0, canResume: false },
+    });
+    this.scheduleRecovery();
+  }
+
+  async resumeRecovered(): Promise<void> {
+    const snapshot = this.recovery.offered();
+    if (!snapshot) {
+      return;
+    }
+    const text = snapshot.userText;
+    const runType = snapshot.run.runType === 'work' ? 'work' : 'debate';
+    await this.reviewRecovered();
+    if (!this.changesets.hasPending() && !this.mcp.actions.hasPending() && text) {
+      await this.send(text, runType);
+    }
+  }
+
+  async discardRecovered(): Promise<void> {
+    await this.recovery.discard();
+    this.thread.clear();
+    this.board.clear();
+    await this.changesets.reject();
+    this.mcp.actions.clear();
+    this.emit({
+      type: 'recovery/state',
+      recovery: { available: false, fileCount: 0, mcpCount: 0, canResume: false },
+    });
+  }
+
+  async persistRecoveryNow(): Promise<void> {
+    if (this.recoveryTimer) {
+      clearTimeout(this.recoveryTimer);
+      this.recoveryTimer = undefined;
+    }
+    if (this.recovery.offered()) {
+      return;
+    }
+    const orchestrator = this.orchestrator.recoverySnapshot();
+    const thread = this.thread.snapshot();
+    const files = this.changesets.files ?? [];
+    const mcpActions = this.mcp.actions.exportState();
+    const meaningful =
+      thread.entries.length > 0 ||
+      files.length > 0 ||
+      mcpActions.length > 0 ||
+      orchestrator.run.phase !== 'idle';
+    if (!meaningful) {
+      await this.recovery.discard();
+      return;
+    }
+    const snapshot: WorkspaceRecoverySnapshot = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      runId: orchestrator.runId,
+      userText: orchestrator.userText,
+      run: orchestrator.run,
+      thread,
+      tasks: orchestrator.tasks,
+      pendingFiles: serializeChangeFiles(files),
+      pendingMcpActions: mcpActions,
+    };
+    await this.recovery.save(snapshot);
+  }
+
+  private scheduleRecovery(): void {
+    if (this.recoveryTimer || this.recovery.offered()) {
+      return;
+    }
+    this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = undefined;
+      void this.persistRecoveryNow();
+    }, 250);
   }
 
   async recheck(): Promise<void> {
@@ -255,11 +427,35 @@ export class Application {
       case 'changeset/reject':
         await this.reject();
         break;
+      case 'changeset/toggle-file':
+        this.changesets.setIncluded(msg.path, msg.included);
+        break;
+      case 'changeset/regenerate-stale':
+        await this.orchestrator.regenerateStaleChanges();
+        break;
+      case 'recovery/resume':
+        await this.resumeRecovered();
+        break;
+      case 'recovery/review':
+        await this.reviewRecovered();
+        break;
+      case 'recovery/discard':
+        await this.discardRecovered();
+        break;
       case 'mcp/actions-approve':
         await this.approveMcp();
         break;
       case 'mcp/actions-reject':
         this.rejectMcp();
+        break;
+      case 'onboarding/dismiss':
+        this.dismissOnboarding();
+        break;
+      case 'onboarding/reopen':
+        this.reopenOnboarding();
+        break;
+      case 'onboarding/template':
+        await this.createWorkerTemplate(msg.template);
         break;
       case 'copilot/recheck':
         await this.recheck();
@@ -278,6 +474,14 @@ export class Application {
       case 'contextMap/open':
         await this.contextMap.open(msg.nodeId);
         break;
+    }
+  }
+
+  private emit(message: HostToUi): void {
+    this.thread.recordHostMessage(message);
+    this.emitRaw(message);
+    if (message.type !== 'recovery/state') {
+      this.scheduleRecovery();
     }
   }
 }

@@ -4,6 +4,21 @@ import { PatchParser, dropFileBodies, validateRelativePath } from '../src/app/pa
 const root = '/tmp/bot-rider-ws';
 
 describe('PatchParser', () => {
+  it('accepts validated unified updates and rejects mismatched header paths', () => {
+    const parser = new PatchParser();
+    const patch = '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,1 +1,1 @@\n-old\n+new';
+    const valid = parser.parseImplementer(
+      '```json\n' + JSON.stringify({ files: [{ path: 'src/app.ts', op: 'update', patch }] }) + '\n```',
+      '/workspace',
+    );
+    expect(valid).toMatchObject({ ok: true, files: [{ path: 'src/app.ts', patch }] });
+    const invalid = parser.parseImplementer(
+      '```json\n' + JSON.stringify({ files: [{ path: 'src/other.ts', op: 'update', patch }] }) + '\n```',
+      '/workspace',
+    );
+    expect(invalid).toMatchObject({ ok: false, code: 'validate-failed' });
+  });
+
   const parser = new PatchParser();
 
   it('parses create/update/delete in memory', () => {

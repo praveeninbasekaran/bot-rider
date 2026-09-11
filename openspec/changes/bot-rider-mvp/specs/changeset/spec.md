@@ -1,5 +1,7 @@
 # Delta for Changeset Apply (BR-6)
 
+> **Historical delta.** EDIT-1 supersedes whole-batch-only Approve. See [br-6-gated-workspace-edit](../../specs/br-6-gated-workspace-edit/spec.md) and [edit-1-selective-hunks](../../specs/edit-1-selective-hunks/spec.md).
+
 ## Purpose
 
 The human reviews one batch of proposed workspace edits. Approve applies the whole batch. Failure is honest.

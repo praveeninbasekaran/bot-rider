@@ -54,6 +54,36 @@ const chipsFn = chatJs.slice(chatJs.indexOf('function renderInFlightChips'), cha
 const markFn = chatJs.slice(chatJs.indexOf('function markInterrupted'), chatJs.indexOf('function closePicker'));
 
 describe('§26 F7 parallel Debate stream chrome', () => {
+  it('defaults parallel prose to keyboard disclosures with a configurable expansion cap', () => {
+    expect(turnStart).toContain('class="article-toggle" aria-expanded="false"');
+    expect(turnStart).toContain("msg.solo ? '' : ' hidden'");
+    expect(turnStart).toContain("articleToggle.addEventListener('click'");
+    expect(chatJs).toContain('state.expandedArticles.length > state.maxVisibleArticles');
+    expect(chatJs).toContain("msg.type === 'ui/preferences'");
+    expect(chatJs).not.toContain('class="chips"><span class="chip think"');
+  });
+
+  it('renders one keyed activity timeline with distinct scheduler and dependency states', () => {
+    expect(chatJs).toContain('id="activity-timeline"');
+    expect(chatJs).toContain('function renderActivityTimeline()');
+    for (const status of ['blocked', 'queued', 'retrying', 'inFlight', 'speaking', 'completed', 'failed']) {
+      expect(chatJs).toContain(status);
+    }
+    expect(chatJs).toContain("const key = id || handle");
+    expect(chatCss).toContain('.activity-row.status-blocked');
+  });
+
+  it('keeps exactly one synthesis card and one terminal decision card across replay', () => {
+    expect(chatJs.match(/id="synthesis-card"/g)).toHaveLength(1);
+    expect(chatJs.match(/id="decision-card"/g)).toHaveLength(1);
+    expect(chatJs).toContain('synthesisCard.replaceChildren()');
+    expect(chatJs).toContain('decisionCard.replaceChildren()');
+    expect(chatJs).toContain('paintSynthesis(data.synthesis)');
+    expect(chatJs).toContain('paintDecision(data.decision)');
+    expect(proto).toContain("type: 'chat/synthesis'");
+    expect(proto).toContain("type: 'chat/decision'");
+  });
+
   it('shares Swarm sidebar + Expand and keeps one article per bot bubble', () => {
     expect(sidebar).toContain("scriptFile: 'chat.js'");
     expect(sidebar).toContain("styleFile: 'chat.css'");
@@ -155,13 +185,15 @@ describe('§26 F7 parallel Debate stream chrome', () => {
     expect(overflowFn).not.toContain('lockComposer()');
   });
 
-  it('uses per-article live regions and throttles to one announce per 2s per article', () => {
+  it('serializes announcements through one live region and leaves articles quiet', () => {
     expect(chrome.canAnnounceArticle(0, 100)).toBe(true);
     expect(chrome.canAnnounceArticle(1000, 2500)).toBe(false);
     expect(chrome.canAnnounceArticle(1000, 3000)).toBe(true);
-    expect(turnStart).toContain('class="article-live sr-only" aria-live="polite"');
+    expect(turnStart).toContain('class="article-live sr-only" aria-live="off"');
     expect(tokenHandler).toContain('announceArticle(current,');
     expect(tokenHandler).not.toMatch(/\bannounce\(/);
+    expect(chatJs).toContain('state.a11yQueue.push(value)');
+    expect(chatJs).toContain('drainAnnouncements()');
     expect(chatJs).toContain('id="thread" class="thread" role="log" aria-live="off"');
     expect(phaseFn).toContain('announce(rh.textContent)');
   });

@@ -1,6 +1,6 @@
 # Bot Rider — Human voice (additive slice)
 
-Status: **ready for implementation.** Design only until a developer lands it. Not a host rewrite of BR-1–BR-6. Not a TokenGovernor / pack change.
+Status: **shipped (HV-1–HV-3).** Verified by `test/human-voice.test.ts`, `test/article-strip.test.ts`, and `test/article-chrome.test.ts`. Implementation-allocation notes below are historical.
 Stories: **HV-1** host voice on visible debate turns, **HV-2** host strip leftover markdown chrome, **HV-3** length is prompt guidance only.
 UI chrome contract: `ui-ux-spec.md` §18 (addendum `ui-ux-chat-prose.md`). Host is the source of truth for stripped article text. UI renders that article; it does not re-strip as source of truth.
 Date: 2026-08-30.

@@ -68,6 +68,18 @@ export function attachFileCites(file: ChangeFile, catalog: readonly OpenSpecEntr
   if (file.content !== undefined) {
     next.content = file.content;
   }
+  if (file.patch !== undefined) {
+    next.patch = file.patch;
+  }
+  if (file.sourceHash !== undefined) {
+    next.sourceHash = file.sourceHash;
+  }
+  if (file.included !== undefined) {
+    next.included = file.included;
+  }
+  if (file.stale !== undefined) {
+    next.stale = file.stale;
+  }
   if (file.binary) {
     next.binary = file.binary;
   }

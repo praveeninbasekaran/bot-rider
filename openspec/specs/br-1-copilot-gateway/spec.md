@@ -18,7 +18,7 @@ Bot Rider SHALL talk to language models only through VS Code `vscode.lm` and onl
 10. Copilot auth, quota, and hang SHALL be posted on `copilot/status`. `ErrorCode` `copilot` on `error` is the thread catch-all only.
 11. `CopilotStatus` SHALL be `ready` \| `missing` \| `noPermissions` \| `notFound` \| `blocked` \| `quota` \| `hung` \| `streamFailed` \| `offTopic`.
 12. A 60s hang SHALL surface a visible error, SHALL keep Stop available (`botrider.chat.stop`), and SHALL NOT silently retry.
-13. One run SHALL never overlap `sendRequest`. One cancellation token source per run.
+13. Orchestrator runs SHALL NOT overlap. Debate Propose/Critique and Work worker requests MAY overlap only inside host-owned EB/WK batches. `@`, vote, Split, and implementer requests remain one-at-a-time. One cancellation scope SHALL own each run.
 
 ## Acceptance (architecture rev 7)
 

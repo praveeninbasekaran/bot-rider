@@ -7,6 +7,7 @@ import {
 import type { HostToUi } from '../protocol/messages';
 import { filesToPreview } from '../protocol/messages';
 import type { ApplyEditPort, DiffCloser, FileSystemPort, ProposedDocHost } from './ports';
+import { applyUnifiedPatch, MISSING_SOURCE_HASH, sourceHash } from './unified-hunk';
 
 export class ChangesetStore {
   private pending: ChangeFile[] | undefined;
@@ -34,24 +35,94 @@ export class ChangesetStore {
   }
 
   hasPending(): boolean {
-    return !!this.pending && !this.holdApprove;
+    return !!this.pending && this.pending.some((file) => file.included !== false) && !this.holdApprove;
   }
 
   setPending(files: ChangeFile[], opts?: { holdApprove?: boolean }): void {
-    this.pending = files.map((f) => ({
-      ...f,
-      binary: f.binary ? new Uint8Array(f.binary) : undefined,
+    this.pending = files.map((file) => ({
+      ...file,
+      included: file.included !== false,
+      binary: file.binary ? new Uint8Array(file.binary) : undefined,
+      specIds: file.specIds?.slice(),
     }));
+    this.resetPendingState(opts);
+  }
+
+  async setPendingPrepared(files: ChangeFile[], opts?: { holdApprove?: boolean }): Promise<void> {
+    this.pending = await Promise.all(files.map((file) => this.prepareFile(file)));
+    this.resetPendingState(opts);
+  }
+
+  private resetPendingState(opts?: { holdApprove?: boolean }): void {
     this.holdApprove = opts?.holdApprove === true;
     this.applyFailed = false;
     this.leftoverCreates = [];
     this.leftoverDeletes = [];
-    this.docs?.clearProposed();
-    for (const f of this.pending) {
-      const proposed = f.op === 'delete' || f.binary ? '' : (f.content ?? '');
-      this.docs?.setProposed(f.path, proposed);
+    this.refreshPreview();
+  }
+
+  setIncluded(path: string, included: boolean): void {
+    const file = this.pending?.find((item) => item.path === path);
+    if (!file) {
+      return;
     }
-    this.emit({ type: 'changeset/preview', files: filesToPreview(this.pending) });
+    file.included = included;
+    this.refreshPreview();
+  }
+
+  private async prepareFile(file: ChangeFile): Promise<ChangeFile> {
+    const copy: ChangeFile = {
+      ...file,
+      included: file.included !== false,
+      binary: file.binary ? new Uint8Array(file.binary) : undefined,
+      specIds: file.specIds?.slice(),
+    };
+    const exists = await this.fs.exists(copy.path);
+    const base = exists ? await this.fs.readText(copy.path) : undefined;
+    const currentHash = exists ? sourceHash(base ?? '') : MISSING_SOURCE_HASH;
+    if (copy.sourceHash && copy.sourceHash !== currentHash) {
+      copy.stale = true;
+    }
+    copy.sourceHash = copy.sourceHash ?? currentHash;
+    if (copy.op === 'update' && copy.patch && !copy.stale) {
+      const applied = applyUnifiedPatch(base ?? '', copy.patch);
+      if (applied.ok) {
+        copy.content = applied.text;
+      } else {
+        copy.stale = true;
+        copy.content = base ?? '';
+      }
+    }
+    return copy;
+  }
+
+  private refreshPreview(): void {
+    this.docs?.clearProposed();
+    for (const file of this.pending ?? []) {
+      if (file.included === false) {
+        continue;
+      }
+      const proposed = file.op === 'delete' || file.binary ? '' : (file.content ?? '');
+      this.docs?.setProposed(file.path, proposed);
+    }
+    this.emit({ type: 'changeset/preview', files: filesToPreview(this.pending ?? []) });
+  }
+
+  private async staleIncludedPaths(): Promise<string[]> {
+    const stale: string[] = [];
+    for (const file of this.pending ?? []) {
+      if (file.included === false) {
+        continue;
+      }
+      const exists = await this.fs.exists(file.path);
+      const base = exists ? await this.fs.readText(file.path) : undefined;
+      const currentHash = exists ? sourceHash(base ?? '') : MISSING_SOURCE_HASH;
+      if (file.stale || (file.sourceHash && file.sourceHash !== currentHash)) {
+        file.stale = true;
+        stale.push(file.path);
+      }
+    }
+    return stale;
   }
 
   /**
@@ -67,6 +138,9 @@ export class ChangesetStore {
     }
     const ops: FileEditOp[] = [];
     for (const file of this.pending) {
+      if (file.included === false || file.stale) {
+        continue;
+      }
       if (file.op === 'create') {
         ops.push({
           type: 'create',
@@ -97,6 +171,16 @@ export class ChangesetStore {
 
   async approve(mode: ApplyMode = 'initial'): Promise<boolean> {
     if (!this.hasPending()) {
+      return false;
+    }
+    const stalePaths = await this.staleIncludedPaths();
+    if (stalePaths.length > 0) {
+      this.refreshPreview();
+      this.emit({
+        type: 'changeset/stale',
+        paths: stalePaths,
+        message: 'Workspace files changed after this patch was prepared. Regenerate the stale patches before applying.',
+      });
       return false;
     }
     const ops = this.buildEdit(mode);

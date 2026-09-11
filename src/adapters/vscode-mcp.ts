@@ -2,6 +2,13 @@ import * as vscode from 'vscode';
 import type { CancelToken } from '../app/ports';
 import type { McpPort, McpToolInfo } from '../app/mcp-gateway';
 
+/**
+ * VS Code only supplies a valid token to ChatParticipant request handlers.
+ * Bot Rider invokes staged tools from its custom Swarm webview, so the public
+ * API requires undefined here; extensions cannot mint or reuse this token.
+ */
+export const MCP_TOOL_INVOCATION_TOKEN: vscode.ChatParticipantToolToken | undefined = undefined;
+
 export class VsCodeMcpPort implements McpPort {
   listTools(): McpToolInfo[] {
     const tools = vscode.lm.tools ?? [];
@@ -22,8 +29,20 @@ export class VsCodeMcpPort implements McpPort {
 
   async invokeTool(name: string, input: unknown, token: CancelToken): Promise<unknown> {
     const cts = new vscode.CancellationTokenSource();
-    token.onCancellationRequested(() => cts.cancel());
-    return vscode.lm.invokeTool(name, { input: asInput(input), toolInvocationToken: undefined }, cts.token);
+    if (token.isCancellationRequested) {
+      cts.cancel();
+    }
+    const subscription = token.onCancellationRequested(() => cts.cancel());
+    try {
+      return await vscode.lm.invokeTool(
+        name,
+        { input: asInput(input), toolInvocationToken: MCP_TOOL_INVOCATION_TOKEN },
+        cts.token,
+      );
+    } finally {
+      subscription.dispose();
+      cts.dispose();
+    }
   }
 
   async hasConfig(): Promise<boolean> {

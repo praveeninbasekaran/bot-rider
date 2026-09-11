@@ -1,6 +1,10 @@
 # Bot Rider architecture blueprint (revision 7)
 
-Locked MVP architecture. Host-owned UI and protocol. The webview never calls `vscode.lm` or `workspace.applyEdit`.
+Status: **shipped revision-7 baseline; later capability specs and PU-1–PU-8 may supersede it.**
+
+Host-owned UI and protocol. The webview never calls `vscode.lm` or `workspace.applyEdit`.
+
+Recovery authority: [master product requirements](../docs/master_product_requirement_document.md) and [PU-1–PU-8](./specs/pu-1-product-usability/spec.md). PU-1, PU-3, PU-4, PU-5, PU-7, EDIT-1, and CTX-1–3 now supersede the earlier empty-swarm, unbounded phase-wide parallelism, unanimity-only convergence, session-loss, whole-file replacement, and whole-batch-only file approval rules where implemented.
 
 Companion: [UI/UX Specification](./ui-ux-spec.md). OpenSpec index: [openspec/specs.md](../openspec/specs.md).
 
@@ -10,7 +14,7 @@ Companion: [UI/UX Specification](./ui-ux-spec.md). OpenSpec index: [openspec/spe
 
 VS Code extension: `publisher: botrider`, `name: bot-rider`, `displayName: Bot Rider`, `engines.vscode: ^1.99.0`, `activationEvents: []`.
 
-Empty swarm on first install. No seed bots. No count cap. No API keys. No `extensionDependencies` on Copilot. No Chat Participant. No SCM `SourceControl`. No `authentication.getSession` as Copilot consent. Settings Sync off (never `setKeysForSync`).
+Shipped baseline: empty swarm on first install and no seed bots. **Superseded by PU-1:** protected Spec and Dispatcher bots are seeded on activation. No count cap. No API keys. No `extensionDependencies` on Copilot. No Chat Participant. No SCM `SourceControl`. No `authentication.getSession` as Copilot consent. Settings Sync off (never `setKeysForSync`).
 
 ## Requirements map (BR-1 … BR-6)
 
@@ -21,7 +25,7 @@ Empty swarm on first install. No seed bots. No count cap. No API keys. No `exten
 | BR-3 | Toggle, delete, persist (`globalState`, Sync off) | [br-3-bot-toggle-delete-persist](../openspec/specs/br-3-bot-toggle-delete-persist/spec.md) |
 | BR-4 | Debate & Decide (two-round cap, freeze, AGREE/DISSENT) | [br-4-debate-and-decide](../openspec/specs/br-4-debate-and-decide/spec.md) |
 | BR-5 | Mentions, split UI, language-only debate/@, implementer | [br-5-mention-split-implementer](../openspec/specs/br-5-mention-split-implementer/spec.md) |
-| BR-6 | Gated whole-changeset `WorkspaceEdit` | [br-6-gated-workspace-edit](../openspec/specs/br-6-gated-workspace-edit/spec.md) |
+| BR-6 | Gated selective `WorkspaceEdit` (EDIT-1) | [br-6-gated-workspace-edit](../openspec/specs/br-6-gated-workspace-edit/spec.md) |
 
 ## Host ids
 
@@ -132,10 +136,10 @@ Card Stop posts `chat/stop`.
 
 ## Orchestrator
 
-One run, never overlapping `sendRequest`. One cancellation token source per run.
+One orchestrator run at a time. Debate Propose/Critique and Work worker requests may overlap only inside host-owned EB/WK batches. `@`, vote, Split, and implementer remain one-at-a-time. One cancellation scope owns the run.
 
 - Freeze at RunStarted; keep freeze on split/Continue.
-- Sequential propose then critique ×2 then AGREE/DISSENT. Vote: first token `AGREE` or `DISSENT` case-insensitive; rest is reason; unparseable = `DISSENT`. All AGREE ⇒ implementer = first frozen active bot. Else Split. No auto round 3.
+- Parallel Propose batch then settled parallel Critique batch ×2, followed by sequential AGREE/DISSENT voting. Vote: first token `AGREE` or `DISSENT` case-insensitive; rest is reason; unparseable = `DISSENT`. All AGREE ⇒ implementer = first frozen active bot. Else Split. No auto round 3.
 - Continue: one more propose/critique round, **same freeze**, then vote.
 - Pick: that bot implements.
 - Stop during stream: cancel, snapshot into Split, **never implement**.
@@ -164,10 +168,16 @@ Drop oldest turns first; never drop persona. `countTokens` vs `maxInputTokens`. 
 First fenced block that JSON-parses with `files[]`. Tag `json` optional. Extra prose dropped. Each op MUST be `update` | `create` | `delete` else `validate-failed`.
 
 ```json
-{ "files": [{ "path": "relative/path", "op": "update|create|delete", "content": "..." }] }
+{
+  "files": [
+    { "path": "relative/path", "op": "create", "content": "..." },
+    { "path": "relative/path", "op": "update", "patch": "--- a/relative/path\n+++ b/relative/path\n@@ ...", "sourceHash": "sha256:..." },
+    { "path": "relative/path", "op": "delete" }
+  ]
+}
 ```
 
-Delete has no content.
+Text `update` entries prefer unified `patch` with optional `sourceHash`. Legacy whole-file `content` remains accepted during transition. Delete has no content.
 
 ## Copilot gateway (BR-1)
 
@@ -175,14 +185,14 @@ Delete has no content.
 - User gestures only: Send, `@bot`, Recheck. Startup empty list is **not** `missing` until `onDidChangeChatModels` and `languageModelAccessInformation.onDidChange` settle.
 - `canSendRequest` guard. 60s hang then visible error, Stop still available, no silent retry.
 
-## Persistence (BR-3)
+## Persistence (BR-3 + PU-7)
 
 - Bots `globalState` key `botrider.bots.v1`.
 - Never `setKeysForSync`.
-- Transcript memory-only, session-only.
-- Pending changeset memory-only.
+- Workspace recovery `workspaceState` key `botrider.workspaceRecovery.v1` (versioned snapshot: transcript, run/DAG/board, pending files, staged MCP metadata).
+- SI-1 isolation packets remain session-only.
 
-## Apply (BR-6)
+## Apply (BR-6 + EDIT-1)
 
 `applyEdit` ONLY from `ChangesetStore.approve()` as `botrider.changeset.approve`. Retry is the same caller, `buildEdit('retry')`. Never `workspace.fs.writeFile`, Node `fs`, `TextEditor.edit`, `needsConfirmation`.
 
@@ -191,12 +201,13 @@ Delete has no content.
 | op | `initial` | `retry` |
 | --- | --- | --- |
 | create | `createFile`, overwrite false | `createFile`, overwrite true (leftover creates replace) |
-| update | replace full document | replace full document |
+| update | replace full document from materialized patch/content | replace full document |
 | delete | `deleteFile` | skip if already gone; otherwise `ignoreIfNotExists` |
 
-Whole-changeset Approve including create, update, delete.
+Approve applies only **included** pending files. Excluded or stale files are skipped. Text updates are materialized from validated unified hunks before preview/apply. Binary deliverables remain whole-file create/replace.
 
 - Success: clear store, dispose proposed docs, close diffs, post `changeset/cleared`, `applyFailed` false.
+- Stale base: post `changeset/stale`; do not call `applyEdit`.
 - Fail (`ok === false`): never claim success; keep store; Review stays; `applyFailed` true; leftoverCreates/leftoverDeletes; post `changeset/apply-failed`.
 - Retry idempotent: leftover creates overwrite/replace; already-gone deletes skip.
 - Reject does not auto-delete leftover creates / restore deletes.

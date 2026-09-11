@@ -532,6 +532,65 @@ describe('WK-4 dispatch + Work-batch', () => {
     releaseB();
     await done;
   });
+
+  it('executes a validated Dispatcher DAG in dependency-ready waves', async () => {
+    const { app, gw } = harness();
+    await workSwarm(app);
+    const graph = {
+      tasks: [
+        {
+          id: 'architecture',
+          owner: 'deva',
+          kind: 'architecture',
+          dependsOn: [],
+          requiredArtifacts: ['spec'],
+          producesArtifacts: ['architecture'],
+          paths: ['docs/architecture.md'],
+        },
+        {
+          id: 'implementation',
+          owner: 'devb',
+          kind: 'implementation',
+          dependsOn: ['architecture'],
+          requiredArtifacts: ['spec', 'architecture'],
+          producesArtifacts: ['implementation'],
+          paths: ['src/feature.ts'],
+        },
+      ],
+    };
+    gw.script = ({ turn, instruction }) => {
+      if (turn === 'spec') return 'SPEC-BODY';
+      if (turn === 'dispatch') return `\`\`\`json\n${JSON.stringify(graph)}\n\`\`\``;
+      if (turn === 'work') {
+        const paths = assignedFrom(instruction);
+        return changesetFence(paths.map((path) => ({ path, op: 'create', content: path })));
+      }
+      return 'talk';
+    };
+
+    await app.send('dependency graph', 'work');
+
+    const workHandles = gw.lastSendOpts
+      .filter((_, index) => gw.turns[index] === 'work')
+      .map((options) => options.handle);
+    expect(workHandles).toEqual(['deva', 'devb']);
+    expect(app.changesets.files?.map((file) => file.path).sort()).toEqual([
+      'docs/architecture.md',
+      'src/feature.ts',
+    ]);
+    expect(app.orchestrator.snapshotBoard().todos).toEqual([
+      expect.objectContaining({ id: 'architecture', status: 'done' }),
+      expect.objectContaining({ id: 'implementation', status: 'done' }),
+    ]);
+    expect(app.orchestrator.bus.listEvents().map((event) => event.type)).toEqual([
+      'SPEC_PUBLISHED',
+      'TASK_READY',
+      'ARCHITECTURE_READY',
+      'TASK_COMPLETED',
+      'TASK_READY',
+      'TASK_COMPLETED',
+    ]);
+  });
 });
 
 function holdWork(gw: FakeGateway, latch: Promise<void>): void {

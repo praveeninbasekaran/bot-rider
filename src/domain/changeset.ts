@@ -6,6 +6,14 @@ export interface ChangeFile {
   path: string;
   op: FileOp;
   content?: string;
+  /** Unified text patch retained for stale-base validation and regeneration. */
+  patch?: string;
+  /** SHA-256 of the workspace source used to materialize this proposal. */
+  sourceHash?: string;
+  /** Defaults to true; excluded files are omitted from preview and apply. */
+  included?: boolean;
+  /** True when the workspace no longer matches sourceHash or a hunk cannot be materialized. */
+  stale?: boolean;
   binary?: Uint8Array;
   kind?: ChangePreviewKind;
   /** Surviving catalog ids (OS-2). Omit when empty. */
@@ -46,4 +54,6 @@ export interface ProposedFileDto {
   kind?: ChangePreviewKind;
   /** Catalog ids as stored, surviving OS-2. Omit when empty. */
   specIds?: string[];
+  included?: boolean;
+  stale?: boolean;
 }

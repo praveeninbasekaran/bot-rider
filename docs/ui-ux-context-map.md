@@ -113,7 +113,7 @@ Expanding a file node (UI → host `contextMap/expand-file { uri }`) loads **tha
 
 ### 25.8 Unchanged
 
-§17 Run board. §18 article prose. §19 MCP Grain B. §20 Attach. §22 model picker. §23 export/import. §24 OpenSpec chips on Files rows. Round headers. Split Continue / Pick / Stop. Composer. Approve/Reject still whole-changeset BR-6.
+§17 Run board. §18 article prose. §19 MCP Grain B. §20 Attach. §22 model picker. §23 export/import. §24 OpenSpec chips on Files rows. Round headers. Split Continue / Pick / Stop. Composer. Approve/Reject apply EDIT-1 selected included files (BR-6).
 
 ### 25.9 Out
 

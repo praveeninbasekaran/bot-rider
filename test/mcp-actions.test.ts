@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Application } from '../src/app/application';
 import { CopilotGateway } from '../src/app/copilot-gateway';
 import { COPY } from '../src/app/copy';
+import { mcpBatchConfirmation } from '../src/app/mcp-action-store';
 import { McpGateway } from '../src/app/mcp-gateway';
 import type { LmModel, CancelToken, LmSendOptions } from '../src/app/ports';
 import type { HostToUi, PromptMessage } from '../src/protocol/messages';
@@ -105,6 +106,41 @@ describe('MA staged MCP actions host', () => {
     expect(msgs.some((m) => m.type === 'chat/mcp-skip' && m.reason === 'mutating-blocked')).toBe(false);
     const threadish = msgs.filter((m) => m.type.startsWith('chat/'));
     expect(JSON.stringify(threadish)).not.toContain('"title":"Ship login"');
+  });
+
+  it('deduplicates equivalent staged actions and lists every unique action in one confirmation', () => {
+    const port = new FakeMcpPort();
+    const msgs: HostToUi[] = [];
+    const mcp = new McpGateway(port, (message) => msgs.push(message), { settleMs: 0 });
+    mcp.stage(
+      { callId: '1', name: 'create_issue', input: { title: 'Ship', id: '42' } },
+      'bot-1',
+      'alpha',
+      { server: 'github', tool: 'create_issue' },
+    );
+    mcp.stage(
+      { callId: '2', name: 'create_issue', input: { id: '42', title: 'Ship' } },
+      'bot-2',
+      'beta',
+      { server: 'github', tool: 'create_issue' },
+    );
+    mcp.stage(
+      { callId: '3', name: 'post_comment', input: { id: '42', title: 'Ready' } },
+      'bot-2',
+      'beta',
+      { server: 'github', tool: 'post_comment' },
+    );
+
+    const actions = mcp.actions.snapshot();
+    expect(actions).toHaveLength(2);
+    expect(msgs.filter((message) => message.type === 'mcp/actions-preview')).toHaveLength(2);
+    const confirmation = mcpBatchConfirmation(actions);
+    expect(confirmation.message).toBe('Run 2 staged MCP actions?');
+    expect(confirmation.confirm).toBe('Run 2 actions');
+    expect(confirmation.detail).toContain('1. github · create_issue · @alpha');
+    expect(confirmation.detail).toContain('2. github · post_comment · @beta');
+    expect(confirmation.detail).toContain('title Ship');
+    expect(confirmation.detail).toContain('title Ready');
   });
 
   it('cannot-stage mutating call is still mutating-blocked; stageable call is not', async () => {
@@ -243,7 +279,7 @@ describe('MA staged MCP actions host', () => {
     expect(mcp.actions.hasPending()).toBe(false);
   });
 
-  it('failed MCP Approve keeps leftoverIds, locked copy, no success; retry is still allowed', async () => {
+  it('partial MCP failure removes completed actions and preserves the failed and unexecuted remainder', async () => {
     const port = new FakeMcpPort();
     port.config = true;
     port.tools = [stageableMcpTool({ name: 'create_issue' }), stageableMcpTool({ name: 'post_comment' })];
@@ -275,7 +311,7 @@ describe('MA staged MCP actions host', () => {
       { server: 'github', tool: 'post_comment' },
     );
     const ids = mcp.actions.snapshot().map((a) => a.id);
-    port.failNames.add('create_issue');
+    port.failNames.add('post_comment');
     const applyFailedBefore = app.changesets.applyFailed;
     const ok = await app.approveMcp();
     expect(ok).toBe(false);
@@ -284,7 +320,7 @@ describe('MA staged MCP actions host', () => {
     expect(failed).toEqual({
       type: 'mcp/actions-failed',
       message: COPY.mcpActionsFailed,
-      leftoverIds: ids,
+      leftoverIds: ids.slice(1),
     });
     expect(COPY.mcpActionsFailed).toBe(
       'MCP actions failed\nSome remote side effects (Figma, Azure Boards, or other servers) may already have happened and may not roll back.',
@@ -295,15 +331,61 @@ describe('MA staged MCP actions host', () => {
     ]);
     expect(COPY.mcpActionsFailed).not.toContain('\n\n');
     expect(msgs.some((m) => m.type === 'mcp/actions-cleared')).toBe(false);
-    expect(mcp.actions.snapshot().map((a) => a.id)).toEqual(ids);
-    expect(port.invokeCalls).toHaveLength(1);
+    expect(mcp.actions.snapshot().map((a) => a.id)).toEqual(ids.slice(1));
+    expect(port.invokeCalls.map((call) => call.name)).toEqual(['create_issue', 'post_comment']);
 
-    port.failNames.delete('create_issue');
+    port.failNames.delete('post_comment');
     const retry = await app.approveMcp();
     expect(retry).toBe(true);
-    expect(port.invokeCalls.map((c) => c.name)).toEqual(['create_issue', 'create_issue', 'post_comment']);
+    expect(port.invokeCalls.map((c) => c.name)).toEqual(['create_issue', 'post_comment', 'post_comment']);
     expect(mcp.actions.hasPending()).toBe(false);
     expect(msgs.some((m) => m.type === 'mcp/actions-cleared')).toBe(true);
+  });
+
+  it('executes sequentially and cancellation preserves all remaining actions', async () => {
+    const port = new FakeMcpPort();
+    const msgs: HostToUi[] = [];
+    const mcp = new McpGateway(port, (message) => msgs.push(message), { settleMs: 0 });
+    for (const [index, name] of ['create_issue', 'post_comment', 'update_issue'].entries()) {
+      mcp.stage(
+        { callId: String(index), name, input: { id: String(index) } },
+        'bot-1',
+        'alpha',
+        { server: 'github', tool: name },
+      );
+    }
+    const ids = mcp.actions.snapshot().map((action) => action.id);
+    const cancelling = {
+      isCancellationRequested: false,
+      onCancellationRequested: () => ({ dispose() {} }),
+    };
+    const progress: string[] = [];
+    const ok = await mcp.approveStaged({
+      token: cancelling,
+      onProgress: (completed, total, action) => {
+        progress.push(`${completed}/${total}:${action.tool}`);
+        cancelling.isCancellationRequested = true;
+      },
+    });
+
+    expect(ok).toBe(false);
+    expect(port.invokeCalls.map((call) => call.name)).toEqual(['create_issue']);
+    expect(progress).toEqual(['1/3:create_issue']);
+    expect(mcp.actions.snapshot().map((action) => action.id)).toEqual(ids.slice(1));
+    expect(msgs.some((message) => message.type === 'mcp/actions-cleared')).toBe(false);
+
+    const remaining = mcp.actions.snapshot().map((action) => action.id);
+    cancelling.isCancellationRequested = false;
+    msgs.length = 0;
+    port.invokeTool = async (name, input) => {
+      port.invokeCalls.push({ name, input });
+      cancelling.isCancellationRequested = true;
+      throw new Error('cancelled');
+    };
+    const cancelledDuringInvoke = await mcp.approveStaged({ token: cancelling });
+    expect(cancelledDuringInvoke).toBe(false);
+    expect(mcp.actions.snapshot().map((action) => action.id)).toEqual(remaining);
+    expect(msgs.some((message) => message.type === 'mcp/actions-failed')).toBe(false);
   });
 
   it('reload and mcp/actions-reject emit mcp/actions-cleared and do not clear the file changeset', async () => {

@@ -8,6 +8,7 @@ export { personaBlock } from './token-governor';
 export interface HistoryTurn {
   handle: string;
   text: string;
+  turn: TurnKind;
 }
 
 function voiceLines(): string {
@@ -39,6 +40,10 @@ export function turnInstruction(
   switch (turn) {
     case 'propose':
       return `${user}${extraLine}\n\nRound ${round}. Role: propose. ${speakingVoice('Give your proposal.')}`;
+    case 'synthesis':
+      return `${user}${extraLine}\n\nRound ${round}. Role: synthesis. Reconcile the settled proposals into one concrete recommendation. State the recommendation first, then the rationale and trade-offs. Do not vote or emit file changes. ${speakingVoice()}`;
+    case 'objection':
+      return `${user}${extraLine}\n\nRound ${round}. Role: targeted objection. Review the settled synthesis. If it has no decision-blocking issue, reply exactly NO_BLOCKER. Otherwise the first non-empty line MUST be BLOCKING <class>: <criterion> — <reason>. Use a concrete acceptance criterion or risk; vague disagreement is non-blocking. Do not emit file changes. ${speakingVoice()}`;
     case 'critique':
       return `${user}${extraLine}\n\nRound ${round}. Role: critique. Review the other bots' proposals. ${speakingVoice()}`;
     case 'consensus':
@@ -46,13 +51,13 @@ export function turnInstruction(
     case 'direct':
       return `${user}${extraLine}\n\nAnswer the user directly. ${speakingVoice('After your answer, the last non-empty line MUST be exactly NEED_EDIT or NO_EDIT depending on whether workspace files must change.')}`;
     case 'implement':
-      return `${user}${extraLine}\n\nEmit a JSON changeset. Use a fenced code block containing JSON with shape {"files":[{"path":"relative/path","op":"create"|"update"|"delete","content":"..."}]}. delete omits content. Paths must stay inside the workspace. Extra prose is ignored.`;
+      return `${user}${extraLine}\n\nEmit a JSON changeset with shape {"files":[{"path":"relative/path","op":"create"|"update"|"delete"}]}. Use a fenced JSON block. Creates add "content". Text updates add "patch":"--- a/relative/path\\n+++ b/relative/path\\n@@ ..." and may add "sourceHash":"sha256:..."; the host captures an omitted hash. Deletes omit content. Unified hunks must contain exact context and both header paths must match path. Paths must stay inside the workspace. Extra prose is ignored.`;
     case 'spec':
       return `${user}${extraLine}\n\nRole: spec. BA-phase. Write the work specification for this request. Other workers wait. ${speakingVoice('Give the spec.')}`;
     case 'dispatch':
-      return `${user}${extraLine}\n\nRole: dispatch. Assign disjoint workspace-relative path sets to remaining worker handles. Emit a fenced JSON block with shape {"assignments":[{"handle":"worker-handle","paths":["relative/path"]}]}. Path sets MUST be pairwise disjoint. Do not invent reserved Dev1, Dev2, or tester roles. Handles only. Extra prose is ignored.`;
+      return `${user}${extraLine}\n\nRole: dispatch. Propose a typed dependency graph for remaining worker handles. Emit a fenced JSON block with shape {"tasks":[{"id":"task-id","owner":"worker-handle","kind":"architecture"|"implementation"|"qa"|"documentation","dependsOn":[],"requiredArtifacts":["spec"],"producesArtifacts":["artifact-id"],"paths":["relative/path"],"maxRetries":0}]}. Every implementation task requires "spec"; architecture-dependent implementation names that architecture artifact and depends on its producer; QA depends on implementation and requires its artifact. Unordered tasks need pairwise-disjoint paths. Do not schedule, execute, approve, or invent handles. Extra prose is ignored.`;
     case 'work':
-      return `${user}${extraLine}\n\nRole: work. Work-batch on your assigned paths only. Emit a JSON changeset. Use a fenced code block containing JSON with shape {"files":[{"path":"relative/path","op":"create"|"update"|"delete","content":"..."}]}. delete omits content. Paths must stay inside the workspace and inside your assignment. Extra prose is ignored.`;
+      return `${user}${extraLine}\n\nRole: work. Work-batch on your assigned paths only. Emit a fenced JSON changeset. Creates use content; text updates use a unified patch in patch (with optional sourceHash); deletes omit content. Patch headers and every path must stay inside the workspace and inside your assignment. Extra prose is ignored.`;
     case 'argue':
       return `${user}${extraLine}\n\nArgue round ${round}. Role: argue. Sequential ping-pong for this path. The first token of your reply MUST be AGREE @handle or DISSENT. AGREE names exactly one claimant handle as the writer for this path. Yield is AGREE on a peer handle. DISSENT is not a win. Do not emit file bodies, diffs, or JSON changesets. ${speakingVoice()}`;
   }

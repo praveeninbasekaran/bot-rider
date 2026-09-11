@@ -22,9 +22,9 @@ When an MCP batch is pending, Proposed Changes (`botrider.review`) shows a **sec
 File groups (**Modified** / **Added** / **Deleted**) stay as today.
 MCP Approve / Reject are the MCP commands, not the changeset commands.
 
-### 19.3 Swarm Review card only
-Consumes `mcp/actions-preview` only. Label **`MCP actions · {n}`** plus **Review**.
-**No Approve on the card.** Pending list is **not** in the thread.
+### 19.3 Swarm review strip
+Consumes `mcp/actions-preview` in the shared idempotent review strip. The strip shows file and MCP counts and exposes separate **Files** and **MCP** focus actions.
+**No Approve on the strip.** Pending action details remain in Proposed Changes.
 
 ### 19.4 Failed MCP Approve
 Keep the batch (`leftoverIds` including the failed id). Never claim success. No silent retry. Retry must not be blocked solely because the remote object now exists or changed.
@@ -50,5 +50,10 @@ Do not invent extra protocol members. Do not use a combined Approve.
 §16 `mutating-blocked` copy (`Writes through {server} aren't available in Bot Rider.`) **only when the host cannot stage**.
 Staged mutations do not use that copy. Missing MCP: visible skip. Unauth: visible error, no silent retry.
 
-### 19.7 Session-only
-Pending MCP batch is session-only (reload clears, like changeset/board). File pending store unchanged. Reject / reload emit `mcp/actions-cleared`; files untouched.
+### 19.7 PU-7 recovery
+Pending MCP batch metadata is restorable from PU-7 workspace recovery snapshots. Restored MCP actions **never** auto-execute. **Discard** or explicit Reject emits `mcp/actions-cleared`; files untouched. File pending store follows the same recovery snapshot rules.
+
+### 19.8 Batch confirmation and progress
+MCP Approve opens one modal confirmation listing every deduplicated staged action. Confirmed actions execute sequentially in a cancellable notification. Completed actions disappear from pending state immediately; cancellation or failure preserves the remainder.
+
+VS Code-native tool confirmation is platform-owned. `toolInvocationToken` is only available inside a Chat Participant request, so Bot Rider's custom Swarm webview must pass `undefined` and cannot suppress or combine any native per-tool prompts.

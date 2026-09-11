@@ -205,7 +205,7 @@ describe('§28 F8b sequential Argue chrome', () => {
 
   it('leaves Approve held to host holdApprove and remainder visible in one Files list', () => {
     expect(showFilesFn).toContain('state.previewFiles = files || []');
-    expect(showFilesFn).toContain("Proposed changes · '");
+    expect(showFilesFn).toContain('paintReviewStrip()');
     expect(chatJs).toContain("msg.type === 'changeset/preview'");
     expect(chatJs).toContain('showFiles(msg.files || [])');
     expect(chatJs).not.toContain("type: 'changeset/approve'");
@@ -222,7 +222,7 @@ describe('§28 F8b sequential Argue chrome', () => {
     expect(chatJs).toContain('function paintArguePathHeader');
     expect(chatJs).toContain('announceOnce(rh.textContent)');
     expect(extractBlock(chatJs, 'function paintArgueRoundHeader')).toContain('announce(rh.textContent)');
-    expect(turnStart).toContain('class="article-live sr-only" aria-live="polite"');
+    expect(turnStart).toContain('class="article-live sr-only" aria-live="off"');
     expect(chrome.canAnnounceArticle(1000, 2500)).toBe(false);
     expect(chrome.canAnnounceArticle(1000, 3000)).toBe(true);
     expect(chatJs).toContain('id="thread" class="thread" role="log" aria-live="off"');

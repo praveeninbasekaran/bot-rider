@@ -32,6 +32,9 @@ describe('contribution points', () => {
       viewsContainers: { activitybar: { id: string }[] };
       views: Record<string, { id: string; name?: string; visibility?: string; type?: string }[]>;
       viewsWelcome: { view: string; when: string; contents: string }[];
+      configuration?: {
+        properties: Record<string, { type: string; default: number; minimum: number; maximum: number }>;
+      };
       chatParticipants?: unknown;
     };
   };
@@ -55,6 +58,27 @@ describe('contribution points', () => {
     expect(pkg.contributes.views.botrider.find((v) => v.id === 'botrider.chat')?.type).toBe('webview');
     expect(pkg.contributes.views.botrider.find((v) => v.id === 'botrider.contextMap')?.type).toBe('webview');
     expect(pkg.contributes.views.botrider.find((v) => v.id === 'botrider.contextMap')?.name).toBe('Context Map');
+    expect(pkg.contributes.configuration?.properties['botrider.maxCopilotConcurrency']).toMatchObject({
+      type: 'number',
+      default: 4,
+      minimum: 1,
+      maximum: 16,
+    });
+    expect(pkg.contributes.configuration?.properties['botrider.debate.quorumPercent']).toMatchObject({
+      default: 60,
+      minimum: 1,
+      maximum: 100,
+    });
+    expect(pkg.contributes.configuration?.properties['botrider.debate.maxAutomaticRounds']).toMatchObject({
+      default: 2,
+      minimum: 1,
+      maximum: 5,
+    });
+    expect(pkg.contributes.configuration?.properties['botrider.maxVisibleArticles']).toMatchObject({
+      default: 3,
+      minimum: 1,
+      maximum: 12,
+    });
   });
 
   it('registers the required commands and hide/when rules', () => {
@@ -130,20 +154,18 @@ describe('contribution points', () => {
     expect(mcpApprove?.tooltip).toBe('Run MCP actions');
 
     expect(titles.find((m) => m.command === 'botrider.changeset.approve')?.when).toBe(
-      'view == botrider.review && botrider.hasPendingChanges && !botrider.hasPendingMcp',
+      'view == botrider.review && botrider.hasPendingChanges',
     );
     expect(titles.find((m) => m.command === 'botrider.changeset.reject')?.when).toBe(
-      'view == botrider.review && botrider.hasPendingChanges && !botrider.hasPendingMcp',
+      'view == botrider.review && botrider.hasPendingChanges',
     );
     expect(titles.find((m) => m.command === 'botrider.mcp.approve')?.when).toBe(
-      'view == botrider.review && botrider.hasPendingMcp && !botrider.hasPendingChanges && !botrider.mcpFailed',
+      'view == botrider.review && botrider.hasPendingMcp && !botrider.mcpFailed',
     );
     expect(titles.find((m) => m.command === 'botrider.mcp.reject')?.when).toBe(
-      'view == botrider.review && botrider.hasPendingMcp && !botrider.hasPendingChanges && !botrider.mcpFailed',
+      'view == botrider.review && botrider.hasPendingMcp && !botrider.mcpFailed',
     );
-    expect(titles.some((m) => m.command === 'botrider.mcp.approve' && m.when?.includes('hasPendingChanges') && !m.when.includes('!botrider.hasPendingChanges'))).toBe(
-      false,
-    );
+    expect(titles.find((m) => m.command === 'botrider.mcp.approve')?.when).not.toContain('hasPendingChanges');
 
     const itemCtx = pkg.contributes.menus['view/item/context'];
     const fileHeaderApprove = itemCtx.find(
@@ -199,7 +221,7 @@ describe('contribution points', () => {
     expect(bots?.contents).toContain('command:botrider.bots.create');
     expect(bots?.contents).toContain('command:botRider.bots.import');
     expect(review?.when).toBe('!botrider.hasPendingChanges && !botrider.hasPendingMcp');
-    expect(review?.contents).toContain('Approve applies the whole batch. Reject discards it.');
+    expect(review?.contents).toContain('Approve applies the selected batch. Reject discards it.');
   });
 
   it('source hygiene: no Settings Sync, no Copilot auth session, no other vendors, no writeFile apply path', () => {

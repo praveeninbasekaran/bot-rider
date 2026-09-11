@@ -2,7 +2,7 @@ import { COPY } from './copy';
 import type { CancelToken } from './ports';
 import type { LmChatTool } from './ports';
 import type { HostToUi, McpSkipReason } from '../protocol/messages';
-import { argsLineFrom, McpActionStore } from './mcp-action-store';
+import { argsLineFrom, McpActionStore, type McpBatchApprovalOptions } from './mcp-action-store';
 
 export const WRITE_ISH_RE = /\b(comment|transition|edit|post|create|update|delete|write|patch|merge|assign)\b/i;
 export const MCP_SETTLE_MS = 400;
@@ -277,14 +277,17 @@ export class McpGateway {
     return { text: COPY.mcpStagedResult };
   }
 
-  async approveStaged(): Promise<boolean> {
-    const token: CancelToken = {
+  async approveStaged(options: McpBatchApprovalOptions = {}): Promise<boolean> {
+    const token: CancelToken = options.token ?? {
       isCancellationRequested: false,
       onCancellationRequested: () => ({ dispose() {} }),
     };
-    return this.actions.approve(async (action) => {
-      await this.port.invokeTool(action.name, action.args, token);
-    });
+    return this.actions.approve(
+      async (action) => {
+        await this.port.invokeTool(action.name, action.args, token);
+      },
+      { ...options, token },
+    );
   }
 
   rejectStaged(): void {

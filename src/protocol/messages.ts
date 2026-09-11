@@ -1,6 +1,7 @@
 import type { AttachmentKind, BotRecord } from '../domain/bot';
 import { inferChangeKind, type ChangeFile, type FileOp, type ProposedFileDto } from '../domain/changeset';
 import type { RunStateDto, TurnKind } from '../domain/run-state';
+import type { ThreadSnapshot } from '../app/thread-store';
 
 export type CopilotStatus =
   | 'ready'
@@ -67,10 +68,57 @@ export interface McpActionDto {
   handle: string;
 }
 
+export interface DebateSynthesisDto {
+  round: number;
+  botId: string;
+  handle: string;
+  text: string;
+}
+
+export interface DebateDecisionDto {
+  status: 'accepted' | 'escalated';
+  recommendation: string;
+  dissentSummary?: string;
+  highRisk: boolean;
+  agreeVotes: number;
+  validVotes: number;
+  quorumRequired: number;
+}
+
+export interface RecoveryStateDto {
+  available: boolean;
+  savedAt?: string;
+  phase?: RunStateDto['phase'];
+  fileCount: number;
+  mcpCount: number;
+  canResume: boolean;
+}
+
 export type HostToUi =
   | { type: 'bots/snapshot'; bots: BotRecord[] }
   | { type: 'copilot/status'; status: CopilotStatus; message?: string }
+  | {
+      type: 'copilot/scheduler';
+      snapshot: {
+        maxConcurrent: number;
+        requests: {
+          id: number;
+          botId?: string;
+          handle?: string;
+          state: 'queued' | 'inFlight' | 'retrying';
+          priority: 'user' | 'normal';
+          attempt: number;
+          nextRetryAt?: number;
+        }[];
+      };
+    }
   | { type: 'run/state'; state: RunStateDto }
+  | { type: 'ui/preferences'; maxVisibleArticles: number }
+  | { type: 'context/status'; includedChars: number; dropped: string[] }
+  | { type: 'recovery/state'; recovery: RecoveryStateDto }
+  | { type: 'chat/transcript-snapshot'; snapshot: ThreadSnapshot }
+  | { type: 'chat/synthesis'; synthesis: DebateSynthesisDto }
+  | { type: 'chat/decision'; decision: DebateDecisionDto }
   | {
       type: 'chat/turn-start';
       botId: string;
@@ -113,7 +161,9 @@ export type HostToUi =
       message: string;
     }
   | { type: 'ui/expanded'; expanded: boolean }
+  | { type: 'onboarding/state'; open: boolean; complete: boolean; sampleTask: string }
   | { type: 'changeset/preview'; files: ProposedFileDto[] }
+  | { type: 'changeset/stale'; paths: string[]; message: string }
   | {
       type: 'changeset/apply-failed';
       leftoverCreates: string[];
@@ -171,10 +221,18 @@ export type UiToHost =
   | { type: 'changeset/approve' }
   | { type: 'changeset/retry' }
   | { type: 'changeset/reject' }
+  | { type: 'changeset/toggle-file'; path: string; included: boolean }
+  | { type: 'changeset/regenerate-stale' }
+  | { type: 'recovery/resume' }
+  | { type: 'recovery/review' }
+  | { type: 'recovery/discard' }
   | { type: 'review/open-diff'; path: string; op?: FileOp }
   | { type: 'copilot/recheck' }
   | { type: 'mcp/actions-approve' }
   | { type: 'mcp/actions-reject' }
+  | { type: 'onboarding/dismiss' }
+  | { type: 'onboarding/reopen' }
+  | { type: 'onboarding/template'; template: 'coder' | 'reviewer' | 'writer' }
   | { type: 'bots/attach-pick'; slot: AttachmentKind }
   | { type: 'bots/attach-remove'; slot: AttachmentKind; path: string }
   | {
@@ -246,8 +304,14 @@ export type ContextMapRunPayload = {
 };
 
 export function filesToPreview(files: ChangeFile[]): ProposedFileDto[] {
-  return files.map((f) => {
-    const dto: ProposedFileDto = { path: f.path, op: f.op, kind: inferChangeKind(f) };
+  return files.filter((file) => file.included !== false).map((f) => {
+    const dto: ProposedFileDto = {
+      path: f.path,
+      op: f.op,
+      kind: inferChangeKind(f),
+      included: true,
+      stale: f.stale === true,
+    };
     if (f.specIds && f.specIds.length > 0) {
       dto.specIds = [...f.specIds];
     }

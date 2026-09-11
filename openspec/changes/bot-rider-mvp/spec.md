@@ -8,7 +8,9 @@ Related: [proposal.md](./proposal.md), [tasks.md](./tasks.md), [design.md](./des
 
 ## Purpose
 
-Bot Rider runs a swarm of user-defined persona bots through GitHub Copilot. Default turns are a capped Debate & Decide loop. File edits exist only after a separate implementer pass, and only land on disk after the user Approves a whole changeset.
+Bot Rider runs a swarm of user-defined persona bots through GitHub Copilot. Default turns are a capped Debate & Decide loop. File edits exist only after a separate implementer pass, and only land on disk after the user Approves **included** pending files (EDIT-1).
+
+> **Superseded areas:** PU-7 reload recovery and EDIT-1 selective patching supersede parts of this historical MVP spec. Authoritative behavior lives in `openspec/specs/` and [docs/architecture-mvp.md](../../../docs/architecture-mvp.md).
 
 ---
 
@@ -78,6 +80,8 @@ Toggle Active MUST be the tree checkbox (`manageCheckboxStateManually`), separat
 
 ## BR-3 Local persistence, Settings Sync off
 
+> **Superseded by PU-7:** transcript and pending review state are restorable from workspace recovery snapshots. See current [br-3](../../specs/br-3-bot-toggle-delete-persist/spec.md).
+
 ### Requirement: What is stored
 
 Bots MUST persist in `globalState` under key `botrider.bots.v1`. The extension MUST NEVER call `setKeysForSync`. The chat transcript MUST be memory-only and session-only. The pending changeset MUST be memory-only.
@@ -85,7 +89,7 @@ Bots MUST persist in `globalState` under key `botrider.bots.v1`. The extension M
 #### Scenario: Reload window
 - GIVEN the user created bots then reloaded the window
 - THEN bots SHALL still appear
-- AND the Swarm transcript and any un-approved changeset SHALL be gone
+- AND the Swarm transcript and any un-approved changeset SHALL be gone (superseded: user MAY Resume / Review pending / Discard)
 
 ---
 
@@ -134,6 +138,8 @@ The implementer MUST run only from: unanimous AGREE, split/pick, or solo `NEED_E
 ---
 
 ## BR-6 Whole-changeset Approve
+
+> **Superseded by EDIT-1:** Approve applies only included pending files. See current [br-6](../../specs/br-6-gated-workspace-edit/spec.md) and [edit-1-selective-hunks](../../specs/edit-1-selective-hunks/spec.md).
 
 ### Requirement: Approve applies the batch
 
